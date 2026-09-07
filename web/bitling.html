@@ -359,7 +359,7 @@
   const bugs = [];
   const debug = { active: false, until: 0 };
   const drop = { active: false, x: 0, y: 0, vy: 0, kind: 'commit', label: '', rest: false };
-  const rocket = { active: false, x: 0, y: 0, vy: 0, t: 0 };
+  const rocket = { active: false, x: 0, y: 0, vy: 0, t: 0, fade: 1 };
   let gitInfo = { dirty: 0, repo: '', branch: '', minutesSinceCommit: -1 };
   const particles = [];
   const pointer = { x: 0, y: 0, over: false, lastT: -10, vx: 0, vy: 0, pt: 0 };
@@ -621,9 +621,10 @@
   function launchRocket(label) {
     rocket.active = true;
     rocket.x = pet.x;
-    rocket.y = pet.y - petR() * 2.1;
-    rocket.vy = -60;
+    rocket.y = pet.y - petR() * 3.6;
+    rocket.vy = -55;
     rocket.t = 0;
+    rocket.fade = 1;
     pet.stretchT = 1.4;
     pet.happy = 2;
     audio.whoosh();
@@ -1084,11 +1085,18 @@
   function updateRocket(dt) {
     if (!rocket.active) return;
     rocket.t += dt;
-    rocket.vy -= 1100 * dt;
+    rocket.vy -= 240 * dt;
     rocket.y += rocket.vy * dt;
     rocket.x += Math.sin(rocket.t * 7) * 14 * dt;
-    spawn('flame', rocket.x, rocket.y + 14 * scale, 1, { spread: 2, vx: 25, vy: 140, size: 7, dur: 0.35, hue: rand(20, 45) });
-    if (rocket.y < -60) rocket.active = false;
+    // Shrink and fade out before the top edge, so it reads as flying away rather than
+    // being cut off by the window it lives in.
+    const HORIZON = 16, FADE = 84;
+    rocket.fade = clamp((rocket.y - HORIZON) / FADE, 0, 1);
+    if (rocket.fade > 0.15) {
+      spawn('flame', rocket.x, rocket.y + 14 * scale * (0.5 + 0.5 * rocket.fade), 1,
+        { spread: 2, vx: 25, vy: 140, size: 7 * (0.5 + 0.5 * rocket.fade), dur: 0.3, hue: rand(20, 45) });
+    }
+    if (rocket.fade <= 0) rocket.active = false;
   }
 
   function doIdle() {
@@ -1710,8 +1718,9 @@
 
   function drawRocket() {
     if (!rocket.active) return;
-    const u = 9 * scale;
+    const u = 9 * scale * (0.45 + 0.55 * rocket.fade);
     ctx.save();
+    ctx.globalAlpha = clamp(rocket.fade * 1.4, 0, 1);
     ctx.translate(rocket.x, rocket.y);
     ctx.rotate(Math.sin(rocket.t * 7) * 0.12);
     ctx.fillStyle = '#f4f1ea';

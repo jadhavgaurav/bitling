@@ -204,7 +204,8 @@ def build(source: Path, target: Path) -> None:
         "    debug() {\n"
         "      return { mode: pet.mode, grounded: pet.grounded, thrown: pet.thrown, chuteOpen: pet.chuteOpen,\n"
         "        chute: Number(pet.chute.toFixed(3)), knee: Number(pet.knee.toFixed(3)), r: petR(), scale, W, H, groundY,\n"
-        "        x: Math.round(pet.x), y: Math.round(pet.y), stage: stageOf(state) };\n"
+        "        x: Math.round(pet.x), y: Math.round(pet.y), stage: stageOf(state),\n"
+        "        rocket: rocket.active ? { y: Math.round(rocket.y), fade: Number(rocket.fade.toFixed(2)) } : null };\n"
         "    },\n"
         "  };\n\n"
         "  // ---------------------------------------------------------------- boot\n",

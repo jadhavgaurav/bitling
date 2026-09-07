@@ -67,7 +67,7 @@
   .dock.asleep .wake{display:block}
   .dock.asleep .moon{display:none}
   .bubble{position:absolute;left:0;top:0;transform:translate(-50%,-100%);background:var(--bubble);color:var(--bubble-ink);font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:500;font-size:17px;padding:8px 14px;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.14);pointer-events:none;white-space:nowrap;animation:pop .25s cubic-bezier(.2,1.4,.4,1)}
-  .bubble::after{content:"";position:absolute;left:50%;bottom:-6px;width:12px;height:12px;background:var(--bubble);transform:translateX(-50%) rotate(45deg);border-radius:2px}
+  .bubble::after{content:"";position:absolute;left:var(--tail,50%);bottom:-6px;width:12px;height:12px;background:var(--bubble);transform:translateX(-50%) rotate(45deg);border-radius:2px}
   @keyframes pop{from{transform:translate(-50%,-100%) scale(.6);opacity:0}}
   dialog{border:none;border-radius:22px;padding:22px 24px;width:min(92vw,360px);background:var(--panel);color:var(--ink);box-shadow:var(--shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
   dialog::backdrop{background:rgba(20,26,51,.45)}
@@ -495,6 +495,16 @@
   const stars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random() * 0.6, s: rand(0.6, 1.8), p: rand(0, 6) }));
 
   const petR = () => [46, 46, 58, 68][stageOf(state)] * scale;
+  // How far the drawing actually reaches sideways from pet.x: the head and its ear caps
+  // are wider than the body, and an open parafoil is wider still.
+  function petHalfWidth() {
+    const r = petR();
+    // The arms reach furthest: shoulder (0.78) + full swing (0.55) + hand (0.16) + stroke.
+    const arms = r * 1.62;
+    // The canopy is wide and sits high, so the sway rotation about the feet swings it
+    // much further sideways than its own half span.
+    return pet.chute > 0.02 ? Math.max(arms, r * 2.15) : arms;
+  }
   const eggR = () => 46 * scale;
 
   function resize() {
@@ -513,8 +523,8 @@
       return;
     }
     const ratio = W / prevW;
-    pet.ax = clamp(pet.ax * ratio, petR(), W - petR());
-    pet.x = clamp(pet.x * ratio, petR(), W - petR());
+    pet.ax = clamp(pet.ax * ratio, petHalfWidth(), W - petHalfWidth());
+    pet.x = clamp(pet.x * ratio, petHalfWidth(), W - petHalfWidth());
     if (pet.grounded && !pet.held) pet.y = groundY;
   }
   window.addEventListener('resize', resize);
@@ -701,7 +711,8 @@
   }
   function spawnBug(x) {
     const bx = x !== undefined ? x : (Math.random() < 0.5 ? rand(14, W * 0.3) : rand(W * 0.7, W - 14));
-    bugs.push({ x: clamp(bx, 12, W - 12), vx: rand(50, 90) * (Math.random() < 0.5 ? -1 : 1), dart: rand(0.5, 2), alive: true, squash: 0, wig: rand(0, 6) });
+    const bugEdge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
+    bugs.push({ x: clamp(bx, bugEdge, W - bugEdge), vx: rand(50, 90) * (Math.random() < 0.5 ? -1 : 1), dart: rand(0.5, 2), alive: true, squash: 0, wig: rand(0, 6) });
   }
   function squashBug(b, byPet) {
     if (!b.alive) return;
@@ -859,7 +870,7 @@
     pet.mode = 'ground'; pet.landing = false; pet.grounded = true; pet.thrown = false;
     pet.y = groundY; pet.vx = 0; pet.vy = 0; pet.thrust = 0;
     pet.knee = 0.55;
-    pet.ax = clamp(pet.x, r, W - r);
+    pet.ax = clamp(pet.x, petHalfWidth(), W - petHalfWidth());
     spawn('dust', pet.x, groundY - 4, 4, { spread: r * 0.6, vx: 50, vy: -20, g: -10, size: 8, dur: 0.6 });
   }
   function handleFlight(phase) {
@@ -907,7 +918,7 @@
     const stale = performance.now() - pointer.pt > 100;
     pet.vx = stale ? 0 : clamp(pointer.vx, -1400, 1400);
     pet.vy = stale ? 0 : clamp(pointer.vy, -1400, 1400);
-    pet.ax = clamp(pet.x, petR(), W - petR());
+    pet.ax = clamp(pet.x, petHalfWidth(), W - petHalfWidth());
     const speed = Math.hypot(pet.vx, pet.vy);
     if (pet.mode === 'fly' && speed < 260) {
       // Dropped gently mid-air while flying: hover where it was left.
@@ -1077,7 +1088,7 @@
             const chuted = pet.chuteOpen;
             cutChute(true);
             land(chuted ? 200 : pet.vy); pet.vy = 0; pet.vx *= 0.4;
-            pet.ax = clamp(pet.x, r, W - r);
+            pet.ax = clamp(pet.x, petHalfWidth(), W - petHalfWidth());
           }
         }
       } else {
@@ -1092,7 +1103,7 @@
           }
         }
       }
-      pet.x = clamp(pet.x, r, W - r);
+      pet.x = clamp(pet.x, petHalfWidth(), W - petHalfWidth());
 
       if (pet.walkDir) pet.facing = pet.walkDir;
       pet.walking = !state.asleep && !pet.carried && pet.grounded && (pet.walkDir !== 0 || Math.abs(pet.ax - pet.x) > 2);
@@ -1172,8 +1183,10 @@
       const away = b.x - pet.x;
       if (Math.abs(away) < r * 1.6 && Math.random() < 0.06) b.vx = Math.sign(away || 1) * rand(90, 150);
       b.x += b.vx * dt;
-      if (b.x < 12) { b.x = 12; b.vx = Math.abs(b.vx); }
-      if (b.x > W - 12) { b.x = W - 12; b.vx = -Math.abs(b.vx); }
+      // Keep beetles where the pet can actually reach them to stomp.
+      const edge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
+      if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx); }
+      if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx); }
       if (canStomp && pet.grounded && Math.abs(b.x - pet.x) < r * 0.62) squashBug(b, true);
     }
     if (!debug.active) return;
@@ -1189,7 +1202,7 @@
     if (debug.until <= 0) { endDebug(); say(line('someEscaped'), 2200); return; }
     let best = alive[0], bestDist = Infinity;
     for (const b of alive) { const d = Math.abs(b.x - pet.x); if (d < bestDist) { bestDist = d; best = b; } }
-    pet.ax = clamp(best.x, r, W - r);
+    pet.ax = clamp(best.x, petHalfWidth(), W - petHalfWidth());
     if (canStomp && pet.grounded && bestDist < r * 1.1 && pet.stomp <= 0 && !reduceMotion) pet.stomp = 0.35;
   }
 
@@ -1252,7 +1265,7 @@
     else if (r < 0.8 && state.joy < 50) { pet.tapT = 1.4; }
     else if (!reduceMotion) {
       if (DESKTOP) native({ type: 'walk', dir: Math.random() < 0.5 ? -1 : 1 });
-      else pet.ax = clamp(W / 2 + rand(-W * 0.3, W * 0.3), petR(), W - petR());
+      else pet.ax = clamp(W / 2 + rand(-W * 0.3, W * 0.3), petHalfWidth(), W - petHalfWidth());
     }
   }
 
@@ -1285,8 +1298,15 @@
     if (!bubble.hidden) {
       const r = state.hatched ? petR() : eggR();
       const top = state.hatched ? pet.y - r * (pet.chute > 0.05 ? 4.85 : 3.15) - (pet.mode === 'fly' ? 8 : 0) - 10 : groundY - r * 2.2 - 12;
-      bubble.style.left = `${Math.round(clamp(pet.x, 70, W - 70))}px`;
-      bubble.style.top = `${Math.round(Math.max(60, top))}px`;
+      // Clamp by the bubble's own measured box so long or wrapped lines cannot run off
+      // any edge, then slide the tail along it so it still points at the pet.
+      const bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+      const half = bw / 2;
+      const cx = W > bw + 12 ? clamp(pet.x, half + 6, W - half - 6) : W / 2;
+      const cy = Math.max(bh + 6, top);
+      bubble.style.left = `${Math.round(cx)}px`;
+      bubble.style.top = `${Math.round(cy)}px`;
+      bubble.style.setProperty('--tail', `${Math.round(clamp(pet.x - (cx - half), 14, Math.max(14, bw - 14)))}px`);
     }
 
     skyTimer -= dt;
@@ -1486,7 +1506,7 @@
     ctx.save();
     ctx.translate(pet.x + (pet.shake > 0 ? Math.sin(t * 70) * r * 0.08 : 0), pet.y + (flying ? Math.sin(t * 2.4) * r * 0.06 : 0));
     let lean = 0;
-    if (pet.chuteOpen || pet.chute > 0.05) lean = Math.sin(pet.chuteSway) * 0.16;
+    if (pet.chuteOpen || pet.chute > 0.05) lean = Math.sin(pet.chuteSway) * 0.11;
     else if (pet.thrown) lean = pet.spin;
     else if (flying) lean = pet.facing * 0.07 + Math.sin(t * 1.7) * 0.03;
     else if (pet.walking) lean = pet.facing * 0.04;

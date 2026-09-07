@@ -29,23 +29,39 @@ pet itself, minus the parts that need your actual repositories.
 
 ## Install
 
-1. Download the latest `.dmg` from the [releases page](https://github.com/jadhavgaurav/bitling/releases/latest).
-2. Open it and drag **Bitling** into Applications.
-3. Open it from Applications.
+```bash
+curl -fsSL https://raw.githubusercontent.com/jadhavgaurav/bitling/main/install.sh | bash
+```
 
-On first launch macOS says **"Apple could not verify Bitling is free of malware."** That is
-Gatekeeper reacting to an app that is not signed with a paid Apple Developer ID, which this
-one is not. To open it anyway:
+That downloads the latest release, installs it to `/Applications`, links the `bitling`
+command and opens it. Nothing to click through. ([Read the script first](install.sh) if you
+would rather see what it does.)
 
-**System Settings → Privacy & Security → scroll down → Open Anyway**
+Bitling has no Dock icon. Look for the smiling face in the menu bar.
 
-or, in Terminal:
+<details>
+<summary><b>Prefer to download the .dmg by hand?</b></summary>
+
+Grab it from the [releases page](https://github.com/jadhavgaurav/bitling/releases/latest),
+open it, and drag **Bitling** into Applications.
+
+macOS will then refuse to open it: **"Apple could not verify Bitling is free of malware."**
+That is Gatekeeper reacting to an app signed ad hoc rather than with a paid Apple Developer
+ID, which this one is. Nothing is wrong with the app, but macOS cannot tell.
+
+**Click `Done`, never `Move to Trash`.** Then either:
+
+- open **System Settings → Privacy & Security**, scroll down to "Bitling was blocked to
+  protect your Mac", and click **Open Anyway**, or
+- run this once:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Bitling.app
 ```
 
-Bitling has no Dock icon. Look for the smiling face in the menu bar.
+The one-line installer above exists precisely so you can skip all of that.
+
+</details>
 
 ---
 
@@ -175,6 +191,8 @@ npm script or git hook. If the installer could not link it for you:
 ```bash
 sudo ln -sf /Applications/Bitling.app/Contents/Resources/bitling /usr/local/bin/bitling
 ```
+
+(The one-line installer does this for you when `/usr/local/bin` is writable.)
 
 ---
 

@@ -2,14 +2,17 @@ A desktop pet for macOS that lives on your dev activity. A small robot stands on
 bottom edge of your screen, watches your cursor, walks around, flies off to hover
 somewhere else, and reacts to what you are actually doing.
 
-**Install**
+**Install (one line, no warnings)**
 
-1. Download the `.dmg` below and open it.
-2. Drag **Bitling** to Applications, then open it from Applications.
-3. macOS will say it *cannot check the app for malicious software*, because this build
-   is not signed with a paid Apple Developer ID. Open **System Settings → Privacy &
-   Security**, scroll down, and click **Open Anyway**. Or run:
-   `xattr -dr com.apple.quarantine /Applications/Bitling.app`
+```
+curl -fsSL https://raw.githubusercontent.com/jadhavgaurav/bitling/main/install.sh | bash
+```
+
+**Or by hand:** download the `.dmg` below, drag Bitling to Applications, and open it. macOS
+will refuse the first launch because this build is signed ad hoc rather than with a paid
+Apple Developer ID. Click **Done** (never "Move to Trash"), then either open **System
+Settings → Privacy & Security** and click **Open Anyway**, or run
+`xattr -dr com.apple.quarantine /Applications/Bitling.app`.
 
 Bitling has no Dock icon. Look for the smiling face in the menu bar.
 

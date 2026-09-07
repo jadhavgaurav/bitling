@@ -2424,6 +2424,28 @@
     });
   }
 
+  // A small handle for deterministic stepping: used by the screenshot and GIF tooling and
+  // by the verification harness. Stepping the clock by hand keeps captures reproducible.
+  window.__bitling = {
+    advance(seconds) {
+      const steps = Math.min(900, Math.max(0, Math.round((Number(seconds) || 0) * 60)));
+      for (let i = 0; i < steps; i++) update(1 / 60);
+      draw();
+    },
+    place(x) { const v = clamp(Number(x) || 0, 0, W); pet.x = v; pet.ax = v; draw(); },
+    event(ev) { handleGitEvent(ev); },
+    act(name) {
+      if (name === 'pat') { if (!state.hatched) eggTap(); else if (state.asleep) wake(); else petTap(); }
+      else if (name === 'feed') feed();
+      else if (name === 'play') play();
+      else if (name === 'sleep') toggleSleep();
+      else if (name === 'reset') doReset();
+    },
+    setName(n) { state.name = String(n || '').slice(0, 16); saveState(); updateHud(); },
+    hideBubble() { bubble.hidden = true; },
+    state() { return { x: Math.round(pet.x), y: Math.round(pet.y), W, H, groundY, r: petR(), hatched: state.hatched }; },
+  };
+
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveState(); });
   window.addEventListener('pagehide', saveState);
 

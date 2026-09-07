@@ -1,19 +1,24 @@
 <div align="center">
 
-<img src="docs/media/hero.png" width="300" alt="Bitling, a small robot with a glowing screen for a face, arms raised, saying my circuits tingle">
-
 # Bitling
 
 **A desktop pet for macOS that lives on your dev activity.**
 
+<img src="docs/media/demo.gif" width="620" alt="Bitling reacting: it beams with heart eyes when patted, catches a commit, then its screen turns red with ERR as beetles crawl in and it fires twin laser beams from its eyes to destroy them">
+
+### ▶ [Play with it in your browser](https://jadhavgaurav.github.io/bitling/)
+
+No install, no signup. Unbox it, pat it, throw it, and press the buttons to fire real
+developer events at it.
+
+[![Download](https://img.shields.io/github/v/release/jadhavgaurav/bitling?color=6f63d6&label=download&style=flat-square)](https://github.com/jadhavgaurav/bitling/releases/latest)
+[![Try it in your browser](https://img.shields.io/badge/live-demo-2fd4b5?style=flat-square)](https://jadhavgaurav.github.io/bitling/)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-8a8a99?style=flat-square)
+![Apple Silicon and Intel](https://img.shields.io/badge/universal-Apple%20Silicon%20%2B%20Intel-8a8a99?style=flat-square)
+
 A small robot stands on the bottom edge of your screen, watches your cursor, walks around,
 and reacts to what you are actually doing: your commits, your test runs, your deploys and
 your Claude Code sessions.
-
-[![Download](https://img.shields.io/github/v/release/jadhavgaurav/bitling?color=6f63d6&label=download&style=flat-square)](https://github.com/jadhavgaurav/bitling/releases/latest)
-[![Try it in your browser](https://img.shields.io/badge/try%20it-in%20your%20browser-2fd4b5?style=flat-square)](https://jadhavgaurav.github.io/bitling/)
-![macOS 13+](https://img.shields.io/badge/macOS-13%2B-8a8a99?style=flat-square)
-![Apple Silicon and Intel](https://img.shields.io/badge/universal-Apple%20Silicon%20%2B%20Intel-8a8a99?style=flat-square)
 
 </div>
 

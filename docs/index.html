@@ -2439,7 +2439,7 @@
       else if (name === 'feed') feed();
       else if (name === 'play') play();
       else if (name === 'sleep') toggleSleep();
-      else if (name === 'reset') doReset();
+      else if (name === 'reset' && typeof doReset === 'function') doReset();
     },
     setName(n) { state.name = String(n || '').slice(0, 16); saveState(); updateHud(); },
     hideBubble() { bubble.hidden = true; },

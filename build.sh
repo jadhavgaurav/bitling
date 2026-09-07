@@ -19,7 +19,7 @@ python3 Tools/make_pet_html.py "$WEB_SOURCE" Resources/pet.html
 echo "→ compiling host app ($ARCH)"
 swiftc -O -swift-version 5 -target "$ARCH-apple-macosx13.0" \
   -framework Cocoa -framework WebKit -framework ServiceManagement \
-  -o "$APP/Contents/MacOS/Bitling" Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift
+  -o "$APP/Contents/MacOS/Bitling" Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift
 
 echo "→ drawing icon"
 swiftc -O -swift-version 5 -framework Cocoa -o build/makeicon Tools/makeicon.swift

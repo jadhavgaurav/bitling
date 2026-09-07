@@ -124,6 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var snapshot = PetSnapshot()
     private let git = GitWatcher()
     private let ci = CIWatcher()
+    private let claude = ClaudeWatcher()
+    private var recentEvents: [String: Date] = [:]
 
     // Motion
     private var timer: Timer?
@@ -162,6 +164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let stopWatchingMenu = NSMenu(title: "Stop watching")
     private let ciStatusItem = NSMenuItem(title: "CI: checking…", action: nil, keyEquivalent: "")
     private let ciLastItem = NSMenuItem(title: "Last CI: nothing yet", action: nil, keyEquivalent: "")
+    private let claudeStatusItem = NSMenuItem(title: "Claude Code: watching transcripts", action: nil, keyEquivalent: "")
+    private let claudeTodayItem = NSMenuItem(title: "Today: 0 prompts · 0 tool calls", action: nil, keyEquivalent: "")
+    private let claudeLastItem = NSMenuItem(title: "Last: nothing yet", action: nil, keyEquivalent: "")
+    private let hooksItem = NSMenuItem(title: "Connect Claude Code hooks…", action: #selector(toggleClaudeHooks), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -175,6 +181,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         ci.repositories = { [weak self] in self?.git.repositories() ?? [] }
         ci.onEvent = { [weak self] event in self?.deliverGitEvent(event) }
         ci.start()
+        claude.onEvent = { [weak self] event in self?.deliverGitEvent(event) }
+        claude.start()
         timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(timer!, forMode: .common)
         NotificationCenter.default.addObserver(
@@ -274,6 +282,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         for item in [gitWatchingItem, gitTodayItem, gitLastItem, gitTotalsItem] { item.isEnabled = false; gitMenu.addItem(item) }
         gitMenu.addItem(.separator())
         for item in [ciStatusItem, ciLastItem] { item.isEnabled = false; gitMenu.addItem(item) }
+        gitMenu.addItem(.separator())
+        for item in [claudeStatusItem, claudeTodayItem, claudeLastItem] { item.isEnabled = false; gitMenu.addItem(item) }
+        hooksItem.target = self
+        gitMenu.addItem(hooksItem)
         gitMenu.addItem(.separator())
         let watchFolder = NSMenuItem(title: "Watch a folder…", action: #selector(watchFolder), keyEquivalent: "")
         watchFolder.target = self
@@ -376,6 +388,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         gitTotalsItem.title = "Lifetime: \(snapshot.commits) commits caught · \(snapshot.pushes) pushes · \(snapshot.bugs) bugs squashed"
         ciStatusItem.title = "CI: \(ci.ghStatus) · pytest caches"
         ciLastItem.title = "Last CI: \(ci.lastSummary)"
+        let hooked = ClaudeHooks.installed()
+        let active = claude.activeSessionCount
+        claudeStatusItem.title = "Claude Code: \(active) active session\(active == 1 ? "" : "s") · \(hooked ? "hooks connected" : "transcripts only")"
+        claudeTodayItem.title = "Today: \(claude.promptsToday) prompt\(claude.promptsToday == 1 ? "" : "s") · \(claude.toolsToday) tool calls · \(claude.sessionsToday) new session\(claude.sessionsToday == 1 ? "" : "s")"
+        claudeLastItem.title = "Last: \(claude.lastSummary)"
+        hooksItem.title = hooked ? "Disconnect Claude Code hooks" : "Connect Claude Code hooks…"
         stopWatchingMenu.removeAllItems()
         for root in git.roots {
             let item = NSMenuItem(title: root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"), action: #selector(stopWatching(_:)), keyEquivalent: "")
@@ -452,6 +470,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     // MARK: Git
 
     private func deliverGitEvent(_ event: GitEvent) {
+        // Hooks and transcript tailing can report the same moment; keep the first within 3 seconds.
+        if event.kind.hasPrefix("claude-") {
+            let key = "\(event.kind)|\(event.name)"
+            let now = Date()
+            recentEvents = recentEvents.filter { now.timeIntervalSince($0.value) < 30 }
+            if let last = recentEvents[key], now.timeIntervalSince(last) < 3 { return }
+            recentEvents[key] = now
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: event.asDictionary),
               let json = String(data: data, encoding: .utf8) else { return }
         js("petNative.gitEvent(\(json))")
@@ -487,6 +513,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     @objc private func pretendPush() {
         deliverGitEvent(GitEvent(kind: "push", repo: "demo", branch: "main", message: "", hash: ""))
+    }
+
+    @objc private func toggleClaudeHooks() {
+        NSApp.activate(ignoringOtherApps: true)
+        let installed = ClaudeHooks.installed()
+        let alert = NSAlert()
+        alert.messageText = installed ? "Disconnect Claude Code hooks?" : "Connect Claude Code hooks?"
+        alert.informativeText = installed
+            ? "Removes the Bitling entries from the hooks section of ~/.claude/settings.json. Other hooks stay untouched. Bitling keeps watching transcripts."
+            : "Adds Bitling to the hooks section of ~/.claude/settings.json for SessionStart, UserPromptSubmit, PreToolUse, Stop, Notification and SessionEnd. Each hook runs \(ClaudeHooks.command) which forwards one event to the pet. Existing hooks are kept, and a backup is written next to the file. This makes reactions instant and lets the pet tell you when Claude is waiting for permission."
+        alert.addButton(withTitle: installed ? "Disconnect" : "Connect")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            if installed { try ClaudeHooks.uninstall() } else { try ClaudeHooks.install() }
+            js("petNative.gitEvent({kind:'say', message: \(jsString(installed ? "hooks off. still watching." : "hooks on. I hear everything now."))})")
+        } catch {
+            let failure = NSAlert()
+            failure.messageText = "Could not update ~/.claude/settings.json"
+            failure.informativeText = error.localizedDescription
+            failure.runModal()
+        }
     }
 
     @objc private func pretendTestsFailed() {
@@ -643,6 +691,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 js("petNative.cursor(\(Int(localX)), \(Int(localY)))")
             }
         }
+    }
+}
+
+// MARK: - Claude Code hooks in ~/.claude/settings.json
+
+enum ClaudeHooks {
+    static let events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Stop", "Notification", "SessionEnd"]
+    static var command: String { "\(Bundle.main.bundlePath)/Contents/Resources/bitling claude" }
+    private static var settingsURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
+    }
+
+    struct HooksError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    private static func load() throws -> [String: Any] {
+        guard FileManager.default.fileExists(atPath: settingsURL.path) else { return [:] }
+        let data = try Data(contentsOf: settingsURL)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw HooksError(message: "settings.json is not a JSON object")
+        }
+        return object
+    }
+
+    private static func save(_ settings: [String: Any]) throws {
+        let backup = settingsURL.deletingLastPathComponent().appendingPathComponent("settings.json.bitling-backup")
+        if FileManager.default.fileExists(atPath: settingsURL.path) {
+            try? FileManager.default.removeItem(at: backup)
+            try FileManager.default.copyItem(at: settingsURL, to: backup)
+        }
+        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: settingsURL, options: .atomic)
+    }
+
+    private static func isOurs(_ group: [String: Any]) -> Bool {
+        let hooks = group["hooks"] as? [[String: Any]] ?? []
+        return !hooks.isEmpty && hooks.allSatisfy { ($0["command"] as? String ?? "").hasSuffix("/bitling claude") }
+    }
+
+    static func installed() -> Bool {
+        guard let settings = try? load(), let hooks = settings["hooks"] as? [String: Any] else { return false }
+        let groups = hooks["UserPromptSubmit"] as? [[String: Any]] ?? []
+        return groups.contains(where: isOurs)
+    }
+
+    static func install() throws {
+        var settings = try load()
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        for event in events {
+            var groups = hooks[event] as? [[String: Any]] ?? []
+            groups.removeAll(where: isOurs)
+            groups.append(["matcher": "", "hooks": [["type": "command", "command": command, "timeout": 10]]])
+            hooks[event] = groups
+        }
+        settings["hooks"] = hooks
+        try save(settings)
+    }
+
+    static func uninstall() throws {
+        var settings = try load()
+        guard var hooks = settings["hooks"] as? [String: Any] else { return }
+        for event in events {
+            var groups = hooks[event] as? [[String: Any]] ?? []
+            groups.removeAll(where: isOurs)
+            if groups.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = groups }
+        }
+        settings["hooks"] = hooks
+        try save(settings)
     }
 }
 

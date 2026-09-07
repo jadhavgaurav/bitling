@@ -97,6 +97,7 @@ bitling run pytest -q
 bitling deploy production ./deploy.sh   # start, then finished or failed
 bitling event test-failed count=3 name=api
 bitling say "lunch?"
+bitling claude < hook.json                # Claude Code hook adapter (installed for you by the menu)
 ```
 
 If `build.sh` could not link the command, do it once yourself:
@@ -105,8 +106,31 @@ If `build.sh` could not link the command, do it once yourself:
 sudo ln -sf /Applications/Bitling.app/Contents/Resources/bitling /usr/local/bin/bitling
 ```
 
+## Claude Code reactions
+
+Bitling watches your Claude Code sessions too. It tails the session transcripts Claude
+Code writes under `~/.claude/projects`, so this works with no configuration for the
+terminal, the desktop app and IDE extensions.
+
+| Claude Code | Bitling does |
+|---|---|
+| you send a prompt | "on it", antenna turns orange, typing dots on its screen, it stops strolling and stares at the code |
+| Claude edits, runs commands, reads, searches | occasional chatter: "editing files…", "running tests…", "reading around…" |
+| a tool call errors | brief "!" flicker, "hmm, that errored" |
+| Claude finishes a turn | "done! check it", sparkles, arms up |
+| Claude waits for your permission | waves both arms, "?" on screen, "Claude needs you!" (hooks only) |
+| new session, idle 5 minutes, session ends | a line each |
+
+**Hooks** make this instant and add the permission alert. "Connect Claude Code hooks…"
+in the Dev activity menu adds Bitling to `~/.claude/settings.json` for SessionStart,
+UserPromptSubmit, PreToolUse, Stop, Notification and SessionEnd. Existing hooks are kept,
+a backup is written beside the file, and "Disconnect" removes only Bitling's entries.
+Each hook runs `bitling claude`, which reads the hook JSON and forwards one event. With
+both hooks and transcripts active, duplicates within three seconds are dropped.
+
 The Dev activity submenu shows what is being watched, today's commits and pushes,
-lifetime totals, the CI source status, and "Pretend…" items for a demo.
+lifetime totals, the CI source status, Claude Code activity, and "Pretend…" items for a
+demo.
 
 State lives in `~/Library/Preferences/app.bitling.pet.plist`. Delete it, or use Start
 over, for a fresh box.
@@ -117,6 +141,7 @@ over, for a fresh box.
 Sources/main.swift        macOS host: window, drag + physics, menu bar, bridge, URL scheme
 Sources/GitWatcher.swift  reflog tailing, repo discovery, github slugs
 Sources/CIWatcher.swift   gh runs + deployments, pytest caches
+Sources/ClaudeWatcher.swift  Claude Code transcript tailing
 Resources/pet.html        generated desktop page (do not edit by hand)
 Resources/bitling         command line tool copied into the app bundle
 Resources/Info.plist      bundle metadata (LSUIElement, icon, URL scheme)
@@ -142,4 +167,5 @@ Host to page (`window.petNative`): `action(name)`, `grab()`, `drag(vx, vy)`,
 
 Event kinds: commit, amend, merge, push, checkout, rebase, rebase-done, pull, stash,
 reset, cherry-pick, test-failed, test-passed, deploy-started, deploy-finished,
-deploy-failed, say.
+deploy-failed, claude-session-start, claude-prompt, claude-tool, claude-tool-error,
+claude-done, claude-notify, claude-idle, claude-session-end, say.

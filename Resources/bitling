@@ -5,6 +5,7 @@
 #   bitling deploy <target> <command...>  run a deploy; the pet shows progress, then rocket or error
 #   bitling event <kind> [key=value...]   raw event, e.g. `bitling event test-failed count=3 name=api`
 #   bitling say <text>                    make the pet say something
+#   bitling claude                        Claude Code hook adapter (reads hook JSON on stdin)
 #
 # Events travel over the bitling:// URL scheme, so this works from any shell, Makefile,
 # npm script or git hook on the same Mac. Exit status of the wrapped command is preserved.
@@ -73,6 +74,43 @@ case "$command_name" in
   say)
     [ $# -gt 0 ] || { usage; exit 2; }
     send say "text=$*"
+    ;;
+  claude)
+    # Claude Code hook adapter: reads the hook JSON on stdin and forwards one event.
+    # The payload travels through the environment because python's program text uses stdin.
+    BITLING_PAYLOAD="$(cat)" python3 - <<'PY'
+import json, subprocess, sys, urllib.parse, os
+try:
+    data = json.loads(os.environ.get("BITLING_PAYLOAD", ""))
+except Exception:
+    sys.exit(0)
+event = data.get("hook_event_name", "")
+cwd = data.get("cwd") or os.getcwd()
+project = os.path.basename(cwd.rstrip("/")) or cwd
+kind = None
+params = {"name": project}
+if event == "SessionStart":
+    kind = "claude-session-start"
+elif event == "UserPromptSubmit":
+    kind = "claude-prompt"
+    params["message"] = str(data.get("prompt", ""))[:80]
+elif event == "PreToolUse":
+    kind = "claude-tool"
+    tool_input = data.get("tool_input") or {}
+    params["name"] = str(data.get("tool_name", "tool"))
+    params["message"] = str(tool_input.get("command") or tool_input.get("file_path") or tool_input.get("pattern") or "")[:80]
+elif event == "Stop":
+    kind = "claude-done"
+elif event == "Notification":
+    kind = "claude-notify"
+    params["message"] = str(data.get("message", ""))[:80]
+elif event == "SessionEnd":
+    kind = "claude-session-end"
+if kind:
+    query = "&".join(f"{k}={urllib.parse.quote(v, safe='')}" for k, v in params.items() if v)
+    subprocess.run(["open", "-g", f"bitling://{kind}?{query}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+PY
+    exit 0
     ;;
   *)
     usage

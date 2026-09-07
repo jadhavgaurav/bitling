@@ -1145,7 +1145,7 @@
     const ey = cy - r * 0.12, ex = r * 0.34;
     const er = r * 0.2 * (pet.surprise > 0 ? 1.22 : 1);
     const lids = asleep ? 1 : Math.max(pet.blink, sleepy ? 0.45 : 0, pet.yawn > 0 ? 0.7 : 0);
-    const happyEyes = pet.happy > 0 && !asleep && pet.surprise <= 0;
+    const happyEyes = pet.happy > 0 && !asleep && pet.surprise <= 0 && pet.dizzy <= 0;
     ctx.lineCap = 'round';
     for (const s of [-1, 1]) {
       const x = s * ex;

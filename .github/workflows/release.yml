@@ -1,0 +1,35 @@
+name: Release
+
+# Push a tag like v1.0.1 and this builds the universal app, packages the disk image
+# and attaches it to a GitHub release that anyone can download.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build universal app and disk image
+        run: ./release.sh
+
+      - name: Check the binary carries both architectures
+        run: |
+          lipo -archs build/Bitling.app/Contents/MacOS/Bitling | tee /dev/stderr | grep -q arm64
+          lipo -archs build/Bitling.app/Contents/MacOS/Bitling | grep -q x86_64
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          gh release create "${GITHUB_REF_NAME}" "build/Bitling-${VERSION}.dmg" \
+            --title "Bitling ${VERSION}" \
+            --notes-file .github/RELEASE_NOTES.md \
+            || gh release upload "${GITHUB_REF_NAME}" "build/Bitling-${VERSION}.dmg" --clobber

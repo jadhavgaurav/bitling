@@ -10,7 +10,38 @@ artifact). The macOS host (`Sources/`) renders it in a borderless WKWebView and 
 everything a page cannot do: window movement, screen physics, a menu bar item, native
 prompts, durable state, and the git and CI watchers.
 
-## Build and install
+## Install
+
+Download the latest `Bitling-<version>.dmg` from the
+[releases page](https://github.com/jadhavgaurav/bitling/releases), open it, and drag
+Bitling into Applications.
+
+The first launch says **"Apple could not verify Bitling is free of malware."** That is
+Gatekeeper reacting to an app that is not signed with a paid Apple Developer ID, which
+this one is not. To open it anyway:
+
+**System Settings -> Privacy & Security -> scroll down -> Open Anyway**
+
+or, in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Bitling.app
+```
+
+Requires macOS 13 or later. The download is universal, so it runs on both Apple Silicon
+and Intel Macs. Bitling has no Dock icon: look for the smiling face in the menu bar.
+
+For the `bitling` command as well:
+
+```bash
+sudo ln -sf /Applications/Bitling.app/Contents/Resources/bitling /usr/local/bin/bitling
+```
+
+To uninstall: quit it from the menu bar, drag `/Applications/Bitling.app` to the Trash,
+then `defaults delete app.bitling.pet` to forget the pet, and
+`git config --global --unset core.hooksPath` if you connected the global git hooks.
+
+## Build from source
 
 Requires macOS 13 or newer and the Xcode Command Line Tools (`xcode-select --install`).
 
@@ -18,16 +49,31 @@ Requires macOS 13 or newer and the Xcode Command Line Tools (`xcode-select --ins
 ./build.sh
 ```
 
-That derives `Resources/pet.html` from the web page, compiles the host, draws the icon,
-ad-hoc signs the bundle, installs `/Applications/Bitling.app` and links the `bitling`
-command into `/usr/local/bin` when that folder is writable. Pass a different folder to
-install elsewhere, or `INSTALL=0 ./build.sh` to only build into `build/`.
+That derives `Resources/pet.html` from the web page, compiles a universal host binary,
+draws the icon, ad-hoc signs the bundle, installs `/Applications/Bitling.app` and links
+the `bitling` command into `/usr/local/bin` when that folder is writable. Pass a
+different folder to install elsewhere, `INSTALL=0 ./build.sh` to only build into
+`build/`, or `NATIVE=1 ./build.sh` to skip the second architecture while developing.
 
 ```bash
 open /Applications/Bitling.app
 ```
 
-Bitling has no Dock icon. Look for the smiling face in the menu bar.
+## Releasing
+
+```bash
+./release.sh              # build/Bitling-<version>.dmg
+./release.sh --publish    # tag, push and create the GitHub release
+```
+
+Pushing a `v*` tag also runs `.github/workflows/release.yml`, which builds the universal
+app on a macOS runner and attaches the disk image to the release.
+
+The version comes from `CFBundleShortVersionString` in `Resources/Info.plist`; bump it
+there before releasing. To ship a build that opens without the Gatekeeper warning you
+need an Apple Developer Program membership: set `SIGN_ID` to your Developer ID
+Application certificate and `NOTARY_PROFILE` to a `notarytool` keychain profile, and
+`release.sh` will sign, notarize and staple it.
 
 ## Using it
 
@@ -168,6 +214,8 @@ Tools/makeicon.swift      draws the app icon set
 Tools/patch_*.py          one-off migrations kept for the record
 web/bitling.html          the creature: shared with the web artifact
 build.sh                  build, sign, install
+release.sh                package the disk image, optionally publish the release
+.github/workflows/        CI that builds and attaches the disk image on a v* tag
 ```
 
 To change the creature, edit `web/bitling.html` and rebuild. To preview the desktop

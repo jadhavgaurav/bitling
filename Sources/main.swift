@@ -638,7 +638,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             : "Pick a new name."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
         field.stringValue = suggestion
-        field.placeholderString = "Name"
+        field.placeholderString = "Give it a name"
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
         alert.addButton(withTitle: first ? "Name it" : "Rename")

@@ -1,4 +1,4 @@
-// Jellykin: a desktop pet for macOS.
+// Bitling: a desktop pet for macOS.
 //
 // The creature itself is a web page (Resources/pet.html) rendered in a transparent,
 // borderless, always-on-top window. This host owns everything the page cannot:
@@ -81,7 +81,7 @@ final class PetWindow: NSWindow {
 // MARK: - Snapshot of the creature's state, as reported by the page
 
 struct PetSnapshot {
-    var name = "Jellykin"
+    var name = "Bitling"
     var stage = "Egg"
     var age = ""
     var full = 0
@@ -123,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var pageReady = false
     private var snapshot = PetSnapshot()
     private let git = GitWatcher()
+    private let ci = CIWatcher()
 
     // Motion
     private var timer: Timer?
@@ -137,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var dragEventCount = 0
 
     // Menu items whose titles or states change
-    private let headerItem = NSMenuItem(title: "Jellykin", action: nil, keyEquivalent: "")
+    private let headerItem = NSMenuItem(title: "Bitling", action: nil, keyEquivalent: "")
     private let stageItem = NSMenuItem(title: "Egg", action: nil, keyEquivalent: "")
     private let tummyItem = NSMenuItem(title: "Tummy", action: nil, keyEquivalent: "")
     private let energyItem = NSMenuItem(title: "Energy", action: nil, keyEquivalent: "")
@@ -153,12 +154,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let resetItem = NSMenuItem(title: "Start over…", action: #selector(resetAction), keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
     private let gitMenu = NSMenu(title: "Git")
-    private let gitItem = NSMenuItem(title: "Git", action: nil, keyEquivalent: "")
+    private let gitItem = NSMenuItem(title: "Dev activity", action: nil, keyEquivalent: "")
     private let gitWatchingItem = NSMenuItem(title: "Watching…", action: nil, keyEquivalent: "")
     private let gitTodayItem = NSMenuItem(title: "Today: 0 commits · 0 pushes", action: nil, keyEquivalent: "")
     private let gitLastItem = NSMenuItem(title: "Last: nothing yet", action: nil, keyEquivalent: "")
     private let gitTotalsItem = NSMenuItem(title: "Lifetime: 0 commits caught · 0 pushes · 0 bugs", action: nil, keyEquivalent: "")
     private let stopWatchingMenu = NSMenu(title: "Stop watching")
+    private let ciStatusItem = NSMenuItem(title: "CI: checking…", action: nil, keyEquivalent: "")
+    private let ciLastItem = NSMenuItem(title: "Last CI: nothing yet", action: nil, keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -169,6 +172,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         git.onEvent = { [weak self] event in self?.deliverGitEvent(event) }
         git.onStatus = { [weak self] status in self?.deliverGitStatus(status) }
         git.start()
+        ci.repositories = { [weak self] in self?.git.repositories() ?? [] }
+        ci.onEvent = { [weak self] event in self?.deliverGitEvent(event) }
+        ci.start()
         timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(timer!, forMode: .common)
         NotificationCenter.default.addObserver(
@@ -178,6 +184,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func applicationWillTerminate(_ notification: Notification) {
         saveWindowX()
+    }
+
+    // bitling://<kind>?key=value… from the `bitling` command line tool or any script.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard url.scheme?.lowercased() == "bitling", let kind = url.host?.lowercased() else { continue }
+            var query: [String: String] = [:]
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.forEach { query[$0.name] = $0.value ?? "" }
+            let event = GitEvent(
+                kind: kind, repo: query["repo"] ?? "", branch: query["branch"] ?? "",
+                message: query["message"] ?? query["text"] ?? "", hash: query["hash"] ?? "",
+                count: Int(query["count"] ?? "") ?? 0, target: query["target"] ?? "", name: query["name"] ?? ""
+            )
+            deliverGitEvent(event)
+        }
     }
 
     // MARK: Setup
@@ -230,15 +251,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: "Jellykin")
+            let image = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: "Bitling")
             image?.isTemplate = true
             button.image = image
-            button.toolTip = "Jellykin"
+            button.toolTip = "Bitling"
         }
         menu.delegate = self
         menu.autoenablesItems = false
         for item in [headerItem, stageItem, tummyItem, energyItem, joyItem] { item.isEnabled = false }
-        headerItem.attributedTitle = NSAttributedString(string: "Jellykin", attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
+        headerItem.attributedTitle = NSAttributedString(string: "Bitling", attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
         menu.addItem(headerItem)
         menu.addItem(stageItem)
         menu.addItem(tummyItem)
@@ -251,6 +272,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.addItem(.separator())
         gitMenu.autoenablesItems = false
         for item in [gitWatchingItem, gitTodayItem, gitLastItem, gitTotalsItem] { item.isEnabled = false; gitMenu.addItem(item) }
+        gitMenu.addItem(.separator())
+        for item in [ciStatusItem, ciLastItem] { item.isEnabled = false; gitMenu.addItem(item) }
         gitMenu.addItem(.separator())
         let watchFolder = NSMenuItem(title: "Watch a folder…", action: #selector(watchFolder), keyEquivalent: "")
         watchFolder.target = self
@@ -265,12 +288,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let pretendPush = NSMenuItem(title: "Pretend I pushed", action: #selector(pretendPush), keyEquivalent: "")
         pretendPush.target = self
         gitMenu.addItem(pretendPush)
+        let pretendFail = NSMenuItem(title: "Pretend tests failed", action: #selector(pretendTestsFailed), keyEquivalent: "")
+        pretendFail.target = self
+        gitMenu.addItem(pretendFail)
+        let pretendDeploy = NSMenuItem(title: "Pretend a deploy ran", action: #selector(pretendDeploy), keyEquivalent: "")
+        pretendDeploy.target = self
+        gitMenu.addItem(pretendDeploy)
         gitItem.submenu = gitMenu
         menu.addItem(gitItem)
         menu.addItem(.separator())
         loginItem.target = self
         menu.addItem(loginItem)
-        let quit = NSMenuItem(title: "Quit Jellykin", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit Bitling", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
         statusItem.menu = menu
     }
@@ -324,17 +353,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         headerItem.attributedTitle = NSAttributedString(
-            string: snapshot.hatched ? snapshot.name : "A mysterious egg",
+            string: snapshot.hatched ? snapshot.name : "A mysterious box",
             attributes: [.font: NSFont.boldSystemFont(ofSize: 13)]
         )
-        stageItem.title = snapshot.hatched ? "\(snapshot.stage) · \(snapshot.age)" : "Tap it three times to hatch"
+        stageItem.title = snapshot.hatched ? "\(snapshot.stage) · \(snapshot.age)" : "Tap it three times to unbox"
         tummyItem.isHidden = !snapshot.hatched
         energyItem.isHidden = !snapshot.hatched
         joyItem.isHidden = !snapshot.hatched
         tummyItem.title = meter("Tummy ", snapshot.full)
         energyItem.title = meter("Energy", snapshot.energy)
         joyItem.title = meter("Joy   ", snapshot.joy)
-        patItem.title = snapshot.hatched ? (snapshot.asleep ? "Wake with a pat" : "Pat") : "Tap the egg"
+        patItem.title = snapshot.hatched ? (snapshot.asleep ? "Wake with a pat" : "Pat") : "Tap the box"
         feedItem.isEnabled = snapshot.hatched && !snapshot.asleep
         playItem.isEnabled = snapshot.hatched && !snapshot.asleep
         sleepItem.isEnabled = snapshot.hatched
@@ -345,6 +374,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         gitTodayItem.title = "Today: \(git.commitsToday) commit\(git.commitsToday == 1 ? "" : "s") · \(git.pushesToday) push\(git.pushesToday == 1 ? "" : "es")"
         gitLastItem.title = "Last: \(git.lastEventSummary)"
         gitTotalsItem.title = "Lifetime: \(snapshot.commits) commits caught · \(snapshot.pushes) pushes · \(snapshot.bugs) bugs squashed"
+        ciStatusItem.title = "CI: \(ci.ghStatus) · pytest caches"
+        ciLastItem.title = "Last CI: \(ci.lastSummary)"
         stopWatchingMenu.removeAllItems()
         for root in git.roots {
             let item = NSMenuItem(title: root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"), action: #selector(stopWatching(_:)), keyEquivalent: "")
@@ -394,7 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         alert.messageText = "Start over?"
         alert.informativeText = snapshot.hatched
             ? "\(snapshot.name) and its history will be gone for good. A new egg will take its place."
-            : "The egg will be replaced with a fresh one."
+            : "The box will be replaced with a fresh one."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Keep my pet")
         alert.addButton(withTitle: "Start over")
@@ -413,7 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.messageText = "Could not change the login setting"
-            alert.informativeText = "\(error.localizedDescription)\n\nMove Jellykin.app to the Applications folder and try again."
+            alert.informativeText = "\(error.localizedDescription)\n\nMove Bitling.app to the Applications folder and try again."
             alert.runModal()
         }
     }
@@ -439,7 +470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.prompt = "Watch"
-        panel.message = "Jellykin will look for git repositories up to three folders deep."
+        panel.message = "Bitling will look for git repositories up to three folders deep."
         guard panel.runModal() == .OK else { return }
         for url in panel.urls { git.addRoot(url) }
     }
@@ -458,12 +489,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         deliverGitEvent(GitEvent(kind: "push", repo: "demo", branch: "main", message: "", hash: ""))
     }
 
+    @objc private func pretendTestsFailed() {
+        deliverGitEvent(GitEvent(kind: "test-failed", repo: "demo", branch: "main", message: "pytest", hash: "", count: Int.random(in: 1...4), name: "demo/api"))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 14) { [weak self] in
+            self?.deliverGitEvent(GitEvent(kind: "test-passed", repo: "demo", branch: "main", message: "pytest", hash: "", name: "demo/api"))
+        }
+    }
+
+    @objc private func pretendDeploy() {
+        deliverGitEvent(GitEvent(kind: "deploy-started", repo: "demo", branch: "main", message: "", hash: "", target: "production"))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+            self?.deliverGitEvent(GitEvent(kind: "deploy-finished", repo: "demo", branch: "main", message: "", hash: "", target: "production"))
+        }
+    }
+
     private func askName(first: Bool, suggestion: String) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = first ? "It hatched!" : "Rename your Jellykin"
+        alert.messageText = first ? "It booted up!" : "Rename your Bitling"
         alert.informativeText = first
-            ? "Give your Jellykin a name. You can change it later from the menu bar."
+            ? "Give your Bitling a name. You can change it later from the menu bar."
             : "Pick a new name."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
         field.stringValue = suggestion

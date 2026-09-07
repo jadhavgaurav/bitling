@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """One-off migration: ball mini-game -> debug (bug squashing) + git reactions.
 
-Applied to web/jellykin.html. Kept in the repo as a record of the change; it is
+Applied to web/bitling.html. Kept in the repo as a record of the change; it is
 idempotent-guarded (refuses to run twice) and asserts every anchor.
 """
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent / "web" / "jellykin.html"
+SRC = Path(__file__).resolve().parent.parent / "web" / "bitling.html"
 s = SRC.read_text(encoding="utf-8")
 if "function updateBugs" in s:
     raise SystemExit("already applied")
@@ -462,8 +462,8 @@ patch("""        <dt>Games</dt><dd id="sGames">0</dd>
         <dt>Pats</dt><dd id="sPets">0</dd>""")
 patch("    $('#sGames').textContent = String(state.games);",
       "    $('#sGames').textContent = String(state.games);\n    $('#sBugs').textContent = String(state.bugs);\n    $('#sCommits').textContent = String(state.commits);")
-patch("<p>Grows to the next stage with age and care points. Needs drift slowly while you are away, but a Jellykin never dies. It only sulks.</p>",
-      "<p>Grows to the next stage with age and care points. Needs drift slowly while you are away, but a Jellykin never dies. It only sulks. The desktop app also feeds it your git commits.</p>")
+patch("<p>Grows to the next stage with age and care points. Needs drift slowly while you are away, but a Bitling never dies. It only sulks.</p>",
+      "<p>Grows to the next stage with age and care points. Needs drift slowly while you are away, but a Bitling never dies. It only sulks. The desktop app also feeds it your git commits.</p>")
 
 SRC.write_text(s, encoding="utf-8")
 print("patched", SRC)

@@ -1,4 +1,4 @@
-// Draws the Jellykin app icon at every size an .iconset needs.
+// Draws the Bitling app icon (a small robot with a screen face) at every size an .iconset needs.
 // Usage: makeicon <output.iconset directory>
 import Cocoa
 
@@ -14,6 +14,10 @@ func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColor 
     NSColor(calibratedRed: r / 255, green: g / 255, blue: b / 255, alpha: a)
 }
 
+func rounded(_ rect: NSRect, _ radius: CGFloat) -> NSBezierPath {
+    NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+}
+
 func render(pixels: Int) -> Data {
     guard let rep = NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8,
@@ -27,68 +31,83 @@ func render(pixels: Int) -> Data {
     gc.imageInterpolation = .high
     let s = CGFloat(pixels)
 
-    // Habitat tile: sky gradient in a macOS-style rounded square.
+    // Tile: deep navy to indigo, the colour of the robot's screen.
     let inset = s * 0.05
-    let tile = NSBezierPath(
-        roundedRect: NSRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset),
-        xRadius: s * 0.22, yRadius: s * 0.22
-    )
-    NSGradient(starting: rgb(234, 245, 242), ending: rgb(163, 213, 234))!.draw(in: tile, angle: 90)
-
-    // Two soft hills.
+    let tile = rounded(NSRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset), s * 0.22)
+    NSGradient(starting: rgb(29, 33, 64), ending: rgb(58, 52, 110))!.draw(in: tile, angle: 90)
     tile.addClip()
-    rgb(191, 216, 201).setFill()
-    let hillA = NSBezierPath()
-    hillA.move(to: NSPoint(x: -s * 0.1, y: s * 0.22))
-    hillA.curve(to: NSPoint(x: s * 0.6, y: s * 0.22), controlPoint1: NSPoint(x: s * 0.12, y: s * 0.42), controlPoint2: NSPoint(x: s * 0.4, y: s * 0.42))
-    hillA.line(to: NSPoint(x: -s * 0.1, y: -s * 0.1))
-    hillA.close()
-    hillA.fill()
-    let hillB = NSBezierPath()
-    hillB.move(to: NSPoint(x: s * 0.45, y: s * 0.22))
-    hillB.curve(to: NSPoint(x: s * 1.1, y: s * 0.22), controlPoint1: NSPoint(x: s * 0.7, y: s * 0.46), controlPoint2: NSPoint(x: s * 0.95, y: s * 0.46))
-    hillB.line(to: NSPoint(x: s * 1.1, y: -s * 0.1))
-    hillB.close()
-    hillB.fill()
-    rgb(207, 227, 214).setFill()
-    NSRect(x: 0, y: 0, width: s, height: s * 0.22).fill()
 
-    // Shadow.
-    rgb(34, 72, 77, 0.18).setFill()
-    NSBezierPath(ovalIn: NSRect(x: s * 0.28, y: s * 0.17, width: s * 0.44, height: s * 0.08)).fill()
+    let outline = rgb(110, 104, 150)
+    let shellTop = rgb(240, 238, 250)
+    let shellBottom = rgb(200, 196, 228)
+    let lineWidth = max(1, s * 0.018)
 
-    // Body: a slightly squashed jelly blob.
-    let body = NSBezierPath(ovalIn: NSRect(x: s * 0.2, y: s * 0.2, width: s * 0.6, height: s * 0.54))
-    NSGradient(starting: rgb(255, 224, 232), ending: rgb(240, 120, 154))!.draw(in: body, angle: -60)
-
-    // Belly highlight.
-    rgb(255, 240, 244, 0.5).setFill()
-    NSBezierPath(ovalIn: NSRect(x: s * 0.34, y: s * 0.24, width: s * 0.32, height: s * 0.2)).fill()
-
-    // Cheeks.
-    rgb(255, 127, 163, 0.55).setFill()
-    NSBezierPath(ovalIn: NSRect(x: s * 0.245, y: s * 0.43, width: s * 0.1, height: s * 0.06)).fill()
-    NSBezierPath(ovalIn: NSRect(x: s * 0.655, y: s * 0.43, width: s * 0.1, height: s * 0.06)).fill()
-
-    // Eyes.
-    let ink = rgb(84, 32, 49)
-    for cx in [s * 0.4, s * 0.6] {
-        NSColor.white.setFill()
-        NSBezierPath(ovalIn: NSRect(x: cx - s * 0.065, y: s * 0.47, width: s * 0.13, height: s * 0.15)).fill()
-        ink.setFill()
-        NSBezierPath(ovalIn: NSRect(x: cx - s * 0.037, y: s * 0.485, width: s * 0.074, height: s * 0.09)).fill()
-        NSColor.white.setFill()
-        NSBezierPath(ovalIn: NSRect(x: cx - s * 0.03, y: s * 0.54, width: s * 0.025, height: s * 0.025)).fill()
+    // Body.
+    let body = rounded(NSRect(x: s * 0.33, y: s * 0.12, width: s * 0.34, height: s * 0.22), s * 0.07)
+    NSGradient(starting: shellBottom, ending: shellTop)!.draw(in: body, angle: 90)
+    outline.setStroke(); body.lineWidth = lineWidth; body.stroke()
+    // Chest LEDs.
+    for (i, colour) in [rgb(90, 214, 150), rgb(90, 214, 150), rgb(250, 190, 80)].enumerated() {
+        colour.setFill()
+        NSBezierPath(ovalIn: NSRect(x: s * (0.44 + CGFloat(i) * 0.05), y: s * 0.2, width: s * 0.03, height: s * 0.03)).fill()
     }
+    // Arms.
+    for x in [s * 0.27, s * 0.69] {
+        let arm = rounded(NSRect(x: x, y: s * 0.14, width: s * 0.05, height: s * 0.16), s * 0.025)
+        shellBottom.setFill(); arm.fill(); outline.setStroke(); arm.lineWidth = lineWidth; arm.stroke()
+    }
+    // Neck.
+    rgb(150, 145, 190).setFill()
+    NSRect(x: s * 0.46, y: s * 0.33, width: s * 0.08, height: s * 0.05).fill()
 
-    // Smile.
-    ink.setStroke()
-    let mouth = NSBezierPath()
-    mouth.lineWidth = max(1, s * 0.022)
-    mouth.lineCapStyle = .round
-    mouth.move(to: NSPoint(x: s * 0.45, y: s * 0.41))
-    mouth.curve(to: NSPoint(x: s * 0.55, y: s * 0.41), controlPoint1: NSPoint(x: s * 0.48, y: s * 0.365), controlPoint2: NSPoint(x: s * 0.52, y: s * 0.365))
-    mouth.stroke()
+    // Antenna.
+    let stem = NSBezierPath()
+    stem.move(to: NSPoint(x: s * 0.5, y: s * 0.79))
+    stem.line(to: NSPoint(x: s * 0.5, y: s * 0.86))
+    stem.lineWidth = max(1, s * 0.02)
+    outline.setStroke(); stem.stroke()
+    let tipRect = NSRect(x: s * 0.46, y: s * 0.85, width: s * 0.08, height: s * 0.08)
+    let glow = NSShadow()
+    glow.shadowColor = rgb(126, 245, 230, 0.9)
+    glow.shadowBlurRadius = s * 0.04
+    NSGraphicsContext.saveGraphicsState()
+    glow.set()
+    rgb(126, 245, 230).setFill()
+    NSBezierPath(ovalIn: tipRect).fill()
+    NSGraphicsContext.restoreGraphicsState()
+
+    // Head.
+    let head = rounded(NSRect(x: s * 0.2, y: s * 0.38, width: s * 0.6, height: s * 0.42), s * 0.11)
+    NSGradient(starting: shellBottom, ending: shellTop)!.draw(in: head, angle: 90)
+    outline.setStroke(); head.lineWidth = lineWidth; head.stroke()
+    // Ear caps.
+    for x in [s * 0.165, s * 0.775] {
+        let cap = rounded(NSRect(x: x, y: s * 0.52, width: s * 0.06, height: s * 0.14), s * 0.02)
+        rgb(176, 170, 214).setFill(); cap.fill(); outline.setStroke(); cap.lineWidth = lineWidth; cap.stroke()
+    }
+    // Screen.
+    let screen = rounded(NSRect(x: s * 0.26, y: s * 0.44, width: s * 0.48, height: s * 0.3), s * 0.07)
+    rgb(29, 33, 64).setFill(); screen.fill()
+    outline.setStroke(); screen.lineWidth = lineWidth; screen.stroke()
+
+    // Face, glowing cyan.
+    NSGraphicsContext.saveGraphicsState()
+    let faceGlow = NSShadow()
+    faceGlow.shadowColor = rgb(126, 245, 230, 0.8)
+    faceGlow.shadowBlurRadius = s * 0.03
+    faceGlow.set()
+    let cyan = rgb(126, 245, 230)
+    cyan.setFill(); cyan.setStroke()
+    for x in [s * 0.36, s * 0.56] {
+        rounded(NSRect(x: x, y: s * 0.57, width: s * 0.08, height: s * 0.09), s * 0.02).fill()
+    }
+    let smile = NSBezierPath()
+    smile.lineWidth = max(1.5, s * 0.022)
+    smile.lineCapStyle = .round
+    smile.move(to: NSPoint(x: s * 0.43, y: s * 0.52))
+    smile.curve(to: NSPoint(x: s * 0.57, y: s * 0.52), controlPoint1: NSPoint(x: s * 0.47, y: s * 0.47), controlPoint2: NSPoint(x: s * 0.53, y: s * 0.47))
+    smile.stroke()
+    NSGraphicsContext.restoreGraphicsState()
 
     guard let png = rep.representation(using: .png, properties: [:]) else { fatalError("png encode failed") }
     return png

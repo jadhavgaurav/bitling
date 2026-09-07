@@ -76,8 +76,8 @@ def build(source: Path, target: Path) -> None:
     # --- creature fields used by the host
     s = patch(
         s,
-        "    grounded: true, chew: 0, happy: 0, surprise: 0, yawn: 0, dizzy: 0, glance: 0, t: 0, idleAt: 2.5,\n  };",
-        "    grounded: true, chew: 0, happy: 0, surprise: 0, yawn: 0, dizzy: 0, glance: 0, t: 0, idleAt: 2.5,\n"
+        "    screenText: '', screenTint: '', screenT: 0, shake: 0, deploying: false, deployProgress: 0,\n  };",
+        "    screenText: '', screenTint: '', screenT: 0, shake: 0, deploying: false, deployProgress: 0,\n"
         "    carried: false, dragSpeed: 0, walkDir: 0,\n  };",
     )
 
@@ -166,16 +166,16 @@ def build(source: Path, target: Path) -> None:
     )
     s = patch(
         s,
-        "    say('a new egg appears', 2400);\n  });",
-        "    say('a new egg appears', 2400);\n    pushState(true);\n  }\n"
+        "    say('a new box arrives', 2400);\n  });",
+        "    say('a new box arrives', 2400);\n    pushState(true);\n  }\n"
         "  resetDialog.addEventListener('close', () => { if (resetDialog.returnValue === 'yes') doReset(); });",
     )
 
     # --- state snapshots for the menu bar
     s = patch(
         s,
-        "  function displayName() { return state.name || 'Jellykin'; }\n",
-        "  function displayName() { return state.name || 'Jellykin'; }\n"
+        "  function displayName() { return state.name || 'Bitling'; }\n",
+        "  function displayName() { return state.name || 'Bitling'; }\n"
         "  let lastPushed = '';\n"
         "  function pushState(force) {\n"
         "    if (!DESKTOP) return;\n"

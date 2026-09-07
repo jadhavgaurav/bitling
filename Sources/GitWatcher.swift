@@ -9,7 +9,9 @@
 import Foundation
 
 struct GitEvent {
-    var kind: String          // commit, amend, merge, push, checkout, rebase, rebase-done, pull, stash, reset, cherry-pick
+    // git: commit, amend, merge, push, checkout, rebase, rebase-done, pull, stash, reset, cherry-pick
+    // ci: test-failed, test-passed, deploy-started, deploy-finished, deploy-failed; misc: say
+    var kind: String
     var repo: String
     var branch: String
     var message: String
@@ -17,11 +19,20 @@ struct GitEvent {
     var insertions = 0
     var deletions = 0
     var files = 0
+    var count = 0
+    var target = ""
+    var name = ""
 
     var asDictionary: [String: Any] {
         ["kind": kind, "repo": repo, "branch": branch, "message": message, "hash": hash,
-         "insertions": insertions, "deletions": deletions, "files": files]
+         "insertions": insertions, "deletions": deletions, "files": files,
+         "count": count, "target": target, "name": name]
     }
+}
+
+struct WatchedRepo {
+    let workTree: URL
+    let slug: String?   // "owner/repo" when origin points at github.com
 }
 
 struct GitStatus {
@@ -44,6 +55,7 @@ final class GitWatcher {
         var remoteLogSizes: [String: UInt64]
         var lastCommitDate: Date?
         var lastActivity: Date
+        var slug: String?
         var name: String { workTree.lastPathComponent }
     }
 
@@ -55,7 +67,7 @@ final class GitWatcher {
 
     private(set) var roots: [URL]
     private var tracked: [String: Tracked] = [:]
-    private let queue = DispatchQueue(label: "app.jellykin.git", qos: .utility)
+    private let queue = DispatchQueue(label: "app.bitling.git", qos: .utility)
     private var pollTimer: Timer?
     private var scanTimer: Timer?
     private var statusTimer: Timer?
@@ -69,7 +81,37 @@ final class GitWatcher {
     var onEvent: ((GitEvent) -> Void)?
     var onStatus: ((GitStatus) -> Void)?
 
-    var repositoryCount: Int { tracked.count }
+    var repositoryCount: Int { queue.sync { tracked.count } }
+
+    func repositories() -> [WatchedRepo] {
+        queue.sync { tracked.values.map { WatchedRepo(workTree: $0.workTree, slug: $0.slug) } }
+    }
+
+    private static func githubSlug(gitDir: URL) -> String? {
+        var configURL = gitDir.appendingPathComponent("config")
+        if !FileManager.default.fileExists(atPath: configURL.path),
+           let common = try? String(contentsOf: gitDir.appendingPathComponent("commondir"), encoding: .utf8) {
+            let path = common.trimmingCharacters(in: .whitespacesAndNewlines)
+            let base = path.hasPrefix("/") ? URL(fileURLWithPath: path) : gitDir.appendingPathComponent(path)
+            configURL = base.standardizedFileURL.appendingPathComponent("config")
+        }
+        guard let text = try? String(contentsOf: configURL, encoding: .utf8) else { return nil }
+        var inOrigin = false
+        for rawLine in text.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") { inOrigin = line == "[remote \"origin\"]"; continue }
+            guard inOrigin, line.hasPrefix("url") else { continue }
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let url = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            guard let range = url.range(of: "github.com") else { return nil }
+            var rest = String(url[range.upperBound...])
+            if rest.hasPrefix(":") || rest.hasPrefix("/") { rest.removeFirst() }
+            if rest.hasSuffix(".git") { rest.removeLast(4) }
+            let parts = rest.split(separator: "/")
+            return parts.count == 2 ? "\(parts[0])/\(parts[1])" : nil
+        }
+        return nil
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -194,7 +236,8 @@ final class GitWatcher {
             stashLogSize: fileSize(gitDir.appendingPathComponent("logs/refs/stash")),
             remoteLogSizes: remoteLogSizes(gitDir),
             lastCommitDate: lastReflogDate(headLog),
-            lastActivity: (try? headLog.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            lastActivity: (try? headLog.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast,
+            slug: Self.githubSlug(gitDir: gitDir)
         )
         tracked[key] = entry
     }

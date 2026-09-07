@@ -1,15 +1,14 @@
-# Jellykin
+# Bitling
 
-A desktop pet for macOS. A wobbly jelly creature lives in a small transparent window
-that floats above your other apps and sits on the bottom edge of the screen. Drag it
-anywhere. Throw it and it falls back down. It watches your cursor across the whole
-screen, strolls around on its own, and is fed, played with and put to sleep from the
-menu bar.
+A desktop pet for macOS that lives on your dev activity. Bitling is a small robot with
+a screen for a face. It stands on the bottom edge of your screen in a transparent window
+above your other apps, watches your cursor, strolls around, and reacts to your commits,
+pushes, test runs and deployments. Drag it anywhere. Throw it and it falls back down.
 
-The creature is a web page (`web/jellykin.html`, the same one published as the
-Jellykin Habitat artifact). The macOS host (`Sources/main.swift`) renders it in a
-borderless WKWebView and adds everything a page cannot do: window movement, screen
-physics, a menu bar item, native prompts, and durable state.
+The creature is a web page (`web/bitling.html`, also published as the Bitling Habitat
+artifact). The macOS host (`Sources/`) renders it in a borderless WKWebView and adds
+everything a page cannot do: window movement, screen physics, a menu bar item, native
+prompts, durable state, and the git and CI watchers.
 
 ## Build and install
 
@@ -19,44 +18,43 @@ Requires macOS 13 or newer and the Xcode Command Line Tools (`xcode-select --ins
 ./build.sh
 ```
 
-That derives `Resources/pet.html` from the web page, compiles the host, draws the
-icon, ad-hoc signs the bundle and installs `/Applications/Jellykin.app`. Pass a
-different folder to install elsewhere, or `INSTALL=0 ./build.sh` to only build into
-`build/`.
-
-Open it from Launchpad or:
+That derives `Resources/pet.html` from the web page, compiles the host, draws the icon,
+ad-hoc signs the bundle, installs `/Applications/Bitling.app` and links the `bitling`
+command into `/usr/local/bin` when that folder is writable. Pass a different folder to
+install elsewhere, or `INSTALL=0 ./build.sh` to only build into `build/`.
 
 ```bash
-open /Applications/Jellykin.app
+open /Applications/Bitling.app
 ```
 
-Jellykin has no Dock icon. Look for the smiling face in the menu bar.
+Bitling has no Dock icon. Look for the smiling face in the menu bar.
 
 ## Using it
 
-- **Tap the egg three times** to hatch. You will be asked for a name.
-- **Click** the pet to pat it. **Drag** to carry it. Let go mid-air and it drops.
+- **Tap the box three times** to unbox it. You will be asked for a name.
+- **Click** the robot to pat it. **Drag** to carry it. Let go mid-air and it drops.
   Fling it and it bounces off the screen edges.
-- **Menu bar**: Pat, Feed, Debug bugs, Sleep, plus Tummy, Energy and Joy meters. Also
-  Hide/Show, Bring pet to this screen, Rename, Sound, Start over, and Open at login.
-- **Debug bugs** releases four bugs that scurry along the floor. The pet chases and
+- **Menu bar**: Pat, Feed, Debug bugs, Sleep, plus Tummy, Energy and Joy meters (also
+  shown as the three LEDs on its chest once it has grown). Hide/Show, Bring pet to this
+  screen, Rename, Sound, Start over, Open at login.
+- **Debug bugs** releases four bugs that scurry along the floor. The robot chases and
   stomps them. Click a bug to squash it yourself.
-- It walks around the bottom of the screen on its own, talks in a speech bubble, and
-  grows through three stages with age and care.
+- Snacks are batteries, chips and cookies. Its antenna turns amber when it is hungry.
+- Grows through three stages with age and care points: Bootling, Bitling, Overclocked
+  Bitling (two antennas, a halo, a shifting shell colour).
 - Needs drift while the app is closed (capped at 12 hours). It never dies.
 
 ## Git reactions
 
-The app watches for git activity in every repository under its watched folders
-(default: `~/Desktop/AI`, plus `~/Developer`, `~/Projects`, `~/Documents/GitHub`,
-`~/code`, `~/src`, `~/repos` when they exist; up to three folders deep). Add or
-remove folders from the menu bar under Git. Detection tails each repository's
-reflog, so there is no polling of `git status` for events and reactions land within
-two seconds.
+The app watches every repository under its watched folders (default `~/Desktop/AI`,
+plus `~/Developer`, `~/Projects`, `~/Documents/GitHub`, `~/code`, `~/src`, `~/repos`
+when they exist; up to three folders deep). Add or remove folders from the menu bar
+under Dev activity. Detection tails each repository's reflog, so reactions land within
+two seconds without polling `git status`.
 
-| You do | The pet does |
+| You do | Bitling does |
 |---|---|
-| commit | catches a falling commit node (hash on it) and eats it. Tummy and Joy go up. |
+| commit | catches a falling commit node (hash on it) and eats it |
 | commit with "fix" or "bug" in the message | a bug appears and gets stomped |
 | commit with "wip" | "wip? okay…" |
 | commit over 400 changed lines | "chonky commit!" |
@@ -65,32 +63,73 @@ two seconds.
 | push | launches a rocket: "shipped main!" |
 | merge | confetti, eats a purple merge node |
 | checkout | glances around: "now on feature/x" |
-| rebase start / finish | dizzy eyes, then relief |
+| rebase start / finish | dizzy spinning eyes, then relief |
 | pull, stash, reset, cherry-pick | a line each |
 | 10+ uncommitted files | nags now and then |
 | no commit for a day | "git log is lonely" (daytime only) |
 
-It wakes up for commits, pushes and merges. The Git submenu shows today's commit
-and push counts and lifetime totals, and has "Pretend I committed" / "Pretend I
-pushed" for a demo without touching a repo.
+## Test and deploy reactions
 
-State lives in `~/Library/Preferences/app.jellykin.pet.plist`. Delete it, or use
-Start over, to get a fresh egg. The window's last position is stored there too.
+| Event | Bitling does |
+|---|---|
+| tests fail | screen flashes red with X eyes and "ERR", antenna red, it shakes, then bugs appear (one per failure, up to five) and it hunts them |
+| tests pass | screen shows a green "OK", any bugs die on the spot, "tests green!" |
+| deploy starts | amber screen with a progress bar that creeps while it waits |
+| deploy finishes | "100%", then a rocket: "deployed to production!" |
+| deploy fails | "ERR", smoke, "deploy failed. rollback?" |
+
+Three sources feed these, all optional:
+
+1. **GitHub Actions and GitHub Deployments** through the `gh` CLI, for watched repos
+   whose origin is on github.com. `gh auth login` once and it works. Workflows named
+   deploy, release, publish, cd or rollout count as deployments; everything else counts
+   as tests. Vercel and similar services record GitHub Deployments, so those show up
+   too. Polled every minute.
+2. **Local pytest runs**: pytest rewrites `.pytest_cache/v/cache/nodeids` on every run
+   and lists failing tests in `lastfailed`. Checked every three seconds for the repo root
+   and its first-level folders.
+3. **The `bitling` command** for anything else. It sends events over the `bitling://`
+   URL scheme, so it works from any shell, Makefile, npm script or git hook:
+
+```bash
+bitling run npm test                    # reports pass or fail, keeps the exit status
+bitling run pytest -q
+bitling deploy production ./deploy.sh   # start, then finished or failed
+bitling event test-failed count=3 name=api
+bitling say "lunch?"
+```
+
+If `build.sh` could not link the command, do it once yourself:
+
+```bash
+sudo ln -sf /Applications/Bitling.app/Contents/Resources/bitling /usr/local/bin/bitling
+```
+
+The Dev activity submenu shows what is being watched, today's commits and pushes,
+lifetime totals, the CI source status, and "Pretend…" items for a demo.
+
+State lives in `~/Library/Preferences/app.bitling.pet.plist`. Delete it, or use Start
+over, for a fresh box.
 
 ## Layout
 
 ```
-Sources/main.swift        macOS host: window, drag + physics, menu bar, bridge
+Sources/main.swift        macOS host: window, drag + physics, menu bar, bridge, URL scheme
+Sources/GitWatcher.swift  reflog tailing, repo discovery, github slugs
+Sources/CIWatcher.swift   gh runs + deployments, pytest caches
 Resources/pet.html        generated desktop page (do not edit by hand)
-Resources/Info.plist      bundle metadata (LSUIElement, icon, ids)
-Tools/make_pet_html.py    derives pet.html from web/jellykin.html
+Resources/bitling         command line tool copied into the app bundle
+Resources/Info.plist      bundle metadata (LSUIElement, icon, URL scheme)
+Tools/make_pet_html.py    derives pet.html from web/bitling.html
 Tools/makeicon.swift      draws the app icon set
-web/jellykin.html         the creature: shared with the web artifact
+Tools/patch_*.py          one-off migrations kept for the record
+web/bitling.html          the creature: shared with the web artifact
 build.sh                  build, sign, install
 ```
 
-To change the creature, edit `web/jellykin.html` and rebuild. To preview the desktop
-layout in a normal browser, open the generated page with `?desktop=1`.
+To change the creature, edit `web/bitling.html` and rebuild. To preview the desktop
+layout in a normal browser, open the generated page with `?desktop=1`, or set
+`window.__forceDesktop = true` before the script runs.
 
 ## Bridge
 
@@ -99,4 +138,8 @@ Page to host (`window.webkit.messageHandlers.pet`): `save` (state JSON), `state`
 
 Host to page (`window.petNative`): `action(name)`, `grab()`, `drag(vx, vy)`,
 `release()`, `land(impact)`, `walking(dir)`, `cursor(x, y)`, `setName(name)`,
-`reset()`.
+`reset()`, `gitEvent(event)`, `gitStatus(info)`.
+
+Event kinds: commit, amend, merge, push, checkout, rebase, rebase-done, pull, stash,
+reset, cherry-pick, test-failed, test-passed, deploy-started, deploy-finished,
+deploy-failed, say.

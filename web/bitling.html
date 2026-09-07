@@ -1,4 +1,4 @@
-<title>Jellykin Habitat</title>
+<title>Bitling Habitat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
@@ -101,8 +101,8 @@
   <header class="hud">
     <div class="card who">
       <button class="name" id="nameBtn" type="button" title="Rename">
-        <span id="nameLabel">A mysterious egg</span>
-        <small id="subLabel">Tap it and see</small>
+        <span id="nameLabel">A mysterious box</span>
+        <small id="subLabel">Tap to unbox</small>
       </button>
       <div class="meters" id="meters" hidden>
         <span>Tummy</span><div class="bar" id="mFull"><i></i></div>
@@ -125,7 +125,7 @@
 
   <nav class="card dock" id="dock" aria-label="Care actions">
     <button type="button" id="feedBtn" disabled>
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="7"/><path d="M12 7c0-3 2-4 5-4-1 3-2 4-5 4z"/></svg><span>Feed</span>
+      <svg viewBox="0 0 24 24"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M19 10h2v4h-2M6 10v4M9 10v4M12 10v4"/></svg><span>Feed</span>
     </button>
     <button type="button" id="playBtn" disabled>
       <svg viewBox="0 0 24 24"><path d="M8 10a4 4 0 0 1 8 0v5a4 4 0 0 1-8 0z"/><path d="M12 6V4M9 7 7 5M15 7l2-2M8 12H4M20 12h-4M8 15H5M19 15h-3M9 18l-2 2M15 18l2 2"/></svg><span>Debug</span>
@@ -139,8 +139,8 @@
 
   <dialog id="nameDialog">
     <form method="dialog">
-      <h2 id="nameTitle">It hatched!</h2>
-      <p id="nameHint">Give your Jellykin a name. You can change it later by tapping the name.</p>
+      <h2 id="nameTitle">It booted up!</h2>
+      <p id="nameHint">Give your Bitling a name. You can change it later by tapping the name.</p>
       <input type="text" id="nameInput" maxlength="16" autocomplete="off" spellcheck="false" aria-label="Pet name">
       <menu><button class="primary" value="ok" type="submit">Name it</button></menu>
     </form>
@@ -159,7 +159,7 @@
         <dt>Pats</dt><dd id="sPets">0</dd>
         <dt>Care points</dt><dd id="sCare">0</dd>
       </dl>
-      <p>Grows to the next stage with age and care points. Needs drift slowly while you are away, but a Jellykin never dies. It only sulks. The desktop app also feeds it your git commits.</p>
+      <p>Grows to the next stage with age and care points. Needs drift slowly while you are away, but a Bitling never dies. It only sulks. The desktop app also feeds it your commits and reacts to test runs and deploys.</p>
       <menu>
         <button class="danger" value="reset" type="submit">Start over</button>
         <button class="primary" value="close" type="submit">Close</button>
@@ -183,10 +183,10 @@
 (() => {
   'use strict';
 
-  const STORE_KEY = 'jellykin.v1';
+  const STORE_KEY = 'bitling.v1';
   const HOUR = 3600000;
   const NAMES = ['Pip', 'Momo', 'Bao', 'Nori', 'Tofu', 'Juniper', 'Wobble', 'Kiwi', 'Plum', 'Dumpling', 'Sprout', 'Pebble'];
-  const STAGES = ['Egg', 'Hatchling', 'Jellykin', 'Luminous Jellykin'];
+  const STAGES = ['Boxed', 'Bootling', 'Bitling', 'Overclocked Bitling'];
   const LINES = {
     hello: ['hi!', 'you came back!', 'ooh, hello', 'missed you'],
     hungry: ['tummy rumbles...', 'snack? snack?', 'feed me pls', 'so hungry'],
@@ -201,7 +201,10 @@
     held: ['whee!', 'eep!', 'flying!', 'careful!'],
     play: ['bugs! squash them!', 'debug time', 'found some bugs', 'exterminate!'],
     squash: ['fixed!', 'squash!', 'gotcha', 'bug: 0, me: 1', 'closed as fixed'],
-    egg: ['tap me!', 'something is inside...', '*wobble*', 'knock knock'],
+    egg: ['unbox me!', 'something is beeping in here', '*rattle*', 'knock knock', 'this side up'],
+    testFail: ['tests are red…', 'who broke the build?', 'ERR ERR ERR', 'it worked on my machine'],
+    testPass: ['tests green!', 'all green. ship it.', 'zero failures'],
+    deployFail: ['deploy failed. rollback?', 'prod said no', 'abort abort'],
     tired: ['too tired to play', 'need a nap first'],
   };
 
@@ -307,6 +310,8 @@
     hatch() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, f, 0.2), i * 110)); },
     grow() { [659, 784, 988, 1318, 1568].forEach((f, i) => setTimeout(() => this.tone(f, f * 1.01, 0.22), i * 90)); },
     whoosh() { this.tone(160, 900, 0.5, 'sawtooth', 0.035); },
+    error() { this.tone(320, 120, 0.3, 'square', 0.05); setTimeout(() => this.tone(260, 100, 0.35, 'square', 0.05), 220); },
+    ok() { this.tone(660, 660, 0.12, 'triangle', 0.07); setTimeout(() => this.tone(990, 990, 0.2, 'triangle', 0.07), 130); },
   };
 
   // ---------------------------------------------------------------- world
@@ -321,6 +326,7 @@
     blink: 0, blinking: false, blinkT: 0, nextBlink: 2,
     held: false, pressing: false, pressX: 0, pressY: 0, holdOff: { x: 0, y: 0 },
     grounded: true, chew: 0, happy: 0, surprise: 0, yawn: 0, dizzy: 0, glance: 0, t: 0, idleAt: 2.5,
+    screenText: '', screenTint: '', screenT: 0, shake: 0, deploying: false, deployProgress: 0,
   };
   const egg = { wobble: 0 };
   const snack = { active: false, x: 0, y: 0, vy: 0, kind: 'berry', rest: false };
@@ -455,7 +461,7 @@
           ctx.fillText('z', p.x, p.y);
           break;
         case 'shard':
-          ctx.fillStyle = '#f7e8cf';
+          ctx.fillStyle = '#d9b483';
           ctx.translate(p.x, p.y); ctx.rotate(p.rot);
           ctx.beginPath(); ctx.moveTo(-s * 0.5, s * 0.4); ctx.lineTo(0, -s * 0.5); ctx.lineTo(s * 0.5, s * 0.4); ctx.closePath(); ctx.fill();
           break;
@@ -509,7 +515,7 @@
     snack.x = clamp(pet.x + rand(-40, 40) * scale, 30, W - 30);
     snack.y = -30;
     snack.vy = 0;
-    snack.kind = pick(['berry', 'cookie', 'leaf']);
+    snack.kind = pick(['battery', 'chip', 'cookie']);
     pet.ax = snack.x;
   }
   function eatSnack() {
@@ -522,7 +528,7 @@
     audio.munch();
     setTimeout(() => audio.munch(), 180);
     setTimeout(() => audio.munch(), 360);
-    spawn('crumb', pet.x, pet.y - petR() * 0.8, 6, { spread: 6, vx: 90, vy: -60, g: 900, size: 6, hue: snack.kind === 'leaf' ? 120 : snack.kind === 'berry' ? 350 : 30 });
+    spawn('crumb', pet.x, pet.y - petR() * 0.8, 6, { spread: 6, vx: 90, vy: -60, g: 900, size: 6, hue: snack.kind === 'battery' ? 130 : snack.kind === 'chip' ? 220 : 30 });
     say(pick(LINES.eat));
     saveState();
   }
@@ -625,7 +631,7 @@
     egg.wobble = 1;
     audio.pop();
     if (state.taps >= 3) hatch();
-    else say(pick(['*crack*', 'something moved!', 'almost...']));
+    else say(pick(['*rattle*', 'tape is tearing', 'almost open...']));
     saveState();
   }
   function hatch() {
@@ -638,7 +644,7 @@
     spawn('shard', pet.ax, groundY - eggR(), 14, { spread: eggR() * 0.6, vx: 260, vy: -320, g: 1300, size: 12, dur: 1.4 });
     spawn('heart', pet.ax, groundY - eggR() * 1.5, 6, { spread: 30, vx: 60, vy: -120, size: 10 });
     audio.hatch();
-    say('hello!!', 3000);
+    say('hello, world!', 3000);
     saveState();
     updateHud();
     setTimeout(() => openNameDialog(true), 900);
@@ -766,7 +772,9 @@
 
   function updatePet(dt) {
     pet.t += dt;
-    for (const k of ['chew', 'happy', 'surprise', 'yawn', 'dizzy', 'glance']) pet[k] = Math.max(0, pet[k] - dt);
+    for (const k of ['chew', 'happy', 'surprise', 'yawn', 'dizzy', 'glance', 'shake', 'screenT']) pet[k] = Math.max(0, pet[k] - dt);
+    if (pet.screenT <= 0 && (pet.screenText || (pet.screenTint && !pet.deploying))) { pet.screenText = ''; if (!pet.deploying) pet.screenTint = ''; }
+    if (pet.deploying) pet.deployProgress = Math.min(0.92, pet.deployProgress + dt * 0.05);
     egg.wobble = Math.max(0, egg.wobble - dt * 1.4);
 
     if (pet.blinking) {
@@ -916,7 +924,7 @@
   function doIdle() {
     if (!state.hatched) {
       if (Math.random() < 0.6) say(pick(LINES.egg));
-      egg.wobble = 0.7;
+      egg.wobble = 0.5;
       return;
     }
     if (state.asleep || pet.held) return;
@@ -975,23 +983,6 @@
   }
 
   // ---------------------------------------------------------------- draw
-  function blobPath(cx, cy, rx, ry, t) {
-    const n = 10, pts = [];
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const w = 1 + 0.03 * Math.sin(t * 2.2 + i * 1.9) + 0.02 * Math.sin(t * 3.1 - i * 1.1);
-      const sy = Math.sin(a) > 0 ? 0.92 : 1;
-      pts.push({ x: cx + Math.cos(a) * rx * w, y: cy + Math.sin(a) * ry * w * sy });
-    }
-    ctx.beginPath();
-    ctx.moveTo((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
-    for (let i = 1; i <= n; i++) {
-      const p = pts[i % n], q = pts[(i + 1) % n];
-      ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
-    }
-    ctx.closePath();
-  }
-
   function drawBackground() {
     const g = ctx.createLinearGradient(0, 0, 0, groundY);
     g.addColorStop(0, sky.top);
@@ -1035,43 +1026,121 @@
     ctx.globalAlpha = 1;
   }
 
-  const CRACKS = [
-    [[-0.3, -1.5], [-0.1, -1.3], [-0.25, -1.1], [0, -0.95]],
-    [[0.2, -1.9], [0.35, -1.7], [0.2, -1.5], [0.4, -1.3]],
-    [[-0.5, -0.7], [-0.2, -0.6], [-0.35, -0.4], [0.1, -0.35]],
+  function roundRect(x, y, w, h, rad) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, rad);
+  }
+
+  const BOX_TEARS = [
+    [[-0.9, -1.55], [-0.6, -1.5], [-0.72, -1.35]],
+    [[0.2, -1.62], [0.5, -1.47], [0.35, -1.3], [0.7, -1.2]],
+    [[-0.3, -1.1], [0.0, -1.0], [-0.2, -0.85]],
   ];
-  const SPOTS = [[-0.35, -1.5, 0.16], [0.4, -1.2, 0.2], [-0.15, -0.6, 0.14], [0.55, -0.55, 0.12], [0.05, -1.85, 0.1]];
-  function drawEgg() {
+  function drawBox() {
     const r = eggR(), x = pet.ax, y = groundY;
-    drawShadow(x, r * 0.9, 0);
-    const rot = (egg.wobble > 0 ? Math.sin(egg.wobble * 22) * 0.14 * egg.wobble : 0) + 0.02 * Math.sin(pet.t * 1.5);
+    drawShadow(x, r * 1.15, 0);
+    const rot = (egg.wobble > 0 ? Math.sin(egg.wobble * 22) * 0.1 * egg.wobble : 0) + 0.01 * Math.sin(pet.t * 1.5);
+    const open = clamp(state.taps / 3, 0, 1);
+    const w = r * 2.3, h = r * 1.7;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
-    const g = ctx.createRadialGradient(-r * 0.4, -r * 1.5, r * 0.2, 0, -r, r * 1.8);
-    g.addColorStop(0, '#fff9ea');
-    g.addColorStop(1, '#efd9bd');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(-r * 1.4, 0, -r * 1.25, -r * 2.2, 0, -r * 2.2);
-    ctx.bezierCurveTo(r * 1.25, -r * 2.2, r * 1.4, 0, 0, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = 'rgba(255,127,163,0.55)';
-    for (const [sx, sy, ss] of SPOTS) { ctx.beginPath(); ctx.ellipse(sx * r, sy * r, ss * r * 1.2, ss * r, 0.4, 0, Math.PI * 2); ctx.fill(); }
-    ctx.restore();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.fillStyle = '#d9b483';
+    ctx.strokeStyle = '#a9804f';
+    ctx.lineWidth = Math.max(1.5, r * 0.06);
+    ctx.beginPath(); ctx.rect(-w / 2, -h, w, h); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(-w / 2, -h, w * 0.18, h);
+    ctx.fillStyle = 'rgba(255,240,200,0.55)';
+    ctx.fillRect(-r * 0.22, -h, r * 0.44, h);
+    ctx.strokeStyle = '#7d5a33';
+    ctx.lineWidth = Math.max(1, r * 0.05);
+    for (const ax of [r * 0.58, r * 0.84]) {
+      ctx.beginPath(); ctx.moveTo(ax, -h * 0.3); ctx.lineTo(ax, -h * 0.68);
+      ctx.moveTo(ax - r * 0.11, -h * 0.56); ctx.lineTo(ax, -h * 0.68); ctx.lineTo(ax + r * 0.11, -h * 0.56); ctx.stroke();
+    }
+    ctx.fillStyle = '#7d5a33';
+    ctx.font = `700 ${Math.round(r * 0.26)}px Fredoka, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('FRAGILE', -r * 0.5, -h * 0.4);
+    if (state.taps > 0) {
+      ctx.fillStyle = `hsla(170, 90%, 65%, ${0.35 + 0.3 * Math.sin(pet.t * 6)})`;
+      ctx.fillRect(-w / 2 + r * 0.1, -h - r * 0.04, w - r * 0.2, r * 0.08);
+    }
+    ctx.fillStyle = '#e2c18f';
+    ctx.strokeStyle = '#a9804f';
+    ctx.lineWidth = Math.max(1.5, r * 0.06);
+    for (const sgn of [-1, 1]) {
+      ctx.save();
+      ctx.translate(sgn * w / 2, -h);
+      ctx.rotate(sgn * open * 2.4);
+      ctx.beginPath(); ctx.rect(sgn === -1 ? 0 : -w / 2, -r * 0.14, w / 2, r * 0.14); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
     ctx.strokeStyle = '#8b6a4b';
     ctx.lineWidth = 2;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (let i = 0; i < Math.min(state.taps, 3); i++) {
       ctx.beginPath();
-      CRACKS[i].forEach(([px, py], k) => (k === 0 ? ctx.moveTo(px * r, py * r) : ctx.lineTo(px * r, py * r)));
+      BOX_TEARS[i].forEach(([px, py], k) => (k === 0 ? ctx.moveTo(px * r, py * r) : ctx.lineTo(px * r, py * r)));
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  function drawFace(hy, r, f) {
+    const t = pet.t;
+    const ey = hy - (pet.deploying ? r * 0.18 : r * 0.08);
+    const ex = r * 0.38;
+    const ew = r * 0.26, eh = r * 0.3 * (pet.surprise > 0 ? 1.25 : 1);
+    const lids = f.asleep ? 1 : Math.max(pet.blink, f.sleepy ? 0.45 : 0, pet.yawn > 0 ? 0.7 : 0);
+    const erroring = pet.screenTint === 'error' && pet.screenT > 0;
+    const happyEyes = pet.happy > 0 && !f.asleep && pet.surprise <= 0 && pet.dizzy <= 0 && !erroring;
+    ctx.lineWidth = Math.max(1.5, r * 0.07);
+    for (const sgn of [-1, 1]) {
+      const x = sgn * ex;
+      if (erroring) {
+        ctx.beginPath();
+        ctx.moveTo(x - ew * 0.5, ey - eh * 0.5); ctx.lineTo(x + ew * 0.5, ey + eh * 0.5);
+        ctx.moveTo(x + ew * 0.5, ey - eh * 0.5); ctx.lineTo(x - ew * 0.5, ey + eh * 0.5);
+        ctx.stroke();
+        continue;
+      }
+      if (pet.dizzy > 0) { ctx.beginPath(); ctx.arc(x, ey, ew * 0.5, t * 9 + sgn, t * 9 + sgn + 4.5); ctx.stroke(); continue; }
+      if (happyEyes) { ctx.beginPath(); ctx.arc(x, ey + eh * 0.35, ew * 0.75, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); continue; }
+      if (lids >= 0.97) { ctx.beginPath(); ctx.moveTo(x - ew * 0.5, ey); ctx.lineTo(x + ew * 0.5, ey); ctx.stroke(); continue; }
+      const px = pet.look.x * ew * 0.25, py = pet.look.y * eh * 0.2;
+      if (pet.surprise > 0) {
+        ctx.beginPath(); ctx.arc(x + px, ey + py, ew * 0.55, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x + px, ey + py, ew * 0.2, 0, Math.PI * 2); ctx.fill();
+        continue;
+      }
+      const h = Math.max(1, eh * (1 - lids * 0.8));
+      roundRect(x - ew / 2 + px, ey - h / 2 + py, ew, h, ew * 0.25);
+      ctx.fill();
+      if (f.mood < 38 && !f.asleep) {
+        ctx.beginPath(); ctx.moveTo(x + sgn * ew * 0.6, ey - h * 0.75); ctx.lineTo(x - sgn * ew * 0.4, ey - h * 1.1); ctx.stroke();
+      }
+    }
+    const my = ey + r * 0.38;
+    if (pet.chew > 0) {
+      for (let i = -1; i <= 1; i++) {
+        if (Math.sin(pet.chew * 40 + i * 2) > 0) { roundRect(i * r * 0.17 - r * 0.06, my - r * 0.06, r * 0.12, r * 0.12, r * 0.02); ctx.fill(); }
+      }
+    } else if (pet.yawn > 0 && !f.asleep) {
+      const open = r * 0.18 * Math.sin(Math.PI * clamp(1 - pet.yawn / 1.2, 0, 1));
+      roundRect(-r * 0.14, my - open / 2, r * 0.28, Math.max(1, open), r * 0.05); ctx.fill();
+    } else if (pet.surprise > 0) {
+      ctx.beginPath(); ctx.arc(0, my, r * 0.07, 0, Math.PI * 2); ctx.stroke();
+    } else if (erroring) {
+      ctx.beginPath(); ctx.moveTo(-r * 0.24, my);
+      for (let i = 1; i <= 4; i++) ctx.lineTo(-r * 0.24 + i * r * 0.12, my + (i % 2 ? -r * 0.07 : r * 0.07));
+      ctx.stroke();
+    } else {
+      const curve = f.asleep ? r * 0.03 : happyEyes ? r * 0.16 : r * 0.14 * ((f.mood - 50) / 50);
+      ctx.beginPath(); ctx.moveTo(-r * 0.2, my); ctx.quadraticCurveTo(0, my + curve, r * 0.2, my); ctx.stroke();
+    }
   }
 
   function drawPet() {
@@ -1081,154 +1150,157 @@
     const asleep = state.asleep;
     const mood = moodOf(state);
     const sleepy = !asleep && state.energy < 25;
-    const hue = st === 3 ? 345 + 35 * Math.sin(t * 0.4) : 345;
-    const sat = asleep ? 55 : 85;
-    const eyeInk = `hsl(${hue}, 45%, 22%)`;
-    const breath = 1 + (asleep ? 0.03 * Math.sin(t * 1.2) : 0.02 * Math.sin(t * 2.4));
+    const hue = st === 3 ? 250 + 60 * Math.sin(t * 0.5) : 250;
     const sqy = (1 + pet.sq) * (1 + pet.stretch);
     const sqx = (1 - pet.sq * 0.85) * (1 - pet.stretch * 0.6);
 
     drawShadow(pet.x, r, groundY - pet.y);
 
     ctx.save();
-    ctx.translate(pet.x, pet.y);
+    ctx.translate(pet.x + (pet.shake > 0 ? Math.sin(t * 70) * r * 0.08 : 0), pet.y);
     ctx.scale(sqx, sqy);
-    const cy = -r;
+    const outline = `hsl(${hue}, 22%, 52%)`;
+    const shell = ctx.createLinearGradient(0, -3 * r, 0, 0);
+    shell.addColorStop(0, `hsl(${hue}, 35%, 95%)`);
+    shell.addColorStop(1, `hsl(${hue}, 28%, 80%)`);
+    const lw = Math.max(1.5, r * 0.06);
+    ctx.lineWidth = lw;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
 
-    if (st >= 2) {
-      ctx.fillStyle = `hsl(${hue}, ${sat}%, 78%)`;
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.ellipse(s * r * 0.62, cy - r * 0.78 + Math.sin(t * 3 + s) * r * 0.02, r * 0.2, r * 0.3, s * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    const walking = !asleep && (pet.walkDir !== 0 || (pet.grounded && Math.abs(pet.ax - pet.x) > 3));
+    const step = walking ? Math.sin(t * 14) : 0;
+    const breathe = asleep ? Math.sin(t * 1.2) * 0.02 : Math.sin(t * 2.2) * 0.012;
+    const carried = !!(pet.carried || pet.held);
+
+    ctx.fillStyle = `hsl(${hue}, 25%, 45%)`;
+    for (const sgn of [-1, 1]) {
+      const lift = walking ? Math.max(0, step * sgn) * r * 0.12 : 0;
+      roundRect(sgn * r * 0.45 - r * 0.3, -r * 0.22 - lift, r * 0.6, r * 0.22, r * 0.08);
+      ctx.fill();
     }
-    if (st === 3) {
-      ctx.strokeStyle = 'hsl(140, 45%, 45%)';
-      ctx.lineWidth = r * 0.05;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, cy - r * 0.95);
-      ctx.quadraticCurveTo(r * 0.05, cy - r * 1.2, r * 0.12, cy - r * 1.36);
-      ctx.stroke();
-      const glow = 0.5 + 0.5 * Math.sin(t * 2);
+
+    for (const sgn of [-1, 1]) {
+      const sx = sgn * r * 0.78, sy = -r * 1.0;
+      let theta = 0.35 + breathe * 3;
+      if (carried) theta = 2.9;
+      else if (pet.happy > 0) theta = 2.2 + Math.sin(t * 12) * 0.35;
+      else if (pet.screenTint === 'error' && pet.screenT > 0) theta = 0.9 + Math.sin(t * 20) * 0.2;
+      else if (walking) theta = 0.35 + step * sgn * 0.4;
+      const ex = sx + sgn * Math.sin(theta) * r * 0.55, ey = sy + Math.cos(theta) * r * 0.55;
+      ctx.strokeStyle = outline; ctx.lineWidth = r * 0.2;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.strokeStyle = `hsl(${hue}, 30%, 88%)`; ctx.lineWidth = r * 0.11;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.fillStyle = `hsl(${hue}, 30%, 90%)`; ctx.strokeStyle = outline; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.arc(ex, ey, r * 0.16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+
+    ctx.fillStyle = shell; ctx.strokeStyle = outline; ctx.lineWidth = lw;
+    roundRect(-r * 0.75, -r * 1.3, r * 1.5, r * 1.12, r * 0.28); ctx.fill(); ctx.stroke();
+    const leds = st >= 2 ? [state.full, state.energy, state.joy] : [state.energy];
+    leds.forEach((v, i) => {
+      const cx = (i - (leds.length - 1) / 2) * r * 0.3;
+      const on = v > 25;
+      ctx.fillStyle = on ? (v > 55 ? 'hsl(150, 70%, 55%)' : 'hsl(40, 90%, 58%)') : 'hsl(0, 60%, 55%)';
+      ctx.globalAlpha = on ? 0.9 : 0.5 + 0.4 * Math.abs(Math.sin(t * 5));
+      ctx.beginPath(); ctx.arc(cx, -r * 0.72, r * 0.07, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    ctx.fillStyle = `hsl(${hue}, 25%, 60%)`;
+    ctx.fillRect(-r * 0.18, -r * 1.45, r * 0.36, r * 0.2);
+
+    const hy = -r * 1.95 + breathe * r * 2;
+    if (st >= 2) {
+      ctx.fillStyle = `hsl(${hue}, 28%, 70%)`; ctx.strokeStyle = outline;
+      for (const sgn of [-1, 1]) { roundRect(sgn * r * 1.0 - r * 0.1, hy - r * 0.22, r * 0.2, r * 0.44, r * 0.06); ctx.fill(); ctx.stroke(); }
+    }
+    ctx.fillStyle = shell; ctx.strokeStyle = outline;
+    roundRect(-r * 1.0, hy - r * 0.68, r * 2.0, r * 1.36, r * 0.36); ctx.fill(); ctx.stroke();
+
+    const tint = pet.screenTint;
+    let tipColor = 'hsl(170, 90%, 62%)';
+    if (tint === 'error') tipColor = 'hsl(0, 90%, 60%)';
+    else if (tint === 'ok') tipColor = 'hsl(150, 80%, 55%)';
+    else if (tint === 'deploy') tipColor = `hsl(40, 95%, ${55 + 15 * Math.sin(t * 8)}%)`;
+    else if (state.full < 30) tipColor = 'hsl(40, 95%, 60%)';
+    else if (asleep) tipColor = `hsl(${hue}, 20%, 55%)`;
+    const antennas = st === 3 ? [-0.35, 0.35] : [0];
+    for (const ax of antennas) {
+      ctx.strokeStyle = outline; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.moveTo(ax * r, hy - r * 0.68); ctx.lineTo(ax * r * 1.3, hy - r * 1.05); ctx.stroke();
       ctx.save();
-      ctx.shadowColor = `hsla(140, 80%, 60%, ${0.4 + glow * 0.6})`;
-      ctx.shadowBlur = r * 0.45;
-      ctx.fillStyle = 'hsl(140, 55%, 62%)';
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.ellipse(r * 0.12 + s * r * 0.14, cy - r * 1.4, r * 0.17, r * 0.08, s * 0.7, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      ctx.shadowColor = tipColor; ctx.shadowBlur = r * 0.35; ctx.fillStyle = tipColor;
+      ctx.beginPath(); ctx.arc(ax * r * 1.3, hy - r * 1.12, r * 0.12, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
-
-    const grad = ctx.createRadialGradient(-r * 0.35, cy - r * 0.45, r * 0.1, 0, cy, r * 1.25);
-    grad.addColorStop(0, `hsl(${hue}, ${sat}%, 88%)`);
-    grad.addColorStop(1, `hsl(${hue}, ${sat - 10}%, 72%)`);
-    ctx.fillStyle = grad;
-    blobPath(0, cy, r * 1.08 * breath, r * 0.98 * breath, t);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = `hsl(${hue}, 90%, 94%)`;
-    ctx.beginPath(); ctx.ellipse(0, cy + r * 0.38, r * 0.55, r * 0.36, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-
-    const blush = clamp((asleep ? 0.15 : 0.2) + (pet.happy > 0 ? 0.45 : 0) + (mood > 65 ? 0.15 : 0), 0, 0.8);
-    ctx.globalAlpha = blush;
-    ctx.fillStyle = `hsl(${hue}, 90%, 70%)`;
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * r * 0.58, cy + r * 0.12, r * 0.14, r * 0.09, 0, 0, Math.PI * 2); ctx.fill(); }
-    ctx.globalAlpha = 1;
-
-    const ey = cy - r * 0.12, ex = r * 0.34;
-    const er = r * 0.2 * (pet.surprise > 0 ? 1.22 : 1);
-    const lids = asleep ? 1 : Math.max(pet.blink, sleepy ? 0.45 : 0, pet.yawn > 0 ? 0.7 : 0);
-    const happyEyes = pet.happy > 0 && !asleep && pet.surprise <= 0 && pet.dizzy <= 0;
-    ctx.lineCap = 'round';
-    for (const s of [-1, 1]) {
-      const x = s * ex;
-      if (happyEyes || lids >= 0.97) {
-        ctx.strokeStyle = eyeInk;
-        ctx.lineWidth = r * 0.07;
-        ctx.beginPath();
-        if (happyEyes) ctx.arc(x, ey + er * 0.35, er * 0.85, Math.PI * 1.15, Math.PI * 1.85);
-        else ctx.arc(x, ey - er * 0.35, er * 0.8, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-        continue;
-      }
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.ellipse(x, ey, er, er * 1.1, 0, 0, Math.PI * 2); ctx.fill();
-        const px = pet.dizzy > 0 ? x + Math.cos(t * 9 + s) * er * 0.35 : x + pet.look.x * er * 0.42;
-      const py = pet.dizzy > 0 ? ey + Math.sin(t * 9 + s) * er * 0.3 : ey + pet.look.y * er * 0.35;
-      ctx.fillStyle = eyeInk;
-      ctx.beginPath(); ctx.ellipse(px, py, er * 0.55, er * 0.62, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(px - er * 0.18, py - er * 0.22, er * 0.16, 0, Math.PI * 2); ctx.fill();
-      if (lids > 0) {
-        ctx.save();
-        ctx.beginPath(); ctx.ellipse(x, ey, er + 1, er * 1.1 + 1, 0, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = `hsl(${hue}, ${sat}%, 80%)`;
-        ctx.fillRect(x - er - 2, ey - er * 1.1 - 2, er * 2 + 4, (er * 2.2 + 4) * lids);
-        ctx.restore();
-      }
-    }
-    if (!asleep && !happyEyes && mood < 38) {
-      ctx.strokeStyle = eyeInk;
-      ctx.lineWidth = r * 0.05;
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(s * r * 0.55, ey - er * 1.55);
-        ctx.lineTo(s * r * 0.2, ey - er * 1.85);
-        ctx.stroke();
-      }
+    if (st === 3) {
+      ctx.strokeStyle = `hsla(${hue + 120}, 80%, 65%, ${0.5 + 0.3 * Math.sin(t * 3)})`; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.ellipse(0, hy - r * 1.4, r * 0.7, r * 0.18, 0, 0, Math.PI * 2); ctx.stroke();
     }
 
-    const my = cy + r * 0.26;
-    ctx.strokeStyle = eyeInk;
-    ctx.lineWidth = r * 0.06;
-    if (pet.chew > 0 || pet.yawn > 0) {
-      const open = pet.yawn > 0
-        ? r * 0.16 * Math.sin(Math.PI * clamp(1 - pet.yawn / 1.2, 0, 1))
-        : r * 0.09 * Math.abs(Math.sin(pet.chew * 22));
-      ctx.fillStyle = `hsl(${hue}, 60%, 30%)`;
-      ctx.beginPath(); ctx.ellipse(0, my + open * 0.5, r * 0.11, Math.max(0.5, open), 0, 0, Math.PI * 2); ctx.fill();
-    } else if (pet.surprise > 0) {
-      ctx.beginPath(); ctx.arc(0, my + r * 0.04, r * 0.06, 0, Math.PI * 2); ctx.stroke();
+    const sw = r * 1.62, sh = r * 1.0;
+    let screenBg = '#1d2140';
+    if (tint === 'error') screenBg = `hsl(0, 60%, ${18 + 12 * Math.abs(Math.sin(t * 10))}%)`;
+    else if (tint === 'ok') screenBg = 'hsl(150, 45%, 16%)';
+    else if (tint === 'deploy') screenBg = 'hsl(230, 45%, 16%)';
+    ctx.fillStyle = screenBg; ctx.strokeStyle = outline; ctx.lineWidth = lw;
+    roundRect(-sw / 2, hy - sh / 2, sw, sh, r * 0.22); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    roundRect(-sw / 2, hy - sh / 2, sw, sh * 0.45, r * 0.22); ctx.fill();
+
+    const glow = tint === 'error' ? 'hsl(0, 90%, 65%)' : tint === 'ok' ? 'hsl(150, 85%, 60%)' : tint === 'deploy' ? 'hsl(40, 95%, 65%)' : (asleep ? 'hsl(170, 40%, 45%)' : 'hsl(170, 90%, 68%)');
+    ctx.save();
+    ctx.shadowColor = glow; ctx.shadowBlur = r * 0.25;
+    ctx.fillStyle = glow; ctx.strokeStyle = glow;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (pet.screenText) {
+      ctx.font = `700 ${Math.round(r * 0.5)}px ui-monospace, Menlo, monospace`;
+      ctx.fillText(pet.screenText, 0, hy + (pet.deploying ? -r * 0.1 : 0));
     } else {
-      const curve = asleep ? r * 0.05 : happyEyes ? r * 0.2 : r * 0.16 * ((mood - 50) / 50);
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.16, my);
-      ctx.quadraticCurveTo(0, my + curve, r * 0.16, my);
-      ctx.stroke();
+      drawFace(hy, r, { asleep, sleepy, mood });
     }
+    if (pet.deploying) {
+      const bw = sw * 0.72, bh = r * 0.13, by = hy + sh / 2 - r * 0.24;
+      ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      roundRect(-bw / 2, by - bh / 2, bw, bh, bh / 2); ctx.fill();
+      ctx.fillStyle = glow; ctx.shadowBlur = r * 0.2;
+      roundRect(-bw / 2, by - bh / 2, Math.max(bh, bw * pet.deployProgress), bh, bh / 2); ctx.fill();
+    }
+    ctx.restore();
     ctx.restore();
   }
 
   function drawSnack() {
     if (!snack.active) return;
-    const s = 9 * scale;
+    const u = 9 * scale;
     ctx.save();
     ctx.translate(snack.x, snack.y);
-    if (snack.kind === 'berry') {
-      ctx.fillStyle = 'hsl(350, 70%, 52%)';
-      ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.beginPath(); ctx.arc(-s * 0.35, -s * 0.35, s * 0.3, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'hsl(130, 50%, 42%)';
-      ctx.beginPath(); ctx.ellipse(s * 0.2, -s * 1.05, s * 0.55, s * 0.25, -0.6, 0, Math.PI * 2); ctx.fill();
-    } else if (snack.kind === 'cookie') {
-      ctx.fillStyle = 'hsl(32, 60%, 62%)';
-      ctx.beginPath(); ctx.arc(0, 0, s * 1.05, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'hsl(25, 55%, 28%)';
-      for (const [dx, dy] of [[-0.4, -0.3], [0.35, -0.1], [-0.1, 0.45], [0.4, 0.5]]) { ctx.beginPath(); ctx.arc(dx * s, dy * s, s * 0.17, 0, Math.PI * 2); ctx.fill(); }
+    ctx.lineJoin = 'round';
+    if (snack.kind === 'battery') {
+      ctx.rotate(-0.35);
+      ctx.fillStyle = 'hsl(140, 55%, 45%)';
+      roundRect(-u * 1.2, -u * 0.6, u * 2.4, u * 1.2, u * 0.2); ctx.fill();
+      ctx.fillStyle = '#9aa3ad';
+      ctx.fillRect(u * 1.2, -u * 0.28, u * 0.3, u * 0.56);
+      ctx.strokeStyle = '#eafff1'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(u * 0.55, 0); ctx.lineTo(u * 0.95, 0); ctx.moveTo(u * 0.75, -u * 0.2); ctx.lineTo(u * 0.75, u * 0.2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-u * 0.9, 0); ctx.lineTo(-u * 0.5, 0); ctx.stroke();
+    } else if (snack.kind === 'chip') {
+      ctx.fillStyle = '#2b2f3a';
+      roundRect(-u * 0.9, -u * 0.9, u * 1.8, u * 1.8, u * 0.15); ctx.fill();
+      ctx.fillStyle = 'hsl(45, 90%, 60%)';
+      ctx.fillRect(-u * 0.4, -u * 0.4, u * 0.8, u * 0.8);
+      ctx.strokeStyle = '#c9ced8'; ctx.lineWidth = 1.5;
+      for (const k of [-0.5, 0, 0.5]) {
+        ctx.beginPath(); ctx.moveTo(-u * 0.9, k * u); ctx.lineTo(-u * 1.25, k * u); ctx.moveTo(u * 0.9, k * u); ctx.lineTo(u * 1.25, k * u);
+        ctx.moveTo(k * u, -u * 0.9); ctx.lineTo(k * u, -u * 1.25); ctx.moveTo(k * u, u * 0.9); ctx.lineTo(k * u, u * 1.25); ctx.stroke();
+      }
     } else {
-      ctx.fillStyle = 'hsl(120, 50%, 50%)';
-      ctx.beginPath(); ctx.ellipse(0, 0, s * 1.3, s * 0.7, -0.5, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'hsl(120, 45%, 32%)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(-s, s * 0.6); ctx.lineTo(s, -s * 0.6); ctx.stroke();
+      ctx.fillStyle = 'hsl(32, 60%, 62%)';
+      ctx.beginPath(); ctx.arc(0, 0, u * 1.05, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'hsl(25, 55%, 28%)';
+      for (const [dx, dy] of [[-0.4, -0.3], [0.35, -0.1], [-0.1, 0.45], [0.4, 0.5]]) { ctx.beginPath(); ctx.arc(dx * u, dy * u, u * 0.17, 0, Math.PI * 2); ctx.fill(); }
     }
     ctx.restore();
   }
@@ -1316,7 +1388,7 @@
 
   function draw() {
     drawBackground();
-    if (!state.hatched) drawEgg();
+    if (!state.hatched) drawBox();
     else { drawSnack(); drawDrop(); drawBugs(); drawPet(); drawRocket(); }
     drawParticles();
     if (state.asleep) {
@@ -1338,11 +1410,11 @@
     const branch = String(ev.branch || '');
     const lower = msg.toLowerCase();
     const hour = new Date().getHours();
-    const loud = kind === 'commit' || kind === 'push' || kind === 'merge';
+    const loud = ['commit', 'push', 'merge', 'test-failed', 'deploy-started', 'deploy-finished', 'deploy-failed'].includes(kind);
     if (state.asleep) {
       if (!loud) return;
       wake();
-      say('who is committing?', 2000);
+      say(kind === 'test-failed' ? 'who broke the build?' : 'who is committing?', 2000);
     }
     audio.ensure();
     switch (kind) {
@@ -1406,6 +1478,60 @@
         spawnDrop('commit', 'cherry');
         say('cherry! nom', 2200);
         break;
+      case 'test-failed': {
+        const count = Math.max(0, Math.min(99, Number(ev.count) || 0));
+        const label = String(ev.name || ev.repo || '').trim();
+        pet.screenText = 'ERR'; pet.screenTint = 'error'; pet.screenT = 2.8; pet.shake = 0.9;
+        pet.happy = 0; pet.deploying = false;
+        state.joy = clamp(state.joy - 3);
+        audio.error();
+        const bugCount = count > 0 ? Math.min(5, count) : 2;
+        for (let i = 0; i < bugCount; i++) spawnBug();
+        debug.active = true; debug.until = 45;
+        const line = count > 0
+          ? `${count} test${count === 1 ? '' : 's'} failing${label ? ` in ${label}` : ''}`
+          : (label ? `${label} is red` : pick(LINES.testFail));
+        setTimeout(() => say(line, 3400), 300);
+        break;
+      }
+      case 'test-passed': {
+        const label = String(ev.name || ev.repo || '').trim();
+        pet.screenText = 'OK'; pet.screenTint = 'ok'; pet.screenT = 2; pet.happy = 1.6;
+        state.joy = clamp(state.joy + 6);
+        audio.ok();
+        for (const b of bugs) if (b.alive) squashBug(b, false);
+        say(label ? `${label} is green!` : pick(LINES.testPass), 2800);
+        break;
+      }
+      case 'deploy-started': {
+        const target = String(ev.target || ev.name || '').trim();
+        pet.deploying = true; pet.deployProgress = 0; pet.screenTint = 'deploy'; pet.screenText = '';
+        say(target ? `deploying ${target}…` : 'deploying…', 3200);
+        break;
+      }
+      case 'deploy-finished': {
+        const target = String(ev.target || ev.name || '').trim();
+        pet.deploying = false; pet.deployProgress = 1;
+        pet.screenText = '100%'; pet.screenTint = 'ok'; pet.screenT = 1.6;
+        state.joy = clamp(state.joy + 10);
+        state.care += 3;
+        audio.ok();
+        setTimeout(() => launchRocket(target ? `deployed to ${target}!` : 'deployed!'), 1000);
+        break;
+      }
+      case 'deploy-failed': {
+        const target = String(ev.target || ev.name || '').trim();
+        pet.deploying = false;
+        pet.screenText = 'ERR'; pet.screenTint = 'error'; pet.screenT = 3.2; pet.shake = 0.7;
+        state.joy = clamp(state.joy - 5);
+        audio.error();
+        spawn('dust', pet.x, pet.y - petR() * 2.6, 8, { spread: petR() * 0.6, vx: 30, vy: -40, g: -30, size: 16, dur: 1.6 });
+        say(target ? `${target} deploy failed. rollback?` : pick(LINES.deployFail), 3400);
+        break;
+      }
+      case 'say':
+        say(shortMessage(msg) || 'hi', 3000);
+        break;
       default:
         break;
     }
@@ -1434,7 +1560,7 @@
     el.classList.toggle('low', v < 40 && v >= 20);
     el.classList.toggle('crit', v < 20);
   }
-  function displayName() { return state.name || 'Jellykin'; }
+  function displayName() { return state.name || 'Bitling'; }
   function updateHud() {
     const st = stageOf(state);
     if (state.hatched) {
@@ -1443,8 +1569,8 @@
       metersEl.hidden = false;
       setMeter(mFull, state.full); setMeter(mEnergy, state.energy); setMeter(mJoy, state.joy);
     } else {
-      nameLabel.textContent = 'A mysterious egg';
-      subLabel.textContent = state.taps === 0 ? 'Tap it and see' : 'Keep tapping';
+      nameLabel.textContent = 'A mysterious box';
+      subLabel.textContent = state.taps === 0 ? 'Tap to unbox' : 'Keep tapping';
       metersEl.hidden = true;
     }
     feedBtn.disabled = !state.hatched || state.asleep;
@@ -1459,8 +1585,8 @@
 
   function openNameDialog(first) {
     if (nameDialog.open) return;
-    nameTitle.textContent = first ? 'It hatched!' : 'Rename';
-    nameHint.textContent = first ? 'Give your Jellykin a name. You can change it later by tapping the name.' : 'Pick a new name for your Jellykin.';
+    nameTitle.textContent = first ? 'It booted up!' : 'Rename';
+    nameHint.textContent = first ? 'Give your Bitling a name. You can change it later by tapping the name.' : 'Pick a new name for your Bitling.';
     nameInput.value = state.name || pick(NAMES);
     nameDialog.showModal();
     nameInput.select();
@@ -1490,7 +1616,7 @@
   menuBtn.addEventListener('click', () => {
     if (menuDialog.open) return;
     const st = stageOf(state);
-    $('#aboutTitle').textContent = state.hatched ? `About ${displayName()}` : 'About the egg';
+    $('#aboutTitle').textContent = state.hatched ? `About ${displayName()}` : 'About the box';
     $('#sStage').textContent = STAGES[st];
     $('#sAge').textContent = state.hatched ? ageText(state) : 'not yet';
     $('#sMeals').textContent = String(state.meals);
@@ -1506,7 +1632,7 @@
     if (menuDialog.returnValue === 'reset') {
       $('#resetHint').textContent = state.hatched
         ? `${displayName()} and its history will be gone for good. A new egg will take its place.`
-        : 'The egg will be replaced with a fresh one.';
+        : 'The box will be replaced with a fresh one.';
       resetDialog.returnValue = '';
       resetDialog.showModal();
     }
@@ -1524,7 +1650,7 @@
     bubble.hidden = true; bubbleUntil = 0;
     saveState();
     updateHud();
-    say('a new egg appears', 2400);
+    say('a new box arrives', 2400);
   });
 
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveState(); });

@@ -1,26 +1,34 @@
+<div align="center">
+
+<img src="docs/media/hero.png" width="300" alt="Bitling, a small robot with a glowing screen for a face, arms raised, saying my circuits tingle">
+
 # Bitling
 
-A desktop pet for macOS that lives on your dev activity. Bitling is a small robot with
-a screen for a face. It stands on the bottom edge of your screen in a transparent window
-above your other apps, watches your cursor, strolls around, and reacts to your commits,
-pushes, test runs and deployments. Drag it anywhere. Throw it and it falls back down.
+**A desktop pet for macOS that lives on your dev activity.**
 
-The creature is a web page (`web/bitling.html`, also published as the Bitling Habitat
-artifact). The macOS host (`Sources/`) renders it in a borderless WKWebView and adds
-everything a page cannot do: window movement, screen physics, a menu bar item, native
-prompts, durable state, and the git and CI watchers.
+A small robot stands on the bottom edge of your screen, watches your cursor, walks around,
+and reacts to what you are actually doing: your commits, your test runs, your deploys and
+your Claude Code sessions.
+
+[![Download](https://img.shields.io/github/v/release/jadhavgaurav/bitling?color=6f63d6&label=download&style=flat-square)](https://github.com/jadhavgaurav/bitling/releases/latest)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-8a8a99?style=flat-square)
+![Apple Silicon and Intel](https://img.shields.io/badge/universal-Apple%20Silicon%20%2B%20Intel-8a8a99?style=flat-square)
+
+</div>
+
+---
 
 ## Install
 
-Download the latest `Bitling-<version>.dmg` from the
-[releases page](https://github.com/jadhavgaurav/bitling/releases), open it, and drag
-Bitling into Applications.
+1. Download the latest `.dmg` from the [releases page](https://github.com/jadhavgaurav/bitling/releases/latest).
+2. Open it and drag **Bitling** into Applications.
+3. Open it from Applications.
 
-The first launch says **"Apple could not verify Bitling is free of malware."** That is
-Gatekeeper reacting to an app that is not signed with a paid Apple Developer ID, which
-this one is not. To open it anyway:
+On first launch macOS says **"Apple could not verify Bitling is free of malware."** That is
+Gatekeeper reacting to an app that is not signed with a paid Apple Developer ID, which this
+one is not. To open it anyway:
 
-**System Settings -> Privacy & Security -> scroll down -> Open Anyway**
+**System Settings → Privacy & Security → scroll down → Open Anyway**
 
 or, in Terminal:
 
@@ -28,132 +36,95 @@ or, in Terminal:
 xattr -dr com.apple.quarantine /Applications/Bitling.app
 ```
 
-Requires macOS 13 or later. The download is universal, so it runs on both Apple Silicon
-and Intel Macs. Bitling has no Dock icon: look for the smiling face in the menu bar.
+Bitling has no Dock icon. Look for the smiling face in the menu bar.
 
-For the `bitling` command as well:
+---
 
-```bash
-sudo ln -sf /Applications/Bitling.app/Contents/Resources/bitling /usr/local/bin/bitling
-```
+## Meet Bitling
 
-To uninstall: quit it from the menu bar, drag `/Applications/Bitling.app` to the Trash,
-then `defaults delete app.bitling.pet` to forget the pet, and
-`git config --global --unset core.hooksPath` if you connected the global git hooks.
+<table>
+<tr>
+<td align="center" width="33%"><img src="docs/media/box.png" width="230" alt="A cardboard box marked FRAGILE saying a new box arrives"><br><b>It arrives in a box</b><br>Tap it three times to unbox.</td>
+<td align="center" width="33%"><img src="docs/media/flying.png" width="230" alt="The robot hovering with a thruster flame beneath it"><br><b>It flies</b><br>Off to hover somewhere else, then back.</td>
+<td align="center" width="33%"><img src="docs/media/parafoil.png" width="230" alt="The robot descending under a teal and white ram-air parafoil, saying engaging drag"><br><b>Throw it</b><br>It deploys a parafoil on the way down.</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/media/debug.png" width="230" alt="The robot beside two red beetles saying bugs squash them"><br><b>Bug hunting</b><br>It stomps them. So can you.</td>
+<td align="center"><img src="docs/media/sleep.png" width="230" alt="The robot asleep with closed eyes saying night night"><br><b>It sleeps</b><br>And wakes up for a commit.</td>
+<td align="center"><img src="docs/media/needs-you.png" width="230" alt="The robot waving with a question mark on its screen saying Claude needs you"><br><b>It waves</b><br>When something needs you.</td>
+</tr>
+</table>
 
-## Build from source
+Its screen is its face: pixel eyes that follow your cursor, a spinner while it works, a
+progress bar while a deploy runs. The antenna changes colour with its mood. The three LEDs
+on its chest are its needs. It has around 390 things to say, drawn so the same line never
+lands twice in a row.
 
-Requires macOS 13 or newer and the Xcode Command Line Tools (`xcode-select --install`).
+---
 
-```bash
-./build.sh
-```
+## It reacts to your git activity
 
-That derives `Resources/pet.html` from the web page, compiles a universal host binary,
-draws the icon, ad-hoc signs the bundle, installs `/Applications/Bitling.app` and links
-the `bitling` command into `/usr/local/bin` when that folder is writable. Pass a
-different folder to install elsewhere, `INSTALL=0 ./build.sh` to only build into
-`build/`, or `NATIVE=1 ./build.sh` to skip the second architecture while developing.
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/media/commit.png" width="260" alt="A glowing commit node with a short hash falling toward the robot, which says commit add parafoil physics"></td>
+<td width="50%" align="center"><img src="docs/media/push.png" width="260" alt="A rocket climbing away above the robot, which says off to origin"></td>
+</tr>
+<tr>
+<td align="center"><b>A commit drops a node it catches and eats</b></td>
+<td align="center"><b>A push launches a rocket</b></td>
+</tr>
+</table>
 
-```bash
-open /Applications/Bitling.app
-```
-
-## Releasing
-
-```bash
-./release.sh              # build/Bitling-<version>.dmg
-./release.sh --publish    # tag, push and create the GitHub release
-```
-
-Pushing a `v*` tag also runs `.github/workflows/release.yml`, which builds the universal
-app on a macOS runner and attaches the disk image to the release.
-
-The version comes from `CFBundleShortVersionString` in `Resources/Info.plist`; bump it
-there before releasing. To ship a build that opens without the Gatekeeper warning you
-need an Apple Developer Program membership: set `SIGN_ID` to your Developer ID
-Application certificate and `NOTARY_PROFILE` to a `notarytool` keychain profile, and
-`release.sh` will sign, notarize and staple it.
-
-## Using it
-
-- **Tap the box three times** to unbox it. You will be asked for a name.
-- **Click** the robot to pat it (it tilts its head). **Drag** to carry it: legs dangle.
-  Let go mid-air and it drops, tumbling, and lands on its feet with a knee bend. Fling
-  it and it glances off the screen edges.
-- **Thrown from a height** it pops a striped parachute, grabs the cords with both
-  arms, and drifts down swaying with its legs swinging. The chute collapses and folds
-  away on touchdown. Short drops are taken on its knees.
-- It **walks** with a real stride and turns to face where it is going. On its own it
-  strolls, turns around, stretches, taps a foot when bored, and now and then fires
-  its thrusters and **flies** to a spot anywhere on the screen, hovers there for a
-  while looking around, then lands. Drop it gently while it is flying and it hovers
-  where you left it.
-- **Menu bar**: Pat, Feed, Debug bugs, Sleep, plus Tummy, Energy and Joy meters (also
-  shown as the three LEDs on its chest once it has grown). Hide/Show, Bring pet to this
-  screen, Rename, Sound, Start over, Open at login.
-- **Debug bugs** releases four bugs that scurry along the floor. The robot chases and
-  stomps them. Click a bug to squash it yourself.
-- Snacks are batteries, chips and cookies. Its antenna turns amber when it is hungry.
-- Grows through three stages with age and care points: Bootling, Bitling, Overclocked
-  Bitling (two antennas, a halo, a shifting shell colour).
-- Needs drift while the app is closed (capped at 12 hours). It never dies.
-
-## Git reactions
-
-The app finds **every git repository on the Mac by itself**. There is nothing to
-configure and no folder to pick: it scans your home folder and any mounted volumes
-(skipping node_modules, caches, Library and similar), remembers what it found so the
-next launch is instant, and rescans every ten minutes. Detection tails each
-repository's reflog, so reactions land within two seconds without polling
-`git status`. "Rescan for repositories now" forces a fresh sweep, and "Also watch a
-folder outside home…" adds anything the sweep cannot reach.
-
-For repositories anywhere at all, including outside your home folder, **global git
-hooks** are the belt-and-braces option: "Connect global git hooks…" points git's
-global `core.hooksPath` at Bitling's hook folder. Each hook reports the event and then
-runs your repository's own hook, and any global hooks path you already use is chained
-too. Disconnect restores your previous setting.
+Bitling watches **every repository on the machine**, with nothing to configure. It finds
+them by scanning your home folder and any mounted volumes, then tails each repository's
+reflog, so reactions land within about two seconds without ever running `git status` in a
+loop.
 
 | You do | Bitling does |
 |---|---|
-| commit | catches a falling commit node (hash on it) and eats it |
-| commit with "fix" or "bug" in the message | a bug appears and gets stomped |
-| commit with "wip" | "wip? okay…" |
+| commit | catches a falling commit node stamped with the short hash, and eats it |
+| commit saying "fix" or "bug" | a beetle appears and gets stomped |
+| commit saying "wip" | "wip. bold of you to admit it" |
 | commit over 400 changed lines | "chonky commit!" |
-| very short message | asks if that was really the message |
+| a very short message | asks whether that was really the message |
 | commit after 23:00 | "go to sleep, human" |
-| push | launches a rocket: "shipped main!" |
-| merge | confetti, eats a purple merge node |
-| checkout | glances around: "now on feature/x" |
-| rebase start / finish | dizzy spinning eyes, then relief |
-| pull, stash, reset, cherry-pick | a line each |
-| any of the above in any repo on the Mac | same reactions; no setup needed |
-| 10+ uncommitted files | nags now and then |
-| no commit for a day | "git log is lonely" (daytime only) |
+| push | launches a rocket, "main has left the building" |
+| merge | confetti, and it eats a purple merge node |
+| checkout | glances around, "we live on feature/x now" |
+| rebase, then finish | spinning dizzy eyes, then relief |
+| pull, stash, reset, cherry-pick | a line for each |
+| 10 or more uncommitted files | nags now and then |
+| no commit all day | "git log is lonely" |
 
-## Test and deploy reactions
+Optional **global git hooks** make it instant instead of near-instant. The menu bar item
+points git's global `core.hooksPath` at a small folder of its own, and every hook there runs
+your repository's own hook straight afterwards, so husky and friends keep working.
+Disconnecting puts the setting back.
 
-| Event | Bitling does |
-|---|---|
-| tests fail | screen flashes red with X eyes and "ERR", antenna red, it shakes, then bugs appear (one per failure, up to five) and it hunts them |
-| tests pass | screen shows a green "OK", any bugs die on the spot, "tests green!" |
-| deploy starts | amber screen with a progress bar that creeps while it waits |
-| deploy finishes | "100%", then a rocket: "deployed to production!" |
-| deploy fails | "ERR", smoke, "deploy failed. rollback?" |
+---
 
-Three sources feed these, all optional:
+## It reacts to tests and deploys
 
-1. **GitHub Actions and GitHub Deployments** through the `gh` CLI, for watched repos
-   whose origin is on github.com. `gh auth login` once and it works. Workflows named
-   deploy, release, publish, cd or rollout count as deployments; everything else counts
-   as tests. Vercel and similar services record GitHub Deployments, so those show up
-   too. Polled every minute.
-2. **Local pytest runs**: pytest rewrites `.pytest_cache/v/cache/nodeids` on every run
-   and lists failing tests in `lastfailed`. Checked every three seconds for the repo root
-   and its first-level folders.
-3. **The `bitling` command** for anything else. It sends events over the `bitling://`
-   URL scheme, so it works from any shell, Makefile, npm script or git hook:
+<table>
+<tr>
+<td width="33%" align="center"><img src="docs/media/tests-failed.png" width="230" alt="The robot with a red ERR screen and red antenna saying 3 tests failing in api, with beetles around it"><br><b>Tests fail</b></td>
+<td width="33%" align="center"><img src="docs/media/tests-passed.png" width="230" alt="The robot with a green OK screen saying zero bugs for now"><br><b>Tests pass</b></td>
+<td width="33%" align="center"><img src="docs/media/deploy.png" width="230" alt="The robot with an amber screen and a progress bar saying deploying production"><br><b>A deploy runs</b></td>
+</tr>
+</table>
+
+When tests fail its screen goes red, its eyes become crosses, it shakes, and one beetle
+appears per failure for it to hunt. When they pass, every beetle dies on the spot. A deploy
+fills a progress bar on its screen and ends in a rocket, or in smoke and "rollback time".
+
+Three sources feed this, all optional:
+
+1. **GitHub Actions and GitHub Deployments** through the `gh` CLI, for any watched repo whose
+   origin is on github.com. Run `gh auth login` once. Workflows named deploy, release,
+   publish, cd or rollout count as deploys; the rest count as tests. Vercel and similar
+   services record GitHub Deployments, so those appear too.
+2. **Local pytest runs**, detected from `.pytest_cache`, including the failure count.
+3. **The `bitling` command**, for everything else.
 
 ```bash
 bitling run npm test                    # reports pass or fail, keeps the exit status
@@ -161,77 +132,118 @@ bitling run pytest -q
 bitling deploy production ./deploy.sh   # start, then finished or failed
 bitling event test-failed count=3 name=api
 bitling say "lunch?"
-bitling claude < hook.json                # Claude Code hook adapter (installed for you by the menu)
 ```
 
-If `build.sh` could not link the command, do it once yourself:
+The command talks to the app over a `bitling://` URL, so it works from any shell, Makefile,
+npm script or git hook. If the installer could not link it for you:
 
 ```bash
 sudo ln -sf /Applications/Bitling.app/Contents/Resources/bitling /usr/local/bin/bitling
 ```
 
-## Claude Code reactions
+---
 
-Bitling watches your Claude Code sessions too. It tails the session transcripts Claude
-Code writes under `~/.claude/projects`, so this works with no configuration for the
-terminal, the desktop app and IDE extensions.
+## It reacts to your Claude Code sessions
+
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/media/claude.png" width="240" alt="The robot with an amber antenna and three typing dots on its screen"></td>
+<td width="50%" align="center"><img src="docs/media/needs-you.png" width="240" alt="The robot waving with a question mark on its screen saying Claude needs you"></td>
+</tr>
+<tr>
+<td align="center"><b>Typing dots while Claude works</b></td>
+<td align="center"><b>A wave when it needs your permission</b></td>
+</tr>
+</table>
+
+This needs no configuration either: Bitling tails the session transcripts Claude Code writes
+under `~/.claude/projects`, so it works with the terminal, the desktop app and the IDE
+extensions.
 
 | Claude Code | Bitling does |
 |---|---|
-| you send a prompt | "on it", antenna turns orange, typing dots on its screen, it stops strolling and stares at the code |
-| Claude edits, runs commands, reads, searches | occasional chatter: "editing files…", "running tests…", "reading around…" |
-| a tool call errors | brief "!" flicker, "hmm, that errored" |
-| Claude finishes a turn | "done! check it", sparkles, arms up |
-| Claude waits for your permission | waves both arms, "?" on screen, "Claude needs you!" (hooks only) |
-| new session, idle 5 minutes, session ends | a line each |
+| you send a prompt | "on it", antenna turns amber, typing dots, it stops strolling and stares at the code |
+| it edits, runs, reads, searches | occasional chatter: "editing files…", "running tests…", "reading around…" |
+| a tool call errors | a brief flicker, "well, that failed" |
+| it finishes a turn | "over to you", sparkles, arms up |
+| it waits for your permission | waves both arms, "?" on screen, and a chime |
+| a session starts, idles or ends | a line for each |
 
-**Hooks** make this instant and add the permission alert. "Connect Claude Code hooks…"
-in the Dev activity menu adds Bitling to `~/.claude/settings.json` for SessionStart,
-UserPromptSubmit, PreToolUse, Stop, Notification and SessionEnd. Existing hooks are kept,
-a backup is written beside the file, and "Disconnect" removes only Bitling's entries.
-Each hook runs `bitling claude`, which reads the hook JSON and forwards one event. With
-both hooks and transcripts active, duplicates within three seconds are dropped.
+Connecting the optional **Claude Code hooks** from the menu makes reactions instant and is
+what enables the permission wave. It merges into `~/.claude/settings.json`, keeps your other
+hooks, writes a backup next to the file, and removes only its own entries when disconnected.
 
-The Dev activity submenu shows what is being watched, today's commits and pushes,
-lifetime totals, the CI source status, Claude Code activity, and "Pretend…" items for a
-demo.
+---
 
-State lives in `~/Library/Preferences/app.bitling.pet.plist`. Delete it, or use Start
-over, for a fresh box.
+## Care and feeding
 
-## Layout
+Click to pat it. Drag to carry it: its legs dangle, and if you throw it, it tumbles, opens a
+parafoil and lands on its feet. Feed it batteries, chips and cookies. Send it bug hunting.
+Let it sleep.
+
+It grows through three stages with age and care: **Bootling**, then **Bitling**, then
+**Overclocked Bitling** with two antennas and a halo. Its needs drift while the app is closed,
+capped at twelve hours. It never dies. It only sulks.
+
+Everything lives in the menu bar: the three meters, Pat, Feed, Debug bugs, Sleep, Hide,
+Bring pet to this screen, Rename, Sound, Start over, Open at login, and a Dev activity
+submenu with what is being watched, today's counts, and "Pretend…" items to see any reaction
+on demand.
+
+---
+
+## Build from source
+
+Requires macOS 13 or newer and the Xcode Command Line Tools (`xcode-select --install`).
+
+```bash
+git clone https://github.com/jadhavgaurav/bitling.git
+cd bitling
+./build.sh
+```
+
+That derives the pet page, compiles a universal binary, draws the icon, ad-hoc signs the
+bundle, installs `/Applications/Bitling.app`, and links the `bitling` command. Use
+`INSTALL=0 ./build.sh` to build without installing, or `NATIVE=1` to skip the second
+architecture while developing.
+
+```bash
+./release.sh              # build/Bitling-<version>.dmg
+./release.sh --publish    # tag, push and create the GitHub release
+```
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which rebuilds on a macOS runner and
+attaches the disk image to the release. To ship a build with no Gatekeeper warning you need an
+Apple Developer Program membership: set `SIGN_ID` to your Developer ID Application certificate
+and `NOTARY_PROFILE` to a `notarytool` keychain profile, and `release.sh` signs, notarizes and
+staples it.
+
+## How it works
+
+The creature is one HTML canvas page. The macOS host renders it in a borderless, transparent,
+always-on-top `WKWebView` and supplies everything a web page cannot do: moving the window when
+you drag the pet, gravity and screen edges, the menu bar, native dialogs, durable state, and
+the watchers.
 
 ```
-Sources/main.swift        macOS host: window, drag + physics, menu bar, bridge, URL scheme
-Sources/GitWatcher.swift  reflog tailing, repo discovery, github slugs
-Sources/CIWatcher.swift   gh runs + deployments, pytest caches
-Sources/ClaudeWatcher.swift  Claude Code transcript tailing
-Resources/pet.html        generated desktop page (do not edit by hand)
-Resources/bitling         command line tool copied into the app bundle
-Resources/Info.plist      bundle metadata (LSUIElement, icon, URL scheme)
-Tools/make_pet_html.py    derives pet.html from web/bitling.html
-Tools/makeicon.swift      draws the app icon set
-Tools/patch_*.py          one-off migrations kept for the record
-web/bitling.html          the creature: shared with the web artifact
-build.sh                  build, sign, install
-release.sh                package the disk image, optionally publish the release
-.github/workflows/        CI that builds and attaches the disk image on a v* tag
+Sources/main.swift          window, drag and physics, menu bar, bridge, bitling:// scheme
+Sources/GitWatcher.swift    repository discovery and reflog tailing
+Sources/CIWatcher.swift     gh runs and deployments, pytest caches
+Sources/ClaudeWatcher.swift Claude Code transcript tailing
+web/bitling.html            the creature: drawing, animation, personality
+Tools/make_pet_html.py      derives the desktop page from the web page
+build.sh, release.sh        build, sign, package, publish
 ```
 
-To change the creature, edit `web/bitling.html` and rebuild. To preview the desktop
-layout in a normal browser, open the generated page with `?desktop=1`, or set
-`window.__forceDesktop = true` before the script runs.
+State lives in `~/Library/Preferences/app.bitling.pet.plist`.
 
-## Bridge
+## Uninstall
 
-Page to host (`window.webkit.messageHandlers.pet`): `save` (state JSON), `state`
-(snapshot for the menu), `walk` (idle stroll request), `askName`, `ready`.
+Quit it from the menu bar, then:
 
-Host to page (`window.petNative`): `action(name)`, `grab()`, `drag(vx, vy)`,
-`release()`, `land(impact)`, `walking(dir)`, `cursor(x, y)`, `setName(name)`,
-`reset()`, `gitEvent(event)`, `gitStatus(info)`.
-
-Event kinds: commit, amend, merge, push, checkout, rebase, rebase-done, pull, stash,
-reset, cherry-pick, test-failed, test-passed, deploy-started, deploy-finished,
-deploy-failed, claude-session-start, claude-prompt, claude-tool, claude-tool-error,
-claude-done, claude-notify, claude-idle, claude-session-end, say.
+```bash
+rm -rf /Applications/Bitling.app
+rm -f /usr/local/bin/bitling
+defaults delete app.bitling.pet          # forget the pet
+git config --global --unset core.hooksPath   # only if you connected the git hooks
+```

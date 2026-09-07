@@ -96,7 +96,9 @@
   html.desktop,html.desktop body,html.desktop #app{background:transparent}
   html.desktop .hud,html.desktop .dock{display:none}
   html.desktop #stage{cursor:default}
-  html.desktop .bubble{white-space:normal;max-width:calc(100vw - 16px);text-align:center;font-size:15px;padding:6px 11px;line-height:1.25}
+  /* width:max-content keeps the bubble from being squeezed into a column when the pet
+     stands near the right edge of the window. */
+  html.desktop .bubble{white-space:normal;width:max-content;max-width:calc(100vw - 16px);text-align:center;font-size:15px;padding:6px 11px;line-height:1.25}
 </style>
 
 <div id="app">
@@ -194,36 +196,156 @@
     'Ada', 'Hopper', 'Turing', 'Pico'];
   const STAGES = ['Boxed', 'Bootling', 'Bitling', 'Overclocked Bitling'];
   const LINES = {
-    hello: ['hi!', 'you came back!', 'ooh, hello', 'missed you'],
-    hungry: ['tummy rumbles...', 'snack? snack?', 'feed me pls', 'so hungry'],
-    sleepy: ['*yawn*', 'so sleepy...', 'nap time?', 'eyes heavy'],
-    happy: ['la la la', 'best day', '~wiggle~', 'love this', 'hehe'],
-    bored: ['play with me?', 'bored...', 'any bugs to squash?', 'anyone?'],
-    petted: ['hehe', 'more pats!', '*purr*', 'that spot!', 'again again'],
-    full: ['so full!', 'no more, thanks', 'later maybe'],
-    eat: ['nom nom', 'yum!', 'crunch', 'tasty'],
-    night: ['stars are out', 'cozy night', 'so quiet'],
-    wake: ['*stretch*', 'good morning!', 'hello again'],
-    held: ['whee!', 'eep!', 'flying!', 'careful!'],
-    chute: ['deploying chute!', 'geronimo!', 'this is fine', 'physics!', 'engaging drag'],
-    landed: ['stuck the landing', 'ten out of ten', 'chute stowed', 'that was on purpose'],
-    play: ['bugs! squash them!', 'debug time', 'found some bugs', 'exterminate!'],
-    squash: ['fixed!', 'squash!', 'gotcha', 'bug: 0, me: 1', 'closed as fixed'],
-    egg: ['unbox me!', 'something is beeping in here', '*rattle*', 'knock knock', 'this side up'],
-    testFail: ['tests are red…', 'who broke the build?', 'ERR ERR ERR', 'it worked on my machine'],
-    testPass: ['tests green!', 'all green. ship it.', 'zero failures'],
-    deployFail: ['deploy failed. rollback?', 'prod said no', 'abort abort'],
-    onIt: ['on it', 'thinking…', 'reading the code', 'let me look', 'hmm, okay'],
-    working: ['still thinking…', 'crunching…', 'almost there', 'lots of files…'],
-    done: ['done! check it', 'finished, human', 'your turn', 'ready for review', 'ta-da'],
-    needsYou: ['Claude needs you!', 'permission? over here!', 'psst, it is waiting'],
-    tired: ['too tired to play', 'need a nap first'],
+    hello: ['hi!', 'you came back!', 'ooh, hello', 'missed you', 'welcome back', 'there you are',
+      'I kept your seat warm', 'status: pleased', 'reconnected', 'I waited', 'you are back online'],
+    hungry: ['tummy rumbles...', 'snack? snack?', 'feed me pls', 'so hungry', 'battery low',
+      'running on fumes', 'is it snack o clock?', 'I could eat a chip', 'feed the machine',
+      'low fuel warning', 'draw exceeds intake', 'hangry.exe'],
+    sleepy: ['*yawn*', 'so sleepy...', 'nap time?', 'eyes heavy', 'entering low power',
+      'my fans are slowing', 'five more minutes', 'sleep mode is calling', 'idle threads everywhere',
+      'cannot keep my pixels open'],
+    happy: ['la la la', 'best day', '~wiggle~', 'love this', 'hehe', 'all systems nominal',
+      'good vibes only', 'humming along', 'zero complaints', 'happily idling', 'joy at 99%',
+      'this is a good desktop'],
+    bored: ['play with me?', 'bored...', 'any bugs to squash?', 'anyone?', 'idle... so idle',
+      'give me a task', 'I have cycles to spare', 'entertain me?', 'nothing in the queue',
+      'boredom overflow', 'poke me?'],
+    petted: ['hehe', 'more pats!', '*purr*', 'that spot!', 'again again', 'pat received',
+      'best input all day', 'processing... joy', 'do that again', 'my circuits tingle',
+      'recalibrated by affection'],
+    full: ['so full!', 'no more, thanks', 'later maybe', 'storage full', 'I am at capacity',
+      'buffer overflow', 'maybe after a walk', 'cannot accept more input'],
+    eat: ['nom nom', 'yum!', 'crunch', 'tasty', 'charging...', 'delicious voltage', 'mmm, silicon',
+      'that hit the spot', 'power restored', '*munch*'],
+    night: ['stars are out', 'cozy night', 'so quiet', 'the servers sleep too', 'moonlight mode',
+      'quiet hours', 'nice night for a build', 'nobody deploys at this hour'],
+    wake: ['*stretch*', 'good morning!', 'hello again', 'rebooted', 'systems back online',
+      'that was a good sleep', 'cache cleared, ready', 'awake and dangerous', 'morning, human'],
+    held: ['whee!', 'eep!', 'flying!', 'careful!', 'unexpected lift', 'wheeee', 'altitude!',
+      'gravity who?', 'I have no legs right now', 'put me down. or do not.', 'this is fine',
+      'weightless!'],
+    chute: ['deploying chute!', 'geronimo!', 'this is fine', 'physics!', 'engaging drag',
+      'canopy out!', 'soft landing incoming', 'gravity, meet nylon', 'descent controlled',
+      'wheeee, but safely'],
+    landed: ['stuck the landing', 'ten out of ten', 'chute stowed', 'that was on purpose',
+      'nailed it', 'no damage taken', 'landing gear works', 'as planned, obviously'],
+    play: ['bugs! squash them!', 'debug time', 'found some bugs', 'exterminate!', 'stomping time',
+      'to the bug tracker!', 'they are getting away!', 'triage, physical edition'],
+    squash: ['fixed!', 'squash!', 'gotcha', 'bug: 0, me: 1', 'closed as fixed', 'patched',
+      'one less ticket', 'stomped', 'resolved', 'cannot reproduce now'],
+    allSquashed: ['all bugs squashed!', 'clean build!', 'zero bugs. for now.', 'the board is empty',
+      'inbox zero, bug edition', 'nothing left to stomp'],
+    someEscaped: ['some got away...', 'they fled into prod', 'reopening those tickets',
+      'known issues, then'],
+    egg: ['unbox me!', 'something is beeping in here', '*rattle*', 'knock knock', 'this side up',
+      'hello? is someone there?', 'let me out!', 'I hear a human', 'shipping was rough',
+      'tape is all that separates us'],
+    unboxing: ['*rattle*', 'tape is tearing', 'almost open...', 'nearly there', 'I can see light',
+      'one more tug', 'keep going!'],
+    sleeping: ['zzz', 'night night', 'sleepy time', 'powering down', 'see you in the morning',
+      'entering sleep mode', 'goodnight, human'],
+    stretch: ['*stretch*', 'servos ok', 'recalibrating', 'joints checked', 'limbering up',
+      'diagnostics: fine'],
+    takeoff: ['brb, hovering', 'let me see from up here', 'going up', 'thrusters on',
+      'gaining altitude', 'up we go', 'switching to flight mode'],
+    hovering: ['nice view', 'scanning…', 'I can see your dock from here', 'hovering is cheap',
+      'good visibility today', 'everything looks smaller', 'no notes from up here'],
+    testFail: ['tests are red…', 'who broke the build?', 'ERR ERR ERR', 'it worked on my machine',
+      'red across the board', 'the suite is unhappy', 'assertions betrayed us',
+      'not great, not terrible'],
+    testPass: ['tests green!', 'all green. ship it.', 'zero failures', 'the suite is happy',
+      'green across the board', 'clean run', 'no assertions harmed'],
+    deployFail: ['deploy failed. rollback?', 'prod said no', 'abort abort', 'prod rejected us',
+      'rollback time', 'the deploy did not deploy'],
+    onIt: ['on it', 'thinking…', 'reading the code', 'let me look', 'hmm, okay', 'spinning up',
+      'parsing your request', 'right, where were we', 'context loading', 'give me a second'],
+    working: ['still thinking…', 'crunching…', 'almost there', 'lots of files…',
+      'deep in the codebase', 'this one is chunky', 'still going', 'do not close the laptop',
+      'many tokens, much thought'],
+    done: ['done! check it', 'finished, human', 'your turn', 'ready for review', 'ta-da',
+      'that is done', 'over to you', 'have a look', 'shipped to your screen'],
+    needsYou: ['Claude needs you!', 'permission? over here!', 'psst, it is waiting',
+      'it wants your approval', 'a decision is required', 'hey! yes or no?'],
+    tired: ['too tired to play', 'need a nap first', 'battery says no', 'ask me after a nap',
+      'low power, sorry'],
+    oops: ['hmm, that errored', 'oops', 'retrying, probably', 'that did not work',
+      'stack trace incoming', 'well, that failed'],
+    noCommits: ['no commits today?', 'the repo misses you', 'git log is lonely',
+      'the branch is untouched', 'HEAD has not moved all day'],
+    commitFix: ['bug fixed? squash!', 'a fix! let me find the bug', 'squashing time',
+      'one bug down, probably', 'the bug tracker thanks you'],
+    commitWip: ['wip? okay…', 'work in progress, sure', 'half a thought, committed',
+      'wip. bold of you to admit it', 'to be continued, then'],
+    commitTypo: ['hehe, typo', 'a typo commit, classic', 'the letters were wrong', 'spelling patch'],
+    commitRevert: ['undo undo undo', 'we do not speak of that commit', 'reverted, never happened',
+      'back to how it was'],
+    commitPlain: ['a commit!', 'another one saved', 'progress!', 'into the log it goes',
+      'HEAD moved', 'that is history now'],
+    amend: ['amended. nobody saw.', 'history rewritten, quietly', 'that never happened',
+      'fixed the fix', 'no one needs to know'],
+    merged: ['merged into {b}!', '{b} just got bigger', 'branches united into {b}',
+      'welcome to {b}'],
+    mergedPlain: ['merged!', 'branches are one', 'no conflicts, apparently'],
+    checkout: ['now on {b}', 'switched to {b}', '{b} it is', 'hello, {b}', 'we live on {b} now'],
+    checkoutPlain: ['switched branch', 'different branch now', 'new context'],
+    rebase: ['rebasing… hold on', 'history is moving', 'do not touch anything',
+      'replaying commits…', 'this may take a moment'],
+    rebaseDone: ['rebased, phew', 'history looks tidy now', 'linear at last',
+      'that was a lot of commits'],
+    pull: ['fresh from origin', 'new code arrived', 'origin had things to say', 'caught up',
+      'someone else was busy'],
+    stash: ['tucked it away', 'saved for later', 'into the stash it goes', 'hidden, not lost'],
+    reset: ['wait, where did it go?', 'that work is gone', 'reset. brave.', 'poof',
+      'I hope that was on purpose'],
+    cherry: ['cherry! nom', 'picked a good one', 'stolen from another branch',
+      'that commit is mine now'],
+    shipped: ['shipped {b}!', '{b} is live!', '{b} has left the building', 'off to origin!'],
+    shippedPlain: ['shipped!', 'pushed!', 'off it goes', 'it is out there now'],
+    deploying: ['deploying {t}…', 'pushing to {t}…', '{t} deploy in progress', 'sending it to {t}…'],
+    deployingPlain: ['deploying…', 'deploy in progress', 'sending it…'],
+    deployed: ['deployed to {t}!', '{t} is live!', 'it is on {t} now', '{t} updated!'],
+    deployedPlain: ['deployed!', 'it is live!', 'out in the world'],
+    claudeSession: ['new session in {p}', 'we are working in {p}', '{p}, here we go'],
+    claudeSessionPlain: ['new Claude session', 'a session started', 'here we go'],
+    claudeIdle: ['waiting on you…', 'your move', 'it is idle now', 'still here when you are'],
+    claudeEnd: ['session over. nap?', 'that is a wrap', 'session closed', 'until next time'],
+    wakeCommit: ['who is committing?', 'someone is working', 'I heard a commit', 'at this hour?'],
+    wakeTest: ['who broke the build?', 'red alert', 'the suite screamed', 'that woke me up'],
   };
 
   const $ = (s) => document.querySelector(s);
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v));
   const rand = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  // Draw phrases from a shuffled bag: every line in a category is used once before
+  // any of them comes round again, so the pet never repeats itself back to back.
+  const phraseBags = new Map();
+  const phraseLast = new Map();
+  function line(key) {
+    const all = LINES[key] || [];
+    if (all.length < 2) return all[0] || '';
+    let bag = phraseBags.get(key);
+    if (!bag || !bag.length) {
+      bag = all.slice();
+      for (let i = bag.length - 1; i > 0; i--) {
+        const k = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[k]] = [bag[k], bag[i]];
+      }
+      // A fresh bag must not open with the phrase the old one closed on.
+      if (bag[bag.length - 1] === phraseLast.get(key)) {
+        [bag[bag.length - 1], bag[0]] = [bag[0], bag[bag.length - 1]];
+      }
+      phraseBags.set(key, bag);
+    }
+    const text = bag.pop();
+    phraseLast.set(key, text);
+    return text;
+  }
+  function lineFor(key, vars) {
+    let text = line(key);
+    for (const k in vars) text = text.split('{' + k + '}').join(vars[k]);
+    return text;
+  }
   const lerp = (a, b, t) => a + (b - a) * t;
   const now = () => Date.now();
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -531,12 +653,12 @@
     pet.sq = -0.04; pet.sqv = 0;
     audio.squeak();
     spawn('heart', pet.x, pet.y - petR() * 1.9, 4, { spread: petR() * 0.6, vx: 40, vy: -90, size: 10 });
-    if (Math.random() < 0.6) say(pick(LINES.petted));
+    if (Math.random() < 0.6) say(line('petted'));
     saveState();
   }
   function feed() {
     if (!state.hatched || state.asleep || snack.active) return;
-    if (state.full >= 95) { say(pick(LINES.full)); return; }
+    if (state.full >= 95) { say(line('full')); return; }
     comeDown();
     snack.active = true;
     snack.rest = false;
@@ -557,12 +679,12 @@
     setTimeout(() => audio.munch(), 180);
     setTimeout(() => audio.munch(), 360);
     spawn('crumb', pet.x, pet.y - petR() * 0.8, 6, { spread: 6, vx: 90, vy: -60, g: 900, size: 6, hue: snack.kind === 'battery' ? 130 : snack.kind === 'chip' ? 220 : 30 });
-    say(pick(LINES.eat));
+    say(line('eat'));
     saveState();
   }
   function play() {
     if (!state.hatched || state.asleep || debug.active) return;
-    if (state.energy < 15) { say(pick(LINES.tired)); pet.yawn = 1.2; return; }
+    if (state.energy < 15) { say(line('tired')); pet.yawn = 1.2; return; }
     comeDown();
     debug.active = true;
     debug.until = 25;
@@ -570,7 +692,7 @@
     state.games += 1;
     state.care += 2;
     state.energy = clamp(state.energy - 8);
-    say(pick(LINES.play));
+    say(line('play'));
     saveState();
   }
   function endDebug() {
@@ -590,7 +712,7 @@
     state.care += 1;
     audio.pop();
     spawn('check', b.x, groundY - 12, 2, { spread: 6, vx: 30, vy: -70, size: 12, dur: 0.9 });
-    say(pick(LINES.squash), 1300);
+    say(line('squash'), 1300);
     if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
   }
   function bugAt(x, y) {
@@ -643,7 +765,7 @@
     pet.happy = 0;
     pet.surprise = 0;
     if (pet.held) release();
-    say(pick(['zzz', 'night night', 'sleepy time']));
+    say(line('sleeping'));
     audio.yawn();
     saveState();
     updateHud();
@@ -652,7 +774,7 @@
     state.asleep = false;
     pet.stretchT = 1.6;
     pet.yawn = 1.2;
-    say(pick(LINES.wake));
+    say(line('wake'));
     audio.squeak();
     saveState();
     updateHud();
@@ -663,7 +785,7 @@
     egg.wobble = 1;
     audio.pop();
     if (state.taps >= 3) hatch();
-    else say(pick(['*rattle*', 'tape is tearing', 'almost open...']));
+    else say(line('unboxing'));
     saveState();
   }
   function hatch() {
@@ -701,7 +823,7 @@
     pet.spin = 0;
     audio.poof();
     spawn('spark', pet.x, pet.y - petR() * 3.4, 6, { spread: petR() * 0.8, vx: 90, vy: -40, size: 7, hue: 190, dur: 0.6 });
-    say(pick(LINES.chute), 2200);
+    say(line('chute'), 2200);
   }
   function cutChute(landed) {
     if (!pet.chuteOpen) return;
@@ -709,7 +831,7 @@
     pet.chuteCut = 0.9;
     if (landed) {
       spawn('dust', pet.x, groundY - 4, 5, { spread: petR() * 0.7, vx: 55, vy: -20, g: -10, size: 8, dur: 0.7 });
-      if (Math.random() < 0.7) say(pick(LINES.landed), 2200);
+      if (Math.random() < 0.7) say(line('landed'), 2200);
     }
   }
 
@@ -776,7 +898,7 @@
     pet.surprise = 1.4;
     pet.happy = 0;
     canvas.classList.add('holding');
-    say(pick(LINES.held), 1800);
+    say(line('held'), 1800);
     audio.squeak();
   }
   function release() {
@@ -1060,11 +1182,11 @@
     if (!alive.length) {
       debug.active = false;
       state.joy = clamp(state.joy + 10);
-      say(pick(['all bugs squashed!', 'clean build!', 'zero bugs. for now.']), 2600);
+      say(line('allSquashed'), 2600);
       saveState();
       return;
     }
-    if (debug.until <= 0) { endDebug(); say('some got away...', 2200); return; }
+    if (debug.until <= 0) { endDebug(); say(line('someEscaped'), 2200); return; }
     let best = alive[0], bestDist = Infinity;
     for (const b of alive) { const d = Math.abs(b.x - pet.x); if (d < bestDist) { bestDist = d; best = b; } }
     pet.ax = clamp(best.x, r, W - r);
@@ -1101,32 +1223,32 @@
 
   function doIdle() {
     if (!state.hatched) {
-      if (Math.random() < 0.6) say(pick(LINES.egg));
+      if (Math.random() < 0.6) say(line('egg'));
       egg.wobble = 0.5;
       return;
     }
     if (state.asleep || pet.held || pet.carried || pet.thrown) return;
-    if (pet.working) { if (Math.random() < 0.35) say(pick(LINES.working), 2400); return; }
+    if (pet.working) { if (Math.random() < 0.35) say(line('working'), 2400); return; }
     const r = Math.random();
-    if (state.full < 30 && r < 0.5) { say(pick(LINES.hungry)); comeDown(); return; }
-    if (state.energy < 25 && r < 0.5) { say(pick(LINES.sleepy)); pet.yawn = 1.2; audio.yawn(); comeDown(); return; }
-    if (state.joy < 35 && r < 0.4) { say(pick(LINES.bored)); pet.tapT = 1.6; return; }
+    if (state.full < 30 && r < 0.5) { say(line('hungry')); comeDown(); return; }
+    if (state.energy < 25 && r < 0.5) { say(line('sleepy')); pet.yawn = 1.2; audio.yawn(); comeDown(); return; }
+    if (state.joy < 35 && r < 0.4) { say(line('bored')); pet.tapT = 1.6; return; }
     const hour = new Date().getHours();
     if (gitInfo.dirty >= 10 && r < 0.3) { say(`${gitInfo.dirty} files uncommitted…`, 3000); pet.glance = 1; return; }
-    if (gitInfo.minutesSinceCommit > 24 * 60 && hour >= 9 && hour < 20 && r < 0.25) { say(pick(['no commits today?', 'the repo misses you', 'git log is lonely']), 3000); return; }
+    if (gitInfo.minutesSinceCommit > 24 * 60 && hour >= 9 && hour < 20 && r < 0.25) { say(line('noCommits'), 3000); return; }
     if (pet.mode === 'fly') {
       if (r < 0.5) { pet.wander.x = rand(-1, 1); pet.wander.y = rand(-0.3, 0.7); }
-      else if (r < 0.7) say(pick(['nice view', 'scanning…', 'I can see your dock from here', 'hovering is cheap']), 2400);
+      else if (r < 0.7) say(line('hovering'), 2400);
       return;
     }
     if (r < 0.14) { pet.facing = -pet.facing; pet.turnT = 0.5; pet.wander.x = pet.facing * 0.6; pet.wander.y = 0; }
-    else if (r < 0.26) { pet.stretchT = 1.6; if (Math.random() < 0.4) say(pick(['*stretch*', 'servos ok', 'recalibrating']), 1500); }
+    else if (r < 0.26) { pet.stretchT = 1.6; if (Math.random() < 0.4) say(line('stretch'), 1500); }
     else if (r < 0.4) {
-      if (takeOff()) { if (Math.random() < 0.6) say(pick(['brb, hovering', 'let me see from up here', 'going up', 'thrusters on']), 2000); }
+      if (takeOff()) { if (Math.random() < 0.6) say(line('takeoff'), 2000); }
       else { pet.wander.x = rand(-1, 1); pet.wander.y = rand(-0.6, 0.4); }
     }
     else if (r < 0.54) { pet.wander.x = rand(-1, 1); pet.wander.y = rand(-0.6, 0.4); }
-    else if (r < 0.7) { say(pick(sky.night > 0.6 ? LINES.night : LINES.happy)); }
+    else if (r < 0.7) { say(line(sky.night > 0.6 ? 'night' : 'happy')); }
     else if (r < 0.8 && state.joy < 50) { pet.tapT = 1.4; }
     else if (!reduceMotion) {
       if (DESKTOP) native({ type: 'walk', dir: Math.random() < 0.5 ? -1 : 1 });
@@ -1767,7 +1889,7 @@
     if (state.asleep) {
       if (!loud) return;
       wake();
-      say(kind === 'test-failed' ? 'who broke the build?' : 'who is committing?', 2000);
+      say(line(kind === 'test-failed' ? 'wakeTest' : 'wakeCommit'), 2000);
     }
     audio.ensure();
     switch (kind) {
@@ -1775,20 +1897,20 @@
         state.commits += 1;
         state.lastCommitAt = now();
         spawnDrop('commit', ev.hash ? String(ev.hash).slice(0, 7) : 'commit');
-        let line = msg.trim() ? `commit: ${shortMessage(msg)}` : 'a commit!';
-        if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { line = 'bug fixed? squash!'; spawnBug(clamp(pet.x + rand(-80, 80), 14, W - 14)); }
-        else if (/\bwip\b/.test(lower)) line = 'wip? okay…';
-        else if (/typo/.test(lower)) line = 'hehe, typo';
-        else if (/^revert\b/i.test(msg.trim())) { line = 'undo undo undo'; pet.surprise = 1.2; }
-        else if (msg.trim().length > 0 && msg.trim().length < 8) line = `"${msg.trim()}"? that's the message?`;
+        let said = msg.trim() ? `commit: ${shortMessage(msg)}` : line('commitPlain');
+        if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { said = line('commitFix'); spawnBug(clamp(pet.x + rand(-80, 80), 14, W - 14)); }
+        else if (/\bwip\b/.test(lower)) said = line('commitWip');
+        else if (/typo/.test(lower)) said = line('commitTypo');
+        else if (/^revert\b/i.test(msg.trim())) { said = line('commitRevert'); pet.surprise = 1.2; }
+        else if (msg.trim().length > 0 && msg.trim().length < 8) said = `"${msg.trim()}"? that's the message?`;
         const churn = (Number(ev.insertions) || 0) + (Number(ev.deletions) || 0);
-        if (churn > 400) { line = `chonky commit! ${churn} lines`; pet.knee = 0.5; }
-        setTimeout(() => say(line, 3200), 900);
+        if (churn > 400) { said = `chonky commit! ${churn} lines`; pet.knee = 0.5; }
+        setTimeout(() => say(said, 3200), 900);
         if (hour >= 23 || hour < 5) setTimeout(() => { say('go to sleep, human', 2600); pet.yawn = 1.2; }, 4400);
         break;
       }
       case 'amend':
-        say('amended. nobody saw.', 2600);
+        say(line('amend'), 2600);
         pet.happy = 0.8;
         break;
       case 'merge':
@@ -1796,40 +1918,40 @@
         state.lastCommitAt = now();
         spawnDrop('merge', 'merge');
         spawn('spark', pet.x, pet.y - petR(), 16, { spread: petR(), vx: 120, vy: -120, size: 9, hue: 275, dur: 1.4 });
-        say(branch ? `merged into ${branch}!` : 'merged!', 3000);
+        say(branch ? lineFor('merged', { b: branch }) : line('mergedPlain'), 3000);
         pet.happy = 1.5;
         break;
       case 'push':
         state.pushes += 1;
-        launchRocket(branch ? `shipped ${branch}!` : 'shipped!');
+        launchRocket(branch ? lineFor('shipped', { b: branch }) : line('shippedPlain'));
         break;
       case 'checkout':
         pet.glance = 1.2;
-        say(branch ? `now on ${branch}` : 'switched branch', 2600);
+        say(branch ? lineFor('checkout', { b: branch }) : line('checkoutPlain'), 2600);
         break;
       case 'rebase':
         pet.dizzy = 4;
-        say('rebasing… hold on', 2600);
+        say(line('rebase'), 2600);
         break;
       case 'rebase-done':
         pet.dizzy = 0;
         pet.happy = 1;
-        say('rebased, phew', 2400);
+        say(line('rebaseDone'), 2400);
         break;
       case 'pull':
         pet.happy = 0.8;
-        say('fresh from origin', 2400);
+        say(line('pull'), 2400);
         break;
       case 'stash':
-        say('tucked it away', 2200);
+        say(line('stash'), 2200);
         break;
       case 'reset':
         pet.surprise = 1.5;
-        say('wait, where did it go?', 2600);
+        say(line('reset'), 2600);
         break;
       case 'cherry-pick':
         spawnDrop('commit', 'cherry');
-        say('cherry! nom', 2200);
+        say(line('cherry'), 2200);
         break;
       case 'test-failed': {
         const count = Math.max(0, Math.min(99, Number(ev.count) || 0));
@@ -1843,7 +1965,7 @@
         debug.active = true; debug.until = 45;
         const line = count > 0
           ? `${count} test${count === 1 ? '' : 's'} failing${label ? ` in ${label}` : ''}`
-          : (label ? `${label} is red` : pick(LINES.testFail));
+          : (label ? `${label} is red` : line('testFail'));
         setTimeout(() => say(line, 3400), 300);
         break;
       }
@@ -1853,13 +1975,13 @@
         state.joy = clamp(state.joy + 6);
         audio.ok();
         for (const b of bugs) if (b.alive) squashBug(b, false);
-        say(label ? `${label} is green!` : pick(LINES.testPass), 2800);
+        say(label ? `${label} is green!` : line('testPass'), 2800);
         break;
       }
       case 'deploy-started': {
         const target = String(ev.target || ev.name || '').trim();
         pet.deploying = true; pet.deployProgress = 0; pet.screenTint = 'deploy'; pet.screenText = '';
-        say(target ? `deploying ${target}…` : 'deploying…', 3200);
+        say(target ? lineFor('deploying', { t: target }) : line('deployingPlain'), 3200);
         break;
       }
       case 'deploy-finished': {
@@ -1869,7 +1991,7 @@
         state.joy = clamp(state.joy + 10);
         state.care += 3;
         audio.ok();
-        setTimeout(() => launchRocket(target ? `deployed to ${target}!` : 'deployed!'), 1000);
+        setTimeout(() => launchRocket(target ? lineFor('deployed', { t: target }) : line('deployedPlain')), 1000);
         break;
       }
       case 'deploy-failed': {
@@ -1879,7 +2001,7 @@
         state.joy = clamp(state.joy - 5);
         audio.error();
         spawn('dust', pet.x, pet.y - petR() * 2.6, 8, { spread: petR() * 0.6, vx: 30, vy: -40, g: -30, size: 16, dur: 1.6 });
-        say(target ? `${target} deploy failed. rollback?` : pick(LINES.deployFail), 3400);
+        say(target ? `${target} deploy failed. rollback?` : line('deployFail'), 3400);
         break;
       }
       case 'say':
@@ -1888,14 +2010,14 @@
       case 'claude-session-start': {
         const project = String(ev.name || ev.repo || '').trim();
         pet.glance = 1.2;
-        say(project ? `new session in ${project}` : 'new Claude session', 2800);
+        say(project ? lineFor('claudeSession', { p: project }) : line('claudeSessionPlain'), 2800);
         break;
       }
       case 'claude-prompt': {
         state.prompts += 1;
         pet.working = true; pet.workT = 120; pet.wave = 0;
         pet.happy = 0.5;
-        say(pick(LINES.onIt), 2200);
+        say(line('onIt'), 2200);
         break;
       }
       case 'claude-tool': {
@@ -1918,7 +2040,7 @@
       case 'claude-tool-error': {
         if (Math.random() < 0.35) {
           pet.screenTint = 'error'; pet.screenText = '!'; pet.screenT = 0.7; pet.shake = 0.25;
-          say(pick(['hmm, that errored', 'oops', 'retrying, probably']), 1800);
+          say(line('oops'), 1800);
         }
         break;
       }
@@ -1927,23 +2049,23 @@
         pet.happy = 1.4;
         state.joy = clamp(state.joy + 2);
         spawn('spark', pet.x, pet.y - petR() * 1.8, 6, { spread: petR() * 0.6, vx: 70, vy: -80, size: 7, hue: 25, dur: 0.9 });
-        say(pick(LINES.done), 3000);
+        say(line('done'), 3000);
         break;
       }
       case 'claude-notify': {
         pet.working = false;
         pet.wave = 4;
         audio.ok();
-        say(shortMessage(msg) || pick(LINES.needsYou), 4200);
+        say(shortMessage(msg) || line('needsYou'), 4200);
         break;
       }
       case 'claude-idle':
         pet.working = false;
-        say('waiting on you…', 2600);
+        say(line('claudeIdle'), 2600);
         break;
       case 'claude-session-end':
         pet.working = false;
-        say('session over. nap?', 2600);
+        say(line('claudeEnd'), 2600);
         break;
       default:
         break;
@@ -2060,6 +2182,9 @@
     pet.held = false; pet.pressing = false; pet.grounded = true;
     pet.ax = W / 2; pet.x = W / 2; pet.y = groundY; pet.sq = 0; pet.sqv = 0; pet.happy = 0;
     pet.mode = 'ground'; pet.landing = false; pet.thrown = false; pet.spin = 0; pet.spinV = 0; pet.thrust = 0; pet.knee = 0;
+    pet.chuteOpen = false; pet.chute = 0; pet.chuteCut = 0; pet.walkDir = 0; pet.walking = false;
+    pet.working = false; pet.workT = 0; pet.wave = 0; pet.deploying = false; pet.deployProgress = 0;
+    pet.screenText = ''; pet.screenTint = ''; pet.screenT = 0; pet.dizzy = 0; pet.shake = 0;
     canvas.classList.remove('holding');
     bubble.hidden = true; bubbleUntil = 0;
     saveState();
@@ -2073,9 +2198,9 @@
   // ---------------------------------------------------------------- boot
   updateHud();
   if (state.hatched) {
-    setTimeout(() => say(awayMs > 30 * 60000 ? `you were gone ${awayText(awayMs)}!` : pick(LINES.hello), 3000), 700);
+    setTimeout(() => say(awayMs > 30 * 60000 ? `you were gone ${awayText(awayMs)}!` : line('hello'), 3000), 700);
   } else {
-    setTimeout(() => say(pick(LINES.egg)), 900);
+    setTimeout(() => say(line('egg')), 900);
   }
 
   let last = performance.now();

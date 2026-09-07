@@ -237,6 +237,13 @@ build.sh, release.sh        build, sign, package, publish
 
 State lives in `~/Library/Preferences/app.bitling.pet.plist`.
 
+## License
+
+[MIT](LICENSE). Use it, fork it, ship your own pet.
+
+The app loads the Fredoka and Atkinson Hyperlegible typefaces from Google Fonts at
+runtime; both are under the SIL Open Font License and are not redistributed here.
+
 ## Uninstall
 
 Quit it from the menu bar, then:

@@ -1,0 +1,1551 @@
+<title>Jellykin Habitat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+  :root{
+    --ground:#e3eee9;
+    --panel:rgba(255,255,255,.74);
+    --panel-border:rgba(34,72,77,.14);
+    --ink:#22484d;
+    --ink-soft:#5f8286;
+    --accent:#ff7fa3;
+    --accent-ink:#3b0f22;
+    --track:rgba(34,72,77,.12);
+    --good:#4fb587;
+    --warn:#e69a4a;
+    --shadow:0 10px 30px rgba(34,72,77,.16);
+    --bubble:#ffffff;
+    --bubble-ink:#22484d;
+    --hover:rgba(34,72,77,.09);
+  }
+  :root[data-sky="night"]{
+    --ground:#171d38;
+    --panel:rgba(32,38,72,.74);
+    --panel-border:rgba(200,208,255,.16);
+    --ink:#eaedff;
+    --ink-soft:#aab2d6;
+    --track:rgba(234,237,255,.14);
+    --shadow:0 10px 30px rgba(0,0,0,.4);
+    --hover:rgba(234,237,255,.1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:'Atkinson Hyperlegible',system-ui,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none;transition:background .8s ease}
+  #app{position:fixed;inset:0}
+  #stage{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+  #stage.holding{cursor:grabbing}
+  #stage:focus-visible{box-shadow:inset 0 0 0 3px var(--accent)}
+  .hud{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:calc(12px + env(safe-area-inset-top)) 14px 0;pointer-events:none}
+  .hud>*{pointer-events:auto}
+  .card{background:var(--panel);border:1px solid var(--panel-border);border-radius:18px;box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .who{display:flex;flex-direction:column;gap:10px;padding:10px 12px;min-width:176px}
+  .name{all:unset;cursor:pointer;font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:600;font-size:22px;line-height:1.1;display:flex;flex-direction:column;gap:3px;border-radius:8px;color:var(--ink)}
+  .name:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .name small{font-family:'Atkinson Hyperlegible',system-ui,sans-serif;font-weight:400;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft)}
+  .meters{display:grid;grid-template-columns:auto 1fr;gap:7px 10px;align-items:center}
+  .meters span{font-size:12px;color:var(--ink-soft);letter-spacing:.03em}
+  .bar{height:8px;border-radius:99px;background:var(--track);overflow:hidden;min-width:96px}
+  .bar i{display:block;height:100%;width:50%;border-radius:99px;background:var(--good);transition:width .4s ease,background .4s}
+  .bar.low i{background:var(--warn)}
+  .bar.crit i{background:var(--accent)}
+  .tools{display:flex;gap:4px;padding:4px}
+  .icon-btn{all:unset;cursor:pointer;width:40px;height:40px;display:grid;place-items:center;border-radius:50%;color:var(--ink)}
+  .icon-btn:hover{background:var(--hover)}
+  .icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .icon-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .icon-btn .off{display:none}
+  .icon-btn.muted .on{display:none}
+  .icon-btn.muted .off{display:block}
+  .dock{position:absolute;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:4px;padding:6px;border-radius:999px}
+  .dock button{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 18px 10px 14px;border-radius:999px;font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:500;font-size:16px;color:var(--ink);transition:background .2s,transform .1s}
+  .dock button:hover{background:var(--hover)}
+  .dock button:active{transform:scale(.96)}
+  .dock button:focus-visible{outline:2px solid var(--accent)}
+  .dock button[disabled]{opacity:.4;cursor:default;transform:none}
+  .dock button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .dock .wake{display:none}
+  .dock.asleep .wake{display:block}
+  .dock.asleep .moon{display:none}
+  .bubble{position:absolute;left:0;top:0;transform:translate(-50%,-100%);background:var(--bubble);color:var(--bubble-ink);font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:500;font-size:17px;padding:8px 14px;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.14);pointer-events:none;white-space:nowrap;animation:pop .25s cubic-bezier(.2,1.4,.4,1)}
+  .bubble::after{content:"";position:absolute;left:50%;bottom:-6px;width:12px;height:12px;background:var(--bubble);transform:translateX(-50%) rotate(45deg);border-radius:2px}
+  @keyframes pop{from{transform:translate(-50%,-100%) scale(.6);opacity:0}}
+  dialog{border:none;border-radius:22px;padding:22px 24px;width:min(92vw,360px);background:var(--panel);color:var(--ink);box-shadow:var(--shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+  dialog::backdrop{background:rgba(20,26,51,.45)}
+  dialog h2{font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:600;font-size:24px;margin:0 0 6px;text-wrap:balance}
+  dialog p{margin:0 0 14px;color:var(--ink-soft);line-height:1.45}
+  dialog input[type=text]{width:100%;font:inherit;font-size:18px;padding:10px 12px;border-radius:12px;border:1px solid var(--panel-border);background:var(--hover);color:var(--ink)}
+  dialog input:focus-visible{outline:2px solid var(--accent)}
+  dialog menu{display:flex;gap:8px;justify-content:flex-end;margin:16px 0 0;padding:0}
+  dialog button{all:unset;cursor:pointer;font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:500;font-size:16px;padding:9px 16px;border-radius:999px;background:var(--hover);color:var(--ink)}
+  dialog button.primary{background:var(--accent);color:var(--accent-ink)}
+  dialog button.danger{color:var(--accent)}
+  dialog button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .stats{display:grid;grid-template-columns:1fr auto;gap:6px 16px;margin:0 0 16px;font-variant-numeric:tabular-nums}
+  .stats dt{color:var(--ink-soft)}
+  .stats dd{margin:0;font-weight:700}
+  .toggle{display:flex;align-items:center;gap:10px;font-size:15px;cursor:pointer}
+  .toggle input{width:18px;height:18px;accent-color:var(--accent)}
+  @media (max-width:520px){
+    .who{min-width:0;padding:8px 10px}
+    .bar{min-width:64px}
+    .name{font-size:19px}
+    .dock button{padding:10px 12px}
+    .dock button span{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){ .bubble{animation:none} }
+</style>
+
+<div id="app">
+  <canvas id="stage" tabindex="0" aria-label="Your pet's habitat. Tap to pet, drag to carry, press space to pat."></canvas>
+
+  <header class="hud">
+    <div class="card who">
+      <button class="name" id="nameBtn" type="button" title="Rename">
+        <span id="nameLabel">A mysterious egg</span>
+        <small id="subLabel">Tap it and see</small>
+      </button>
+      <div class="meters" id="meters" hidden>
+        <span>Tummy</span><div class="bar" id="mFull"><i></i></div>
+        <span>Energy</span><div class="bar" id="mEnergy"><i></i></div>
+        <span>Joy</span><div class="bar" id="mJoy"><i></i></div>
+      </div>
+    </div>
+    <div class="card tools">
+      <button class="icon-btn" id="soundBtn" type="button" aria-label="Sound" aria-pressed="true">
+        <svg viewBox="0 0 24 24" class="on"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+        <svg viewBox="0 0 24 24" class="off"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m22 9-6 6M16 9l6 6"/></svg>
+      </button>
+      <button class="icon-btn" id="menuBtn" type="button" aria-label="About your pet">
+        <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="bubble" class="bubble" hidden></div>
+
+  <nav class="card dock" id="dock" aria-label="Care actions">
+    <button type="button" id="feedBtn" disabled>
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="7"/><path d="M12 7c0-3 2-4 5-4-1 3-2 4-5 4z"/></svg><span>Feed</span>
+    </button>
+    <button type="button" id="playBtn" disabled>
+      <svg viewBox="0 0 24 24"><path d="M8 10a4 4 0 0 1 8 0v5a4 4 0 0 1-8 0z"/><path d="M12 6V4M9 7 7 5M15 7l2-2M8 12H4M20 12h-4M8 15H5M19 15h-3M9 18l-2 2M15 18l2 2"/></svg><span>Debug</span>
+    </button>
+    <button type="button" id="sleepBtn" disabled>
+      <svg viewBox="0 0 24 24" class="moon"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg viewBox="0 0 24 24" class="wake"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <span id="sleepLabel">Sleep</span>
+    </button>
+  </nav>
+
+  <dialog id="nameDialog">
+    <form method="dialog">
+      <h2 id="nameTitle">It hatched!</h2>
+      <p id="nameHint">Give your Jellykin a name. You can change it later by tapping the name.</p>
+      <input type="text" id="nameInput" maxlength="16" autocomplete="off" spellcheck="false" aria-label="Pet name">
+      <menu><button class="primary" value="ok" type="submit">Name it</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="menuDialog">
+    <form method="dialog">
+      <h2 id="aboutTitle">About</h2>
+      <dl class="stats">
+        <dt>Stage</dt><dd id="sStage">Egg</dd>
+        <dt>Age</dt><dd id="sAge">not yet</dd>
+        <dt>Meals</dt><dd id="sMeals">0</dd>
+        <dt>Debug runs</dt><dd id="sGames">0</dd>
+        <dt>Bugs squashed</dt><dd id="sBugs">0</dd>
+        <dt>Commits caught</dt><dd id="sCommits">0</dd>
+        <dt>Pats</dt><dd id="sPets">0</dd>
+        <dt>Care points</dt><dd id="sCare">0</dd>
+      </dl>
+      <p>Grows to the next stage with age and care points. Needs drift slowly while you are away, but a Jellykin never dies. It only sulks. The desktop app also feeds it your git commits.</p>
+      <menu>
+        <button class="danger" value="reset" type="submit">Start over</button>
+        <button class="primary" value="close" type="submit">Close</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="resetDialog">
+    <form method="dialog">
+      <h2>Start over?</h2>
+      <p id="resetHint">Your pet and its history will be gone for good. A new egg will take its place.</p>
+      <menu>
+        <button value="keep" type="submit" autofocus>Keep my pet</button>
+        <button class="danger" value="yes" type="submit">Yes, start over</button>
+      </menu>
+    </form>
+  </dialog>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const STORE_KEY = 'jellykin.v1';
+  const HOUR = 3600000;
+  const NAMES = ['Pip', 'Momo', 'Bao', 'Nori', 'Tofu', 'Juniper', 'Wobble', 'Kiwi', 'Plum', 'Dumpling', 'Sprout', 'Pebble'];
+  const STAGES = ['Egg', 'Hatchling', 'Jellykin', 'Luminous Jellykin'];
+  const LINES = {
+    hello: ['hi!', 'you came back!', 'ooh, hello', 'missed you'],
+    hungry: ['tummy rumbles...', 'snack? snack?', 'feed me pls', 'so hungry'],
+    sleepy: ['*yawn*', 'so sleepy...', 'nap time?', 'eyes heavy'],
+    happy: ['la la la', 'best day', '~wiggle~', 'love this', 'hehe'],
+    bored: ['play with me?', 'bored...', 'any bugs to squash?', 'anyone?'],
+    petted: ['hehe', 'more pats!', '*purr*', 'that spot!', 'again again'],
+    full: ['so full!', 'no more, thanks', 'later maybe'],
+    eat: ['nom nom', 'yum!', 'crunch', 'tasty'],
+    night: ['stars are out', 'cozy night', 'so quiet'],
+    wake: ['*stretch*', 'good morning!', 'hello again'],
+    held: ['whee!', 'eep!', 'flying!', 'careful!'],
+    play: ['bugs! squash them!', 'debug time', 'found some bugs', 'exterminate!'],
+    squash: ['fixed!', 'squash!', 'gotcha', 'bug: 0, me: 1', 'closed as fixed'],
+    egg: ['tap me!', 'something is inside...', '*wobble*', 'knock knock'],
+    tired: ['too tired to play', 'need a nap first'],
+  };
+
+  const $ = (s) => document.querySelector(s);
+  const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const now = () => Date.now();
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------------------------------------------------------------- state
+  function freshState() {
+    return {
+      v: 1, name: '', hatched: false, taps: 0, born: now(), lastSeen: now(),
+      full: 70, energy: 80, joy: 70, care: 0, sound: true, asleep: false,
+      meals: 0, games: 0, pets: 0, stageSeen: 0,
+      commits: 0, pushes: 0, bugs: 0, lastCommitAt: 0,
+    };
+  }
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      return s && typeof s === 'object' ? Object.assign(freshState(), s) : null;
+    } catch (_) { return null; }
+  }
+  function saveState() {
+    state.lastSeen = now();
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) { /* storage unavailable */ }
+  }
+  function applyElapsed(s, ms) {
+    if (!s.hatched || ms <= 0) return;
+    const h = Math.min(ms, 12 * HOUR) / HOUR;
+    if (s.asleep) {
+      s.energy = clamp(s.energy + 30 * h);
+      s.full = clamp(s.full - 4 * h);
+      s.joy = clamp(s.joy - 2 * h);
+    } else {
+      s.full = clamp(s.full - 8 * h);
+      s.energy = clamp(s.energy - 5 * h);
+      s.joy = clamp(s.joy - 6 * h);
+    }
+  }
+  function stageOf(s) {
+    if (!s.hatched) return 0;
+    const days = (now() - s.born) / (24 * HOUR);
+    if (days >= 7 && s.care >= 120) return 3;
+    if (days >= 1 && s.care >= 30) return 2;
+    return 1;
+  }
+  const moodOf = (s) => 0.4 * s.joy + 0.35 * s.full + 0.25 * s.energy;
+  function ageText(s) {
+    const m = (now() - s.born) / 60000;
+    if (m < 1) return 'just hatched';
+    if (m < 60) return `${Math.floor(m)} min old`;
+    const h = m / 60;
+    if (h < 24) return `${Math.floor(h)} hr old`;
+    const d = Math.floor(h / 24);
+    return `${d} day${d === 1 ? '' : 's'} old`;
+  }
+  function awayText(ms) {
+    const h = ms / HOUR;
+    if (h < 1) return `${Math.max(1, Math.floor(ms / 60000))} min`;
+    if (h < 48) return `${Math.floor(h)} hr`;
+    return `${Math.floor(h / 24)} days`;
+  }
+
+  let state = loadState();
+  let awayMs = 0;
+  if (!state) state = freshState();
+  else { awayMs = now() - state.lastSeen; applyElapsed(state, awayMs); }
+
+  // ---------------------------------------------------------------- audio
+  const audio = {
+    ctx: null,
+    ensure() {
+      if (!this.ctx) {
+        try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { this.ctx = null; }
+      }
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    },
+    tone(f0, f1, dur, type = 'sine', gain = 0.07) {
+      if (!state.sound || !this.ctx) return;
+      const t = this.ctx.currentTime;
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(this.ctx.destination);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    },
+    squeak() { this.tone(620, 940, 0.12); setTimeout(() => this.tone(820, 1150, 0.1), 90); },
+    munch() { this.tone(190, 90, 0.08, 'triangle', 0.12); },
+    pop() { this.tone(420, 210, 0.07, 'square', 0.04); },
+    thud() { this.tone(150, 60, 0.12, 'triangle', 0.1); },
+    yawn() { this.tone(420, 220, 0.5, 'sine', 0.05); },
+    hatch() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, f, 0.2), i * 110)); },
+    grow() { [659, 784, 988, 1318, 1568].forEach((f, i) => setTimeout(() => this.tone(f, f * 1.01, 0.22), i * 90)); },
+    whoosh() { this.tone(160, 900, 0.5, 'sawtooth', 0.035); },
+  };
+
+  // ---------------------------------------------------------------- world
+  const canvas = $('#stage');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, scale = 1, groundY = 0;
+
+  const pet = {
+    init: false, x: 0, y: 0, vx: 0, vy: 0, ax: 0,
+    sq: 0, sqv: 0, stretch: 0,
+    look: { x: 0, y: 0 }, lookT: { x: 0, y: 0 }, wander: { x: 0, y: 0 },
+    blink: 0, blinking: false, blinkT: 0, nextBlink: 2,
+    held: false, pressing: false, pressX: 0, pressY: 0, holdOff: { x: 0, y: 0 },
+    grounded: true, chew: 0, happy: 0, surprise: 0, yawn: 0, dizzy: 0, glance: 0, t: 0, idleAt: 2.5,
+  };
+  const egg = { wobble: 0 };
+  const snack = { active: false, x: 0, y: 0, vy: 0, kind: 'berry', rest: false };
+  const bugs = [];
+  const debug = { active: false, until: 0 };
+  const drop = { active: false, x: 0, y: 0, vy: 0, kind: 'commit', label: '', rest: false };
+  const rocket = { active: false, x: 0, y: 0, vy: 0, t: 0 };
+  let gitInfo = { dirty: 0, repo: '', branch: '', minutesSinceCommit: -1 };
+  const particles = [];
+  const pointer = { x: 0, y: 0, over: false, lastT: -10, vx: 0, vy: 0, pt: 0 };
+  const recentPets = [];
+  let zTimer = 0;
+  let saveTimer = 0;
+  let hudTimer = 0;
+  let skyTimer = 0;
+  let lastWall = now();
+
+  const stars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random() * 0.6, s: rand(0.6, 1.8), p: rand(0, 6) }));
+
+  const petR = () => [46, 46, 58, 68][stageOf(state)] * scale;
+  const eggR = () => 46 * scale;
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const prevW = W;
+    W = canvas.clientWidth;
+    H = canvas.clientHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    groundY = Math.round(H * 0.72);
+    scale = clamp(Math.min(W, H) / 520, 0.7, 1.3);
+    if (W <= 0 || H <= 0) return;
+    if (!pet.init || prevW <= 0) {
+      pet.ax = W / 2; pet.x = W / 2; pet.y = groundY; pet.init = true;
+      return;
+    }
+    const ratio = W / prevW;
+    pet.ax = clamp(pet.ax * ratio, petR(), W - petR());
+    pet.x = clamp(pet.x * ratio, petR(), W - petR());
+    if (pet.grounded && !pet.held) pet.y = groundY;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------- sky
+  const SKY = [
+    [0, '#141a33', '#2b3358', 1], [5, '#141a33', '#2b3358', 1], [7, '#f0a58e', '#ffd7ad', 0.35],
+    [10, '#a3d5ea', '#eaf5f2', 0], [16, '#a3d5ea', '#eaf5f2', 0], [19, '#f2926f', '#ffcaa5', 0.35],
+    [21, '#2b3358', '#4b3f6b', 0.9], [24, '#141a33', '#2b3358', 1],
+  ];
+  const hexRgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  function mixHex(a, b, t) {
+    const A = hexRgb(a), B = hexRgb(b);
+    return `rgb(${Math.round(lerp(A[0], B[0], t))},${Math.round(lerp(A[1], B[1], t))},${Math.round(lerp(A[2], B[2], t))})`;
+  }
+  function skyAt(d) {
+    const h = d.getHours() + d.getMinutes() / 60;
+    let i = 0;
+    while (i < SKY.length - 2 && SKY[i + 1][0] <= h) i++;
+    const a = SKY[i], b = SKY[i + 1];
+    const t = clamp((h - a[0]) / (b[0] - a[0]), 0, 1);
+    return {
+      top: mixHex(a[1], b[1], t), bottom: mixHex(a[2], b[2], t),
+      night: lerp(a[3], b[3], t),
+      floor: mixHex('#cfe3d6', '#1f2646', lerp(a[3], b[3], t)),
+      hill: mixHex('#bfd8c9', '#262e52', lerp(a[3], b[3], t)),
+    };
+  }
+  let sky = skyAt(new Date());
+
+  // ---------------------------------------------------------------- bubble
+  const bubble = $('#bubble');
+  let bubbleUntil = 0;
+  function say(text, dur = 2600) {
+    bubble.textContent = text;
+    bubble.hidden = false;
+    bubbleUntil = performance.now() + dur;
+  }
+
+  // ---------------------------------------------------------------- particles
+  function spawn(type, x, y, n, opt = {}) {
+    const count = reduceMotion ? Math.ceil(n / 2) : n;
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        type, x: x + rand(-(opt.spread || 10), opt.spread || 10), y: y + rand(-(opt.spread || 10), opt.spread || 10),
+        vx: rand(-(opt.vx || 60), opt.vx || 60), vy: opt.vy !== undefined ? opt.vy + rand(-40, 40) : rand(-120, -40),
+        g: opt.g !== undefined ? opt.g : 0, life: 1, dur: opt.dur || rand(0.8, 1.4),
+        size: (opt.size || 8) * scale * rand(0.7, 1.3), hue: opt.hue !== undefined ? opt.hue : 345,
+        spin: rand(-6, 6), rot: rand(0, 6), text: opt.text,
+      });
+    }
+  }
+  function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt / p.dur;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      p.vy += p.g * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.rot += p.spin * dt;
+      if (p.type === 'z') p.x += Math.sin(p.life * 8) * 20 * dt;
+    }
+  }
+  function heartPath(x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.9);
+    ctx.bezierCurveTo(x - s * 1.6, y - s * 0.2, x - s * 0.7, y - s * 1.2, x, y - s * 0.4);
+    ctx.bezierCurveTo(x + s * 0.7, y - s * 1.2, x + s * 1.6, y - s * 0.2, x, y + s * 0.9);
+    ctx.closePath();
+  }
+  function drawParticles() {
+    for (const p of particles) {
+      const a = clamp(p.life, 0, 1);
+      const s = Math.max(0.5, p.size * (p.type === 'dust' ? (1.6 - a) : a));
+      ctx.save();
+      ctx.globalAlpha = a;
+      switch (p.type) {
+        case 'heart':
+          ctx.fillStyle = `hsl(${p.hue}, 85%, 68%)`;
+          heartPath(p.x, p.y, s * 0.6);
+          ctx.fill();
+          break;
+        case 'crumb':
+          ctx.fillStyle = `hsl(${p.hue}, 60%, 45%)`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.3, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'z':
+          ctx.fillStyle = sky.night > 0.5 ? '#eaedff' : '#5f8286';
+          ctx.font = `600 ${Math.round(s * 1.6)}px Fredoka, sans-serif`;
+          ctx.fillText('z', p.x, p.y);
+          break;
+        case 'shard':
+          ctx.fillStyle = '#f7e8cf';
+          ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+          ctx.beginPath(); ctx.moveTo(-s * 0.5, s * 0.4); ctx.lineTo(0, -s * 0.5); ctx.lineTo(s * 0.5, s * 0.4); ctx.closePath(); ctx.fill();
+          break;
+        case 'dust':
+          ctx.fillStyle = sky.night > 0.5 ? 'rgba(200,208,255,0.35)' : 'rgba(95,130,134,0.3)';
+          ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.4, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'check':
+          ctx.fillStyle = 'hsl(150, 55%, 42%)';
+          ctx.font = `700 ${Math.round(s * 1.3)}px Fredoka, sans-serif`;
+          ctx.fillText('✓', p.x, p.y);
+          break;
+        case 'flame':
+          ctx.fillStyle = `hsl(${p.hue}, 95%, ${55 + 30 * (1 - a)}%)`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.45, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'spark':
+          ctx.fillStyle = `hsl(${p.hue}, 90%, 70%)`;
+          ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+          ctx.beginPath();
+          for (let k = 0; k < 4; k++) { ctx.lineTo(0, -s * 0.6); ctx.lineTo(s * 0.15, -s * 0.15); ctx.rotate(Math.PI / 2); }
+          ctx.closePath(); ctx.fill();
+          break;
+      }
+      ctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------- actions
+  function petTap() {
+    audio.ensure();
+    const t = performance.now();
+    while (recentPets.length && t - recentPets[0] > 60000) recentPets.shift();
+    recentPets.push(t);
+    const gain = recentPets.length <= 6 ? 4 : 1;
+    state.joy = clamp(state.joy + gain);
+    state.pets += 1;
+    state.care += 1;
+    pet.happy = 1.2;
+    pet.sq = -0.22; pet.sqv = 0;
+    audio.squeak();
+    spawn('heart', pet.x, pet.y - petR() * 1.9, 4, { spread: petR() * 0.6, vx: 40, vy: -90, size: 10 });
+    if (Math.random() < 0.6) say(pick(LINES.petted));
+    saveState();
+  }
+  function feed() {
+    if (!state.hatched || state.asleep || snack.active) return;
+    if (state.full >= 95) { say(pick(LINES.full)); return; }
+    snack.active = true;
+    snack.rest = false;
+    snack.x = clamp(pet.x + rand(-40, 40) * scale, 30, W - 30);
+    snack.y = -30;
+    snack.vy = 0;
+    snack.kind = pick(['berry', 'cookie', 'leaf']);
+    pet.ax = snack.x;
+  }
+  function eatSnack() {
+    snack.active = false;
+    pet.chew = 0.7;
+    state.full = clamp(state.full + 22);
+    state.joy = clamp(state.joy + 4);
+    state.meals += 1;
+    state.care += 1;
+    audio.munch();
+    setTimeout(() => audio.munch(), 180);
+    setTimeout(() => audio.munch(), 360);
+    spawn('crumb', pet.x, pet.y - petR() * 0.8, 6, { spread: 6, vx: 90, vy: -60, g: 900, size: 6, hue: snack.kind === 'leaf' ? 120 : snack.kind === 'berry' ? 350 : 30 });
+    say(pick(LINES.eat));
+    saveState();
+  }
+  function play() {
+    if (!state.hatched || state.asleep || debug.active) return;
+    if (state.energy < 15) { say(pick(LINES.tired)); pet.yawn = 1.2; return; }
+    debug.active = true;
+    debug.until = 25;
+    for (let i = 0; i < 4; i++) spawnBug();
+    state.games += 1;
+    state.care += 2;
+    state.energy = clamp(state.energy - 8);
+    say(pick(LINES.play));
+    saveState();
+  }
+  function endDebug() {
+    debug.active = false;
+    bugs.length = 0;
+  }
+  function spawnBug(x) {
+    const bx = x !== undefined ? x : (Math.random() < 0.5 ? rand(14, W * 0.3) : rand(W * 0.7, W - 14));
+    bugs.push({ x: clamp(bx, 12, W - 12), vx: rand(50, 90) * (Math.random() < 0.5 ? -1 : 1), dart: rand(0.5, 2), alive: true, squash: 0, wig: rand(0, 6) });
+  }
+  function squashBug(b, byPet) {
+    if (!b.alive) return;
+    b.alive = false;
+    b.squash = 0.45;
+    state.bugs += 1;
+    state.joy = clamp(state.joy + 4);
+    state.care += 1;
+    audio.pop();
+    spawn('check', b.x, groundY - 12, 2, { spread: 6, vx: 30, vy: -70, size: 12, dur: 0.9 });
+    say(pick(LINES.squash), 1300);
+    if (byPet) { pet.sq = -0.25; pet.sqv = 0; pet.happy = 0.6; }
+  }
+  function bugAt(x, y) {
+    return bugs.find((b) => b.alive && Math.hypot(x - b.x, y - (groundY - 8)) < 20);
+  }
+  function spawnDrop(kind, label) {
+    drop.active = true;
+    drop.rest = false;
+    drop.kind = kind;
+    drop.label = label;
+    drop.x = clamp(pet.x + rand(-30, 30), 30, W - 30);
+    drop.y = -24;
+    drop.vy = 0;
+    pet.ax = drop.x;
+  }
+  function eatDrop() {
+    drop.active = false;
+    pet.chew = 0.7;
+    state.full = clamp(state.full + 10);
+    state.joy = clamp(state.joy + 8);
+    state.care += 2;
+    audio.munch();
+    setTimeout(() => audio.munch(), 180);
+    spawn('spark', pet.x, pet.y - petR(), 6, { spread: petR() * 0.5, vx: 80, vy: -90, size: 7, hue: drop.kind === 'merge' ? 275 : 175, dur: 0.8 });
+    saveState();
+  }
+  function launchRocket(label) {
+    rocket.active = true;
+    rocket.x = pet.x;
+    rocket.y = pet.y - petR() * 2.1;
+    rocket.vy = -60;
+    rocket.t = 0;
+    pet.sq = 0.25; pet.sqv = 0;
+    pet.happy = 2;
+    audio.whoosh();
+    spawn('spark', pet.x, pet.y - petR(), 10, { spread: petR(), vx: 120, vy: -100, size: 8, hue: 45, dur: 1.2 });
+    say(label, 3200);
+  }
+  function toggleSleep() {
+    if (!state.hatched) return;
+    if (state.asleep) { wake(); return; }
+    state.asleep = true;
+    endDebug();
+    drop.active = false;
+    rocket.active = false;
+    snack.active = false;
+    pet.happy = 0;
+    pet.surprise = 0;
+    if (pet.held) release();
+    say(pick(['zzz', 'night night', 'sleepy time']));
+    audio.yawn();
+    saveState();
+    updateHud();
+  }
+  function wake() {
+    state.asleep = false;
+    pet.sq = 0.2; pet.sqv = 0;
+    pet.yawn = 1.2;
+    say(pick(LINES.wake));
+    audio.squeak();
+    saveState();
+    updateHud();
+  }
+  function eggTap() {
+    audio.ensure();
+    state.taps += 1;
+    egg.wobble = 1;
+    audio.pop();
+    if (state.taps >= 3) hatch();
+    else say(pick(['*crack*', 'something moved!', 'almost...']));
+    saveState();
+  }
+  function hatch() {
+    state.hatched = true;
+    state.born = now();
+    state.stageSeen = 1;
+    pet.x = pet.ax; pet.y = groundY; pet.grounded = true;
+    pet.sq = 0.35; pet.sqv = 0;
+    pet.happy = 1.5;
+    spawn('shard', pet.ax, groundY - eggR(), 14, { spread: eggR() * 0.6, vx: 260, vy: -320, g: 1300, size: 12, dur: 1.4 });
+    spawn('heart', pet.ax, groundY - eggR() * 1.5, 6, { spread: 30, vx: 60, vy: -120, size: 10 });
+    audio.hatch();
+    say('hello!!', 3000);
+    saveState();
+    updateHud();
+    setTimeout(() => openNameDialog(true), 900);
+  }
+  function celebrateStage(st) {
+    state.stageSeen = st;
+    spawn('spark', pet.x, pet.y - petR(), 18, { spread: petR(), vx: 120, vy: -120, size: 9, hue: st === 3 ? 140 : 45, dur: 1.4 });
+    audio.grow();
+    pet.sq = 0.35; pet.sqv = 0;
+    pet.happy = 2;
+    say(st === 3 ? 'I glow now!' : 'I grew!', 3200);
+    saveState();
+  }
+
+  // ---------------------------------------------------------------- pointer
+  function grab() {
+    pet.held = true;
+    pet.grounded = false;
+    pet.surprise = 1.4;
+    pet.happy = 0;
+    canvas.classList.add('holding');
+    say(pick(LINES.held), 1800);
+    audio.squeak();
+  }
+  function release() {
+    pet.held = false;
+    canvas.classList.remove('holding');
+    const stale = performance.now() - pointer.pt > 100;
+    pet.vx = stale ? 0 : clamp(pointer.vx, -1400, 1400);
+    pet.vy = stale ? 0 : clamp(pointer.vy, -1400, 1400);
+    pet.ax = clamp(pet.x, petR(), W - petR());
+    if (pet.y >= groundY && pet.vy >= -60) { pet.y = groundY; pet.grounded = true; land(Math.abs(pet.vy)); pet.vy = 0; }
+    else if (pet.y >= groundY) { pet.y = groundY - 1; }
+  }
+  function land(vy) {
+    const imp = clamp(vy / 1600, 0, 0.4);
+    pet.sq = -imp; pet.sqv = 0;
+    if (imp > 0.12) {
+      spawn('dust', pet.x, groundY - 4, 6, { spread: petR() * 0.8, vx: 70, vy: -25, g: -10, size: 9, dur: 0.7 });
+      audio.thud();
+    }
+  }
+
+  let lastPointerDown = -1e9;
+  function tapAt(x, y) {
+    const bug = bugAt(x, y);
+    if (bug) { squashBug(bug, false); return; }
+    if (!state.hatched) {
+      const r = eggR();
+      if (Math.hypot(x - pet.ax, y - (groundY - r * 1.1)) < r * 1.5) eggTap();
+      return;
+    }
+    const r = petR();
+    if (Math.hypot(x - pet.x, y - (pet.y - r)) < r * 1.25) { if (state.asleep) wake(); else petTap(); }
+  }
+  canvas.addEventListener('click', (e) => {
+    if (performance.now() - lastPointerDown < 400) return;
+    audio.ensure();
+    tapAt(e.offsetX, e.offsetY);
+  });
+  canvas.addEventListener('pointerdown', (e) => {
+    audio.ensure();
+    lastPointerDown = performance.now();
+    const x = e.offsetX, y = e.offsetY;
+    pointer.x = x; pointer.y = y; pointer.lastT = pet.t; pointer.pt = performance.now();
+    pointer.vx = 0; pointer.vy = 0;
+    const bug = bugAt(x, y);
+    if (bug) { squashBug(bug, false); return; }
+    if (!state.hatched) {
+      const r = eggR();
+      if (Math.hypot(x - pet.ax, y - (groundY - r * 1.1)) < r * 1.5) eggTap();
+      return;
+    }
+    const r = petR();
+    if (Math.hypot(x - pet.x, y - (pet.y - r)) < r * 1.25) {
+      pet.pressing = true;
+      pet.pressX = x; pet.pressY = y;
+      pet.holdOff = { x: x - pet.x, y: y - pet.y };
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* unsupported */ }
+    }
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    const x = e.offsetX, y = e.offsetY;
+    const tnow = performance.now();
+    const dtp = Math.max(8, tnow - pointer.pt) / 1000;
+    pointer.vx = (x - pointer.x) / dtp;
+    pointer.vy = (y - pointer.y) / dtp;
+    pointer.pt = tnow;
+    pointer.x = x; pointer.y = y; pointer.over = true; pointer.lastT = pet.t;
+    if (pet.pressing && !pet.held && !state.asleep && Math.hypot(x - pet.pressX, y - pet.pressY) > 10) grab();
+  });
+  const endPointer = () => {
+    if (pet.held) release();
+    else if (pet.pressing) { if (state.asleep) wake(); else petTap(); }
+    pet.pressing = false;
+  };
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', () => { pointer.over = false; });
+  canvas.addEventListener('keydown', (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    e.preventDefault();
+    audio.ensure();
+    if (!state.hatched) eggTap();
+    else if (state.asleep) wake();
+    else petTap();
+  });
+
+  // ---------------------------------------------------------------- update
+  function updateNeeds(dt) {
+    if (!state.hatched) return;
+    if (state.asleep) {
+      state.energy = clamp(state.energy + (8 / 60) * dt);
+      state.full = clamp(state.full - (4 / 3600) * dt);
+      state.joy = clamp(state.joy - (2 / 3600) * dt);
+      if (state.energy >= 100) wake();
+    } else {
+      state.full = clamp(state.full - (8 / 3600) * dt);
+      state.energy = clamp(state.energy - (5 / 3600) * dt);
+      state.joy = clamp(state.joy - (6 / 3600) * dt);
+    }
+    const st = stageOf(state);
+    if (st > state.stageSeen) celebrateStage(st);
+  }
+
+  function updatePet(dt) {
+    pet.t += dt;
+    for (const k of ['chew', 'happy', 'surprise', 'yawn', 'dizzy', 'glance']) pet[k] = Math.max(0, pet[k] - dt);
+    egg.wobble = Math.max(0, egg.wobble - dt * 1.4);
+
+    if (pet.blinking) {
+      pet.blinkT += dt;
+      pet.blink = Math.sin(Math.PI * Math.min(1, pet.blinkT / 0.24));
+      if (pet.blinkT >= 0.24) { pet.blinking = false; pet.blink = 0; pet.nextBlink = rand(2.5, 6); }
+    } else {
+      pet.nextBlink -= dt;
+      if (pet.nextBlink <= 0) { pet.blinking = true; pet.blinkT = 0; }
+    }
+
+    const r = petR();
+    if (pet.held) {
+      const tx = pointer.x - pet.holdOff.x, ty = pointer.y - pet.holdOff.y;
+      const k = Math.min(1, dt * 18);
+      const nx = lerp(pet.x, tx, k), ny = lerp(pet.y, ty, k);
+      pet.vx = (nx - pet.x) / dt; pet.vy = (ny - pet.y) / dt;
+      pet.x = nx; pet.y = ny;
+      pet.stretch = lerp(pet.stretch, clamp(Math.hypot(pet.vx, pet.vy) / 3500, 0, 0.3), Math.min(1, dt * 10));
+      pet.lookT.x = clamp(pet.vx / 800, -1, 1);
+      pet.lookT.y = 0.6;
+    } else {
+      pet.stretch = lerp(pet.stretch, 0, Math.min(1, dt * 10));
+      if (!pet.grounded) {
+        pet.vy += 2400 * dt;
+        pet.y += pet.vy * dt;
+        pet.x += pet.vx * dt;
+        if (pet.y >= groundY) {
+          pet.y = groundY; pet.grounded = true;
+          land(pet.vy); pet.vy = 0; pet.vx *= 0.4;
+          pet.ax = clamp(pet.x, r, W - r);
+        }
+      } else {
+        pet.vx *= Math.pow(0.02, dt);
+        pet.x += pet.vx * dt;
+        const speed = (debug.active || snack.active || drop.active) ? 5 : 2.5;
+        if (!state.asleep) pet.x = lerp(pet.x, pet.ax, Math.min(1, dt * speed));
+      }
+      pet.x = clamp(pet.x, r, W - r);
+
+      if (!state.asleep) {
+        if (snack.active) {
+          pet.lookT.x = clamp((snack.x - pet.x) / (r * 3), -1, 1);
+          pet.lookT.y = clamp((snack.y - (pet.y - r)) / (r * 3), -1, 1);
+        } else if (pet.glance > 0) {
+          pet.lookT.x = Math.sign(Math.sin(pet.t * 14)) * 0.9; pet.lookT.y = -0.2;
+        } else if (drop.active) {
+          pet.lookT.x = clamp((drop.x - pet.x) / (r * 3), -1, 1);
+          pet.lookT.y = clamp((drop.y - (pet.y - r)) / (r * 3), -1, 1);
+        } else if (rocket.active) {
+          pet.lookT.x = clamp((rocket.x - pet.x) / (r * 3), -1, 1);
+          pet.lookT.y = clamp((rocket.y - (pet.y - r)) / (r * 3), -1, 1);
+        } else if (bugs.length) {
+          const b = bugs.find((k) => k.alive) || bugs[0];
+          pet.lookT.x = clamp((b.x - pet.x) / (r * 3), -1, 1);
+          pet.lookT.y = 0.8;
+        } else if (pointer.over && pet.t - pointer.lastT < 3) {
+          pet.lookT.x = clamp((pointer.x - pet.x) / (r * 3), -1, 1);
+          pet.lookT.y = clamp((pointer.y - (pet.y - r)) / (r * 3), -1, 1);
+        } else {
+          pet.lookT.x = pet.wander.x; pet.lookT.y = pet.wander.y;
+        }
+      } else { pet.lookT.x = 0; pet.lookT.y = 0.3; }
+    }
+    const lk = Math.min(1, dt * 9);
+    pet.look.x = lerp(pet.look.x, pet.lookT.x, lk);
+    pet.look.y = lerp(pet.look.y, pet.lookT.y, lk);
+
+    // jelly spring on squash
+    const sqAcc = -pet.sq * 220 - pet.sqv * 10;
+    pet.sqv += sqAcc * dt;
+    pet.sq = clamp(pet.sq + pet.sqv * dt, -0.5, 0.5);
+  }
+
+  function updateSnack(dt) {
+    if (!snack.active) return;
+    if (!snack.rest) {
+      snack.vy += 1400 * dt;
+      snack.y += snack.vy * dt;
+      if (snack.y >= groundY - 8) { snack.y = groundY - 8; snack.vy = 0; snack.rest = true; }
+    }
+    const r = petR();
+    const mx = pet.x, my = pet.y - r * 0.8;
+    if (Math.hypot(snack.x - mx, snack.y - my) < r * 1.05 && !pet.held) eatSnack();
+  }
+
+  function updateBugs(dt) {
+    if (!bugs.length) { if (debug.active) debug.active = false; return; }
+    const r = petR();
+    const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried;
+    for (let i = bugs.length - 1; i >= 0; i--) {
+      const b = bugs[i];
+      if (!b.alive) { b.squash -= dt; if (b.squash <= 0) bugs.splice(i, 1); continue; }
+      b.dart -= dt;
+      if (b.dart <= 0) {
+        b.dart = rand(0.4, 1.8);
+        b.vx = (Math.random() < 0.5 ? -1 : 1) * rand(40, 110);
+      }
+      const away = b.x - pet.x;
+      if (Math.abs(away) < r * 1.6 && Math.random() < 0.06) b.vx = Math.sign(away || 1) * rand(90, 150);
+      b.x += b.vx * dt;
+      if (b.x < 12) { b.x = 12; b.vx = Math.abs(b.vx); }
+      if (b.x > W - 12) { b.x = W - 12; b.vx = -Math.abs(b.vx); }
+      if (canStomp && pet.grounded && Math.abs(b.x - pet.x) < r * 0.55) squashBug(b, true);
+    }
+    if (!debug.active) return;
+    debug.until -= dt;
+    const alive = bugs.filter((b) => b.alive);
+    if (!alive.length) {
+      debug.active = false;
+      state.joy = clamp(state.joy + 10);
+      say(pick(['all bugs squashed!', 'clean build!', 'zero bugs. for now.']), 2600);
+      saveState();
+      return;
+    }
+    if (debug.until <= 0) { endDebug(); say('some got away...', 2200); return; }
+    let best = alive[0], bestDist = Infinity;
+    for (const b of alive) { const d = Math.abs(b.x - pet.x); if (d < bestDist) { bestDist = d; best = b; } }
+    pet.ax = clamp(best.x, r, W - r);
+    if (canStomp && pet.grounded && bestDist < r * 1.3 && bestDist > r * 0.55 && !reduceMotion) {
+      pet.vy = -260; pet.grounded = false; pet.sq = 0.15; pet.sqv = 0;
+      pet.vx = Math.sign(best.x - pet.x) * 120;
+    }
+  }
+
+  function updateDrop(dt) {
+    if (!drop.active) return;
+    if (!drop.rest) {
+      drop.vy += 1300 * dt;
+      drop.y += drop.vy * dt;
+      if (drop.y >= groundY - 12) { drop.y = groundY - 12; drop.vy = 0; drop.rest = true; }
+    }
+    const r = petR();
+    if (!pet.held && !pet.carried && Math.hypot(drop.x - pet.x, drop.y - (pet.y - r * 0.8)) < r * 1.05) eatDrop();
+  }
+
+  function updateRocket(dt) {
+    if (!rocket.active) return;
+    rocket.t += dt;
+    rocket.vy -= 1100 * dt;
+    rocket.y += rocket.vy * dt;
+    rocket.x += Math.sin(rocket.t * 7) * 14 * dt;
+    spawn('flame', rocket.x, rocket.y + 14 * scale, 1, { spread: 2, vx: 25, vy: 140, size: 7, dur: 0.35, hue: rand(20, 45) });
+    if (rocket.y < -60) rocket.active = false;
+  }
+
+  function doIdle() {
+    if (!state.hatched) {
+      if (Math.random() < 0.6) say(pick(LINES.egg));
+      egg.wobble = 0.7;
+      return;
+    }
+    if (state.asleep || pet.held) return;
+    const r = Math.random();
+    if (state.full < 30 && r < 0.5) { say(pick(LINES.hungry)); pet.sq = -0.08; return; }
+    if (state.energy < 25 && r < 0.5) { say(pick(LINES.sleepy)); pet.yawn = 1.2; audio.yawn(); return; }
+    if (state.joy < 35 && r < 0.4) { say(pick(LINES.bored)); return; }
+    const hour = new Date().getHours();
+    if (gitInfo.dirty >= 10 && r < 0.3) { say(`${gitInfo.dirty} files uncommitted…`, 3000); pet.glance = 1; return; }
+    if (gitInfo.minutesSinceCommit > 24 * 60 && hour >= 9 && hour < 20 && r < 0.25) { say(pick(['no commits today?', 'the repo misses you', 'git log is lonely']), 3000); return; }
+    if (r < 0.22 && pet.grounded && !reduceMotion) { pet.vy = -280; pet.grounded = false; pet.sq = 0.18; pet.sqv = 0; }
+    else if (r < 0.5) { pet.wander.x = rand(-1, 1); pet.wander.y = rand(-0.6, 0.4); }
+    else if (r < 0.66) { say(pick(sky.night > 0.6 ? LINES.night : LINES.happy)); }
+    else if (r < 0.82) { pet.ax = clamp(W / 2 + rand(-W * 0.25, W * 0.25), petR(), W - petR()); }
+  }
+
+  function update(dt) {
+    const wall = now();
+    const gap = wall - lastWall;
+    lastWall = wall;
+    if (gap > 5000) applyElapsed(state, gap);
+
+    updateNeeds(dt);
+    updatePet(dt);
+    updateSnack(dt);
+    updateBugs(dt);
+    updateDrop(dt);
+    updateRocket(dt);
+    updateParticles(dt);
+
+    pet.idleAt -= dt;
+    if (pet.idleAt <= 0) { doIdle(); pet.idleAt = rand(4, 9); }
+
+    if (state.asleep) {
+      zTimer -= dt;
+      if (zTimer <= 0) {
+        zTimer = 1.3;
+        spawn('z', pet.x + petR() * 0.7, pet.y - petR() * 1.9, 1, { spread: 2, vx: 10, vy: -45, size: 9, dur: 2 });
+      }
+    }
+
+    if (bubbleUntil && performance.now() > bubbleUntil) { bubble.hidden = true; bubbleUntil = 0; }
+    if (!bubble.hidden) {
+      const r = state.hatched ? petR() : eggR();
+      const top = state.hatched ? pet.y - r * 2 * (1 + pet.sq) - 14 : groundY - r * 2.2 - 12;
+      bubble.style.left = `${Math.round(clamp(pet.x, 70, W - 70))}px`;
+      bubble.style.top = `${Math.round(Math.max(60, top))}px`;
+    }
+
+    skyTimer -= dt;
+    if (skyTimer <= 0) { skyTimer = 1; sky = skyAt(new Date()); }
+    hudTimer -= dt;
+    if (hudTimer <= 0) { hudTimer = 0.4; updateHud(); }
+    saveTimer -= dt;
+    if (saveTimer <= 0) { saveTimer = 5; saveState(); }
+  }
+
+  // ---------------------------------------------------------------- draw
+  function blobPath(cx, cy, rx, ry, t) {
+    const n = 10, pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const w = 1 + 0.03 * Math.sin(t * 2.2 + i * 1.9) + 0.02 * Math.sin(t * 3.1 - i * 1.1);
+      const sy = Math.sin(a) > 0 ? 0.92 : 1;
+      pts.push({ x: cx + Math.cos(a) * rx * w, y: cy + Math.sin(a) * ry * w * sy });
+    }
+    ctx.beginPath();
+    ctx.moveTo((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+    for (let i = 1; i <= n; i++) {
+      const p = pts[i % n], q = pts[(i + 1) % n];
+      ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
+    }
+    ctx.closePath();
+  }
+
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, groundY);
+    g.addColorStop(0, sky.top);
+    g.addColorStop(1, sky.bottom);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    if (sky.night > 0.05) {
+      ctx.fillStyle = '#fff';
+      for (const s of stars) {
+        ctx.globalAlpha = sky.night * (0.45 + 0.55 * Math.sin(pet.t * 1.5 + s.p)) * 0.9;
+        ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.s, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = sky.night;
+      ctx.fillStyle = '#f3f0d8';
+      ctx.beginPath(); ctx.arc(W * 0.82, H * 0.16, 22 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = sky.top;
+      ctx.beginPath(); ctx.arc(W * 0.82 - 10 * scale, H * 0.16 - 6 * scale, 19 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.fillStyle = sky.hill;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    ctx.quadraticCurveTo(W * 0.2, groundY - H * 0.12, W * 0.42, groundY);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(W * 0.5, groundY);
+    ctx.quadraticCurveTo(W * 0.78, groundY - H * 0.17, W * 1.05, groundY);
+    ctx.closePath(); ctx.fill();
+
+    ctx.fillStyle = sky.floor;
+    ctx.fillRect(0, groundY, W, H - groundY);
+  }
+
+  function drawShadow(x, r, lift) {
+    const k = clamp(1 - lift / 320, 0.35, 1);
+    ctx.globalAlpha = 0.18 * k;
+    ctx.fillStyle = sky.night > 0.5 ? '#05081a' : '#22484d';
+    ctx.beginPath(); ctx.ellipse(x, groundY + 4, r * 0.95 * k, r * 0.22 * k, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  const CRACKS = [
+    [[-0.3, -1.5], [-0.1, -1.3], [-0.25, -1.1], [0, -0.95]],
+    [[0.2, -1.9], [0.35, -1.7], [0.2, -1.5], [0.4, -1.3]],
+    [[-0.5, -0.7], [-0.2, -0.6], [-0.35, -0.4], [0.1, -0.35]],
+  ];
+  const SPOTS = [[-0.35, -1.5, 0.16], [0.4, -1.2, 0.2], [-0.15, -0.6, 0.14], [0.55, -0.55, 0.12], [0.05, -1.85, 0.1]];
+  function drawEgg() {
+    const r = eggR(), x = pet.ax, y = groundY;
+    drawShadow(x, r * 0.9, 0);
+    const rot = (egg.wobble > 0 ? Math.sin(egg.wobble * 22) * 0.14 * egg.wobble : 0) + 0.02 * Math.sin(pet.t * 1.5);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    const g = ctx.createRadialGradient(-r * 0.4, -r * 1.5, r * 0.2, 0, -r, r * 1.8);
+    g.addColorStop(0, '#fff9ea');
+    g.addColorStop(1, '#efd9bd');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(-r * 1.4, 0, -r * 1.25, -r * 2.2, 0, -r * 2.2);
+    ctx.bezierCurveTo(r * 1.25, -r * 2.2, r * 1.4, 0, 0, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255,127,163,0.55)';
+    for (const [sx, sy, ss] of SPOTS) { ctx.beginPath(); ctx.ellipse(sx * r, sy * r, ss * r * 1.2, ss * r, 0.4, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+    ctx.strokeStyle = '#8b6a4b';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 0; i < Math.min(state.taps, 3); i++) {
+      ctx.beginPath();
+      CRACKS[i].forEach(([px, py], k) => (k === 0 ? ctx.moveTo(px * r, py * r) : ctx.lineTo(px * r, py * r)));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawPet() {
+    const st = stageOf(state);
+    const r = petR();
+    const t = pet.t;
+    const asleep = state.asleep;
+    const mood = moodOf(state);
+    const sleepy = !asleep && state.energy < 25;
+    const hue = st === 3 ? 345 + 35 * Math.sin(t * 0.4) : 345;
+    const sat = asleep ? 55 : 85;
+    const eyeInk = `hsl(${hue}, 45%, 22%)`;
+    const breath = 1 + (asleep ? 0.03 * Math.sin(t * 1.2) : 0.02 * Math.sin(t * 2.4));
+    const sqy = (1 + pet.sq) * (1 + pet.stretch);
+    const sqx = (1 - pet.sq * 0.85) * (1 - pet.stretch * 0.6);
+
+    drawShadow(pet.x, r, groundY - pet.y);
+
+    ctx.save();
+    ctx.translate(pet.x, pet.y);
+    ctx.scale(sqx, sqy);
+    const cy = -r;
+
+    if (st >= 2) {
+      ctx.fillStyle = `hsl(${hue}, ${sat}%, 78%)`;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(s * r * 0.62, cy - r * 0.78 + Math.sin(t * 3 + s) * r * 0.02, r * 0.2, r * 0.3, s * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (st === 3) {
+      ctx.strokeStyle = 'hsl(140, 45%, 45%)';
+      ctx.lineWidth = r * 0.05;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, cy - r * 0.95);
+      ctx.quadraticCurveTo(r * 0.05, cy - r * 1.2, r * 0.12, cy - r * 1.36);
+      ctx.stroke();
+      const glow = 0.5 + 0.5 * Math.sin(t * 2);
+      ctx.save();
+      ctx.shadowColor = `hsla(140, 80%, 60%, ${0.4 + glow * 0.6})`;
+      ctx.shadowBlur = r * 0.45;
+      ctx.fillStyle = 'hsl(140, 55%, 62%)';
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(r * 0.12 + s * r * 0.14, cy - r * 1.4, r * 0.17, r * 0.08, s * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    const grad = ctx.createRadialGradient(-r * 0.35, cy - r * 0.45, r * 0.1, 0, cy, r * 1.25);
+    grad.addColorStop(0, `hsl(${hue}, ${sat}%, 88%)`);
+    grad.addColorStop(1, `hsl(${hue}, ${sat - 10}%, 72%)`);
+    ctx.fillStyle = grad;
+    blobPath(0, cy, r * 1.08 * breath, r * 0.98 * breath, t);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = `hsl(${hue}, 90%, 94%)`;
+    ctx.beginPath(); ctx.ellipse(0, cy + r * 0.38, r * 0.55, r * 0.36, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    const blush = clamp((asleep ? 0.15 : 0.2) + (pet.happy > 0 ? 0.45 : 0) + (mood > 65 ? 0.15 : 0), 0, 0.8);
+    ctx.globalAlpha = blush;
+    ctx.fillStyle = `hsl(${hue}, 90%, 70%)`;
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * r * 0.58, cy + r * 0.12, r * 0.14, r * 0.09, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+
+    const ey = cy - r * 0.12, ex = r * 0.34;
+    const er = r * 0.2 * (pet.surprise > 0 ? 1.22 : 1);
+    const lids = asleep ? 1 : Math.max(pet.blink, sleepy ? 0.45 : 0, pet.yawn > 0 ? 0.7 : 0);
+    const happyEyes = pet.happy > 0 && !asleep && pet.surprise <= 0;
+    ctx.lineCap = 'round';
+    for (const s of [-1, 1]) {
+      const x = s * ex;
+      if (happyEyes || lids >= 0.97) {
+        ctx.strokeStyle = eyeInk;
+        ctx.lineWidth = r * 0.07;
+        ctx.beginPath();
+        if (happyEyes) ctx.arc(x, ey + er * 0.35, er * 0.85, Math.PI * 1.15, Math.PI * 1.85);
+        else ctx.arc(x, ey - er * 0.35, er * 0.8, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+        continue;
+      }
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(x, ey, er, er * 1.1, 0, 0, Math.PI * 2); ctx.fill();
+        const px = pet.dizzy > 0 ? x + Math.cos(t * 9 + s) * er * 0.35 : x + pet.look.x * er * 0.42;
+      const py = pet.dizzy > 0 ? ey + Math.sin(t * 9 + s) * er * 0.3 : ey + pet.look.y * er * 0.35;
+      ctx.fillStyle = eyeInk;
+      ctx.beginPath(); ctx.ellipse(px, py, er * 0.55, er * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(px - er * 0.18, py - er * 0.22, er * 0.16, 0, Math.PI * 2); ctx.fill();
+      if (lids > 0) {
+        ctx.save();
+        ctx.beginPath(); ctx.ellipse(x, ey, er + 1, er * 1.1 + 1, 0, 0, Math.PI * 2); ctx.clip();
+        ctx.fillStyle = `hsl(${hue}, ${sat}%, 80%)`;
+        ctx.fillRect(x - er - 2, ey - er * 1.1 - 2, er * 2 + 4, (er * 2.2 + 4) * lids);
+        ctx.restore();
+      }
+    }
+    if (!asleep && !happyEyes && mood < 38) {
+      ctx.strokeStyle = eyeInk;
+      ctx.lineWidth = r * 0.05;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * r * 0.55, ey - er * 1.55);
+        ctx.lineTo(s * r * 0.2, ey - er * 1.85);
+        ctx.stroke();
+      }
+    }
+
+    const my = cy + r * 0.26;
+    ctx.strokeStyle = eyeInk;
+    ctx.lineWidth = r * 0.06;
+    if (pet.chew > 0 || pet.yawn > 0) {
+      const open = pet.yawn > 0
+        ? r * 0.16 * Math.sin(Math.PI * clamp(1 - pet.yawn / 1.2, 0, 1))
+        : r * 0.09 * Math.abs(Math.sin(pet.chew * 22));
+      ctx.fillStyle = `hsl(${hue}, 60%, 30%)`;
+      ctx.beginPath(); ctx.ellipse(0, my + open * 0.5, r * 0.11, Math.max(0.5, open), 0, 0, Math.PI * 2); ctx.fill();
+    } else if (pet.surprise > 0) {
+      ctx.beginPath(); ctx.arc(0, my + r * 0.04, r * 0.06, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      const curve = asleep ? r * 0.05 : happyEyes ? r * 0.2 : r * 0.16 * ((mood - 50) / 50);
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.16, my);
+      ctx.quadraticCurveTo(0, my + curve, r * 0.16, my);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSnack() {
+    if (!snack.active) return;
+    const s = 9 * scale;
+    ctx.save();
+    ctx.translate(snack.x, snack.y);
+    if (snack.kind === 'berry') {
+      ctx.fillStyle = 'hsl(350, 70%, 52%)';
+      ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath(); ctx.arc(-s * 0.35, -s * 0.35, s * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'hsl(130, 50%, 42%)';
+      ctx.beginPath(); ctx.ellipse(s * 0.2, -s * 1.05, s * 0.55, s * 0.25, -0.6, 0, Math.PI * 2); ctx.fill();
+    } else if (snack.kind === 'cookie') {
+      ctx.fillStyle = 'hsl(32, 60%, 62%)';
+      ctx.beginPath(); ctx.arc(0, 0, s * 1.05, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'hsl(25, 55%, 28%)';
+      for (const [dx, dy] of [[-0.4, -0.3], [0.35, -0.1], [-0.1, 0.45], [0.4, 0.5]]) { ctx.beginPath(); ctx.arc(dx * s, dy * s, s * 0.17, 0, Math.PI * 2); ctx.fill(); }
+    } else {
+      ctx.fillStyle = 'hsl(120, 50%, 50%)';
+      ctx.beginPath(); ctx.ellipse(0, 0, s * 1.3, s * 0.7, -0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'hsl(120, 45%, 32%)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-s, s * 0.6); ctx.lineTo(s, -s * 0.6); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawBugs() {
+    for (const b of bugs) {
+      const u = 6.5 * scale;
+      ctx.save();
+      ctx.translate(b.x, groundY - 1);
+      if (!b.alive) {
+        ctx.globalAlpha = clamp(b.squash / 0.45, 0, 1);
+        ctx.fillStyle = '#4a3540';
+        ctx.beginPath(); ctx.ellipse(0, -u * 0.3, u * 2, u * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        continue;
+      }
+      ctx.scale(Math.sign(b.vx) || 1, 1);
+      const wig = Math.sin(pet.t * 28 + b.wig);
+      ctx.strokeStyle = '#3a2a33';
+      ctx.lineWidth = 1.2;
+      ctx.lineCap = 'round';
+      for (let k = -1; k <= 1; k++) {
+        const swing = wig * (k === 0 ? -1 : 1) * u * 0.35;
+        ctx.beginPath(); ctx.moveTo(k * u * 0.7, -u * 0.6); ctx.lineTo(k * u * 0.7 + swing - u * 0.2, 0); ctx.stroke();
+      }
+      ctx.fillStyle = '#d9534f';
+      ctx.beginPath(); ctx.ellipse(0, -u * 0.95, u * 1.35, u * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3a2a33';
+      ctx.beginPath(); ctx.moveTo(0, -u * 1.8); ctx.lineTo(0, -u * 0.1); ctx.lineWidth = 1; ctx.stroke();
+      for (const [dx, dy] of [[-0.6, -1.15], [0.35, -1.25], [-0.2, -0.6], [0.7, -0.7]]) {
+        ctx.beginPath(); ctx.arc(dx * u, dy * u, u * 0.18, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(u * 1.3, -u * 0.95, u * 0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(u * 1.5, -u * 1.3); ctx.lineTo(u * 2.0, -u * 2.0 + wig * u * 0.2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(u * 1.6, -u * 1.2); ctx.lineTo(u * 2.3, -u * 1.5 - wig * u * 0.2); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(u * 1.5, -u * 1.05, u * 0.16, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawDrop() {
+    if (!drop.active) return;
+    const u = 12 * scale;
+    ctx.save();
+    ctx.translate(drop.x, drop.y);
+    ctx.rotate(drop.rest ? 0 : Math.sin(pet.t * 6) * 0.15);
+    ctx.shadowColor = drop.kind === 'merge' ? 'hsla(275, 70%, 60%, 0.7)' : 'hsla(175, 70%, 50%, 0.7)';
+    ctx.shadowBlur = u * 0.9;
+    ctx.fillStyle = drop.kind === 'merge' ? 'hsl(275, 55%, 55%)' : 'hsl(175, 60%, 42%)';
+    ctx.beginPath(); ctx.roundRect(-u, -u, u * 2, u * 2, u * 0.35); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, u * 0.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -u * 0.5); ctx.lineTo(0, -u * 0.95); ctx.moveTo(0, u * 0.5); ctx.lineTo(0, u * 0.95); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = `600 ${Math.round(u * 0.75)}px ui-monospace, Menlo, monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(drop.label.slice(0, 7), 0, u * 1.9);
+    ctx.restore();
+  }
+
+  function drawRocket() {
+    if (!rocket.active) return;
+    const u = 9 * scale;
+    ctx.save();
+    ctx.translate(rocket.x, rocket.y);
+    ctx.rotate(Math.sin(rocket.t * 7) * 0.12);
+    ctx.fillStyle = '#f4f1ea';
+    ctx.beginPath();
+    ctx.moveTo(0, -u * 2.2);
+    ctx.quadraticCurveTo(u * 1.1, -u * 0.6, u * 0.8, u * 1.2);
+    ctx.lineTo(-u * 0.8, u * 1.2);
+    ctx.quadraticCurveTo(-u * 1.1, -u * 0.6, 0, -u * 2.2);
+    ctx.fill();
+    ctx.fillStyle = '#e0524f';
+    ctx.beginPath(); ctx.moveTo(-u * 0.8, u * 0.3); ctx.lineTo(-u * 1.6, u * 1.6); ctx.lineTo(-u * 0.7, u * 1.2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(u * 0.8, u * 0.3); ctx.lineTo(u * 1.6, u * 1.6); ctx.lineTo(u * 0.7, u * 1.2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, -u * 2.2); ctx.quadraticCurveTo(u * 0.6, -u * 1.4, u * 0.55, -u * 0.9); ctx.lineTo(-u * 0.55, -u * 0.9); ctx.quadraticCurveTo(-u * 0.6, -u * 1.4, 0, -u * 2.2); ctx.fill();
+    ctx.fillStyle = '#5eb1d8';
+    ctx.beginPath(); ctx.arc(0, -u * 0.1, u * 0.38, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw() {
+    drawBackground();
+    if (!state.hatched) drawEgg();
+    else { drawSnack(); drawDrop(); drawBugs(); drawPet(); drawRocket(); }
+    drawParticles();
+    if (state.asleep) {
+      ctx.fillStyle = 'rgba(10,14,40,0.42)';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // ---------------------------------------------------------------- git reactions
+  function shortMessage(msg) {
+    const m = String(msg || '').trim().split('\n')[0];
+    return m.length > 28 ? `${m.slice(0, 26)}…` : m;
+  }
+  function handleGitEvent(ev) {
+    if (!ev || typeof ev !== 'object') return;
+    if (!state.hatched) { egg.wobble = 1; say('something is happening out there', 2400); return; }
+    const kind = String(ev.kind || '');
+    const msg = String(ev.message || '');
+    const branch = String(ev.branch || '');
+    const lower = msg.toLowerCase();
+    const hour = new Date().getHours();
+    const loud = kind === 'commit' || kind === 'push' || kind === 'merge';
+    if (state.asleep) {
+      if (!loud) return;
+      wake();
+      say('who is committing?', 2000);
+    }
+    audio.ensure();
+    switch (kind) {
+      case 'commit': {
+        state.commits += 1;
+        state.lastCommitAt = now();
+        spawnDrop('commit', ev.hash ? String(ev.hash).slice(0, 7) : 'commit');
+        let line = msg.trim() ? `commit: ${shortMessage(msg)}` : 'a commit!';
+        if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { line = 'bug fixed? squash!'; spawnBug(clamp(pet.x + rand(-80, 80), 14, W - 14)); }
+        else if (/\bwip\b/.test(lower)) line = 'wip? okay…';
+        else if (/typo/.test(lower)) line = 'hehe, typo';
+        else if (/^revert\b/i.test(msg.trim())) { line = 'undo undo undo'; pet.surprise = 1.2; }
+        else if (msg.trim().length > 0 && msg.trim().length < 8) line = `"${msg.trim()}"? that's the message?`;
+        const churn = (Number(ev.insertions) || 0) + (Number(ev.deletions) || 0);
+        if (churn > 400) { line = `chonky commit! ${churn} lines`; pet.sq = 0.3; pet.sqv = 0; }
+        setTimeout(() => say(line, 3200), 900);
+        if (hour >= 23 || hour < 5) setTimeout(() => { say('go to sleep, human', 2600); pet.yawn = 1.2; }, 4400);
+        break;
+      }
+      case 'amend':
+        say('amended. nobody saw.', 2600);
+        pet.happy = 0.8;
+        break;
+      case 'merge':
+        state.commits += 1;
+        state.lastCommitAt = now();
+        spawnDrop('merge', 'merge');
+        spawn('spark', pet.x, pet.y - petR(), 16, { spread: petR(), vx: 120, vy: -120, size: 9, hue: 275, dur: 1.4 });
+        say(branch ? `merged into ${branch}!` : 'merged!', 3000);
+        pet.happy = 1.5;
+        break;
+      case 'push':
+        state.pushes += 1;
+        launchRocket(branch ? `shipped ${branch}!` : 'shipped!');
+        break;
+      case 'checkout':
+        pet.glance = 1.2;
+        say(branch ? `now on ${branch}` : 'switched branch', 2600);
+        break;
+      case 'rebase':
+        pet.dizzy = 4;
+        say('rebasing… hold on', 2600);
+        break;
+      case 'rebase-done':
+        pet.dizzy = 0;
+        pet.happy = 1;
+        say('rebased, phew', 2400);
+        break;
+      case 'pull':
+        pet.happy = 0.8;
+        say('fresh from origin', 2400);
+        break;
+      case 'stash':
+        say('tucked it away', 2200);
+        break;
+      case 'reset':
+        pet.surprise = 1.5;
+        say('wait, where did it go?', 2600);
+        break;
+      case 'cherry-pick':
+        spawnDrop('commit', 'cherry');
+        say('cherry! nom', 2200);
+        break;
+      default:
+        break;
+    }
+    saveState();
+  }
+  function handleGitStatus(info) {
+    if (!info || typeof info !== 'object') return;
+    gitInfo = {
+      dirty: Number(info.dirty) || 0,
+      repo: String(info.repo || ''),
+      branch: String(info.branch || ''),
+      minutesSinceCommit: Number.isFinite(Number(info.minutesSinceCommit)) ? Number(info.minutesSinceCommit) : -1,
+    };
+  }
+
+  // ---------------------------------------------------------------- hud
+  const nameLabel = $('#nameLabel'), subLabel = $('#subLabel'), metersEl = $('#meters');
+  const mFull = $('#mFull'), mEnergy = $('#mEnergy'), mJoy = $('#mJoy');
+  const feedBtn = $('#feedBtn'), playBtn = $('#playBtn'), sleepBtn = $('#sleepBtn'), sleepLabel = $('#sleepLabel'), dock = $('#dock');
+  const soundBtn = $('#soundBtn'), menuBtn = $('#menuBtn'), nameBtn = $('#nameBtn');
+  const nameDialog = $('#nameDialog'), nameInput = $('#nameInput'), nameTitle = $('#nameTitle'), nameHint = $('#nameHint');
+  const menuDialog = $('#menuDialog'), resetDialog = $('#resetDialog');
+
+  function setMeter(el, v) {
+    el.firstElementChild.style.width = `${Math.round(v)}%`;
+    el.classList.toggle('low', v < 40 && v >= 20);
+    el.classList.toggle('crit', v < 20);
+  }
+  function displayName() { return state.name || 'Jellykin'; }
+  function updateHud() {
+    const st = stageOf(state);
+    if (state.hatched) {
+      nameLabel.textContent = displayName();
+      subLabel.textContent = `${STAGES[st]} · ${ageText(state)}`;
+      metersEl.hidden = false;
+      setMeter(mFull, state.full); setMeter(mEnergy, state.energy); setMeter(mJoy, state.joy);
+    } else {
+      nameLabel.textContent = 'A mysterious egg';
+      subLabel.textContent = state.taps === 0 ? 'Tap it and see' : 'Keep tapping';
+      metersEl.hidden = true;
+    }
+    feedBtn.disabled = !state.hatched || state.asleep;
+    playBtn.disabled = !state.hatched || state.asleep;
+    sleepBtn.disabled = !state.hatched;
+    sleepLabel.textContent = state.asleep ? 'Wake' : 'Sleep';
+    dock.classList.toggle('asleep', state.asleep);
+    soundBtn.classList.toggle('muted', !state.sound);
+    soundBtn.setAttribute('aria-pressed', String(state.sound));
+    document.documentElement.dataset.sky = sky.night > 0.55 ? 'night' : 'day';
+  }
+
+  function openNameDialog(first) {
+    if (nameDialog.open) return;
+    nameTitle.textContent = first ? 'It hatched!' : 'Rename';
+    nameHint.textContent = first ? 'Give your Jellykin a name. You can change it later by tapping the name.' : 'Pick a new name for your Jellykin.';
+    nameInput.value = state.name || pick(NAMES);
+    nameDialog.showModal();
+    nameInput.select();
+  }
+  nameDialog.addEventListener('close', () => {
+    const v = nameInput.value.trim();
+    const wasUnnamed = !state.name;
+    state.name = v || state.name || pick(NAMES);
+    saveState();
+    updateHud();
+    if (wasUnnamed) setTimeout(() => say(`I'm ${state.name}! pat me, drag me, feed me`, 3600), 300);
+    canvas.focus({ preventScroll: true });
+  });
+  nameBtn.addEventListener('click', () => { if (state.hatched) openNameDialog(false); else eggTap(); });
+
+  feedBtn.addEventListener('click', () => { audio.ensure(); feed(); });
+  playBtn.addEventListener('click', () => { audio.ensure(); play(); });
+  sleepBtn.addEventListener('click', () => { audio.ensure(); toggleSleep(); });
+  soundBtn.addEventListener('click', () => {
+    state.sound = !state.sound;
+    audio.ensure();
+    if (state.sound) audio.pop();
+    saveState();
+    updateHud();
+  });
+
+  menuBtn.addEventListener('click', () => {
+    if (menuDialog.open) return;
+    const st = stageOf(state);
+    $('#aboutTitle').textContent = state.hatched ? `About ${displayName()}` : 'About the egg';
+    $('#sStage').textContent = STAGES[st];
+    $('#sAge').textContent = state.hatched ? ageText(state) : 'not yet';
+    $('#sMeals').textContent = String(state.meals);
+    $('#sGames').textContent = String(state.games);
+    $('#sBugs').textContent = String(state.bugs);
+    $('#sCommits').textContent = String(state.commits);
+    $('#sPets').textContent = String(state.pets);
+    $('#sCare').textContent = String(state.care);
+    menuDialog.returnValue = '';
+    menuDialog.showModal();
+  });
+  menuDialog.addEventListener('close', () => {
+    if (menuDialog.returnValue === 'reset') {
+      $('#resetHint').textContent = state.hatched
+        ? `${displayName()} and its history will be gone for good. A new egg will take its place.`
+        : 'The egg will be replaced with a fresh one.';
+      resetDialog.returnValue = '';
+      resetDialog.showModal();
+    }
+  });
+  resetDialog.addEventListener('close', () => {
+    if (resetDialog.returnValue !== 'yes') return;
+    try { localStorage.removeItem(STORE_KEY); } catch (_) { /* nothing to remove */ }
+    const keepSound = state.sound;
+    state = freshState();
+    state.sound = keepSound;
+    endDebug(); drop.active = false; rocket.active = false; snack.active = false; particles.length = 0;
+    pet.held = false; pet.pressing = false; pet.grounded = true;
+    pet.ax = W / 2; pet.x = W / 2; pet.y = groundY; pet.sq = 0; pet.sqv = 0; pet.happy = 0;
+    canvas.classList.remove('holding');
+    bubble.hidden = true; bubbleUntil = 0;
+    saveState();
+    updateHud();
+    say('a new egg appears', 2400);
+  });
+
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveState(); });
+  window.addEventListener('pagehide', saveState);
+
+  // ---------------------------------------------------------------- boot
+  updateHud();
+  if (state.hatched) {
+    setTimeout(() => say(awayMs > 30 * 60000 ? `you were gone ${awayText(awayMs)}!` : pick(LINES.hello), 3000), 700);
+  } else {
+    setTimeout(() => say(pick(LINES.egg)), 900);
+  }
+
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(0.05, Math.max(0.001, (t - last) / 1000));
+    last = t;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>

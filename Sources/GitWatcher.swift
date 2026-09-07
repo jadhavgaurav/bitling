@@ -59,13 +59,20 @@ final class GitWatcher {
         var name: String { workTree.lastPathComponent }
     }
 
-    private static let rootsKey = "gitRoots"
+    private static let rootsKey = "gitExtraRoots"
+    private static let cacheKey = "gitRepoCache"
     private static let todayKey = "gitToday"
+    private static let maxDepth = 7
     private static let skippedDirectories: Set<String> = [
-        "node_modules", ".venv", "venv", "Library", ".Trash", "build", "dist", "target", "Pods", "DerivedData", ".next", ".cache",
+        "node_modules", ".venv", "venv", "env", "Library", ".Trash", ".Trashes", "build", "dist", "target", "out", "Pods",
+        "DerivedData", ".next", ".nuxt", ".turbo", ".cache", ".npm", ".cargo", ".rustup", ".gradle", ".m2", ".pub-cache",
+        ".cocoapods", "Applications", "Pictures", "Music", "Movies", "Public", "vendor", "site-packages", "__pycache__",
+        ".Spotlight-V100", ".fseventsd", ".DocumentRevisionsV100", ".TemporaryItems", "Caches", "CloudStorage",
     ]
 
-    private(set) var roots: [URL]
+    private(set) var extraRoots: [URL]
+    private(set) var lastScan: Date?
+    private(set) var scanning = false
     private var tracked: [String: Tracked] = [:]
     private let queue = DispatchQueue(label: "app.bitling.git", qos: .utility)
     private var pollTimer: Timer?
@@ -113,13 +120,12 @@ final class GitWatcher {
         return nil
     }
 
+    /// Everything scanned: the home folder, every mounted volume, and any folders added by hand.
+    var roots: [URL] { Self.deviceRoots() + extraRoots }
+
     init() {
         let defaults = UserDefaults.standard
-        if let saved = defaults.array(forKey: Self.rootsKey) as? [String], !saved.isEmpty {
-            roots = saved.map { URL(fileURLWithPath: $0) }
-        } else {
-            roots = Self.defaultRoots()
-        }
+        extraRoots = (defaults.array(forKey: Self.rootsKey) as? [String] ?? []).map { URL(fileURLWithPath: $0) }
         if let today = defaults.dictionary(forKey: Self.todayKey),
            let day = today["day"] as? String, day == Self.dayString() {
             commitsToday = today["commits"] as? Int ?? 0
@@ -128,14 +134,20 @@ final class GitWatcher {
         todayKey = Self.dayString()
     }
 
-    private static func defaultRoots() -> [URL] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let candidates = ["Desktop/AI", "Developer", "Projects", "Documents/GitHub", "code", "src", "repos"]
-        let existing = candidates.map { home.appendingPathComponent($0) }.filter { url in
-            var isDir: ObjCBool = false
-            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+    private static func deviceRoots() -> [URL] {
+        var roots = [FileManager.default.homeDirectoryForCurrentUser]
+        let fm = FileManager.default
+        if let volumes = try? fm.contentsOfDirectory(at: URL(fileURLWithPath: "/Volumes"), includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles]) {
+            for volume in volumes {
+                let values = try? volume.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values?.isDirectory == true, values?.isSymbolicLink != true else { continue }
+                // The boot volume appears here as a link to "/"; skip it, the home folder covers it.
+                if (try? fm.destinationOfSymbolicLink(atPath: volume.path)) == "/" { continue }
+                if volume.resolvingSymlinksInPath().path == "/" { continue }
+                roots.append(volume)
+            }
         }
-        return existing.isEmpty ? [home.appendingPathComponent("Desktop")] : existing
+        return roots
     }
 
     private static func dayString() -> String {
@@ -147,11 +159,14 @@ final class GitWatcher {
     // MARK: Lifecycle
 
     func start() {
-        queue.async { self.scan() }
+        queue.async {
+            self.primeFromCache()
+            self.scan()
+        }
         pollTimer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.queue.async { self?.poll() }
         }
-        scanTimer = Timer(timeInterval: 60.0, repeats: true) { [weak self] _ in
+        scanTimer = Timer(timeInterval: 600.0, repeats: true) { [weak self] _ in
             self?.queue.async { self?.scan() }
         }
         statusTimer = Timer(timeInterval: 20.0, repeats: true) { [weak self] _ in
@@ -162,23 +177,41 @@ final class GitWatcher {
 
     func addRoot(_ url: URL) {
         guard !roots.contains(where: { $0.path == url.path }) else { return }
-        roots.append(url)
+        extraRoots.append(url)
         saveRoots()
         queue.async { self.scan() }
     }
 
     func removeRoot(_ url: URL) {
-        roots.removeAll { $0.path == url.path }
+        extraRoots.removeAll { $0.path == url.path }
         saveRoots()
         queue.async {
             self.tracked = self.tracked.filter { entry in
                 self.roots.contains { entry.key.hasPrefix($0.path) }
             }
+            self.saveCache()
         }
     }
 
+    func rescan() {
+        queue.async { self.scan() }
+    }
+
     private func saveRoots() {
-        UserDefaults.standard.set(roots.map { $0.path }, forKey: Self.rootsKey)
+        UserDefaults.standard.set(extraRoots.map { $0.path }, forKey: Self.rootsKey)
+    }
+
+    private func primeFromCache() {
+        guard let cached = UserDefaults.standard.array(forKey: Self.cacheKey) as? [String] else { return }
+        for path in cached {
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { continue }
+            register(workTree: URL(fileURLWithPath: path))
+        }
+    }
+
+    private func saveCache() {
+        UserDefaults.standard.set(Array(tracked.keys).sorted(), forKey: Self.cacheKey)
     }
 
     private func bumpToday(commits: Int = 0, pushes: Int = 0) {
@@ -192,11 +225,19 @@ final class GitWatcher {
     // MARK: Discovery
 
     private func scan() {
+        guard !scanning else { return }
+        scanning = true
+        let before = Set(tracked.keys)
         for root in roots { scanDirectory(root, depth: 0) }
+        // Drop repositories that vanished (deleted, or on an unplugged volume).
+        tracked = tracked.filter { FileManager.default.fileExists(atPath: $0.value.gitDir.path) }
+        if Set(tracked.keys) != before { saveCache() }
+        lastScan = Date()
+        scanning = false
     }
 
     private func scanDirectory(_ dir: URL, depth: Int) {
-        guard depth <= 3 else { return }
+        guard depth <= Self.maxDepth else { return }
         let fm = FileManager.default
         let gitEntry = dir.appendingPathComponent(".git")
         if fm.fileExists(atPath: gitEntry.path) {
@@ -300,7 +341,10 @@ final class GitWatcher {
         return "detached"
     }
 
+    private var pollCount = 0
+
     private func poll() {
+        pollCount += 1
         for (key, var repo) in tracked {
             // `git stash` rewrites HEAD with a "reset: moving to HEAD" reflog line; report the stash, not a reset.
             let stashLog = repo.gitDir.appendingPathComponent("logs/refs/stash")
@@ -330,6 +374,9 @@ final class GitWatcher {
                 }
             }
 
+            // Remote reflogs: every poll for repos active in the last 15 minutes, every 30 seconds otherwise.
+            let recentlyActive = Date().timeIntervalSince(repo.lastActivity) < 15 * 60
+            if !recentlyActive && pollCount % 15 != 0 { tracked[key] = repo; continue }
             let remoteSizes = remoteLogSizes(repo.gitDir)
             for (path, newSize) in remoteSizes {
                 let url = URL(fileURLWithPath: path)

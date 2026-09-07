@@ -203,6 +203,8 @@
     night: ['stars are out', 'cozy night', 'so quiet'],
     wake: ['*stretch*', 'good morning!', 'hello again'],
     held: ['whee!', 'eep!', 'flying!', 'careful!'],
+    chute: ['deploying chute!', 'geronimo!', 'this is fine', 'physics!', 'engaging drag'],
+    landed: ['stuck the landing', 'ten out of ten', 'chute stowed', 'that was on purpose'],
     play: ['bugs! squash them!', 'debug time', 'found some bugs', 'exterminate!'],
     squash: ['fixed!', 'squash!', 'gotcha', 'bug: 0, me: 1', 'closed as fixed'],
     egg: ['unbox me!', 'something is beeping in here', '*rattle*', 'knock knock', 'this side up'],
@@ -326,6 +328,7 @@
     hatch() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, f, 0.2), i * 110)); },
     grow() { [659, 784, 988, 1318, 1568].forEach((f, i) => setTimeout(() => this.tone(f, f * 1.01, 0.22), i * 90)); },
     whoosh() { this.tone(160, 900, 0.5, 'sawtooth', 0.035); },
+    poof() { this.tone(700, 240, 0.28, 'triangle', 0.05); },
     error() { this.tone(320, 120, 0.3, 'square', 0.05); setTimeout(() => this.tone(260, 100, 0.35, 'square', 0.05), 220); },
     ok() { this.tone(660, 660, 0.12, 'triangle', 0.07); setTimeout(() => this.tone(990, 990, 0.2, 'triangle', 0.07), 130); },
   };
@@ -346,6 +349,7 @@
     mode: 'ground', landing: false, fx: 0, fy: 0, flyT: 0, hoverUntil: 0, thrust: 0,
     facing: 1, stride: 0, walking: false, knee: 0, tilt: 0, stomp: 0, turnT: 0, stretchT: 0, tapT: 0,
     spin: 0, spinV: 0, thrown: false,
+    chuteOpen: false, chute: 0, chuteSway: 0, chuteCut: 0,
     screenText: '', screenTint: '', screenT: 0, shake: 0, deploying: false, deployProgress: 0,
   };
   const egg = { wobble: 0 };
@@ -684,6 +688,28 @@
     saveState();
   }
 
+  // ---------------------------------------------------------------- parachute
+  function openChute() {
+    if (pet.chuteOpen || state.asleep || !state.hatched) return;
+    pet.chuteOpen = true;
+    pet.chute = 0;
+    pet.chuteSway = 0;
+    pet.spinV = 0;
+    pet.spin = 0;
+    audio.poof();
+    spawn('spark', pet.x, pet.y - petR() * 3.4, 6, { spread: petR() * 0.8, vx: 90, vy: -40, size: 7, hue: 190, dur: 0.6 });
+    say(pick(LINES.chute), 2200);
+  }
+  function cutChute(landed) {
+    if (!pet.chuteOpen) return;
+    pet.chuteOpen = false;
+    pet.chuteCut = 0.9;
+    if (landed) {
+      spawn('dust', pet.x, groundY - 4, 5, { spread: petR() * 0.7, vx: 55, vy: -20, g: -10, size: 8, dur: 0.7 });
+      if (Math.random() < 0.7) say(pick(LINES.landed), 2200);
+    }
+  }
+
   // ---------------------------------------------------------------- flight
   function takeOff() {
     if (!state.hatched || state.asleep || pet.held || pet.carried || pet.thrown || pet.mode === 'fly') return false;
@@ -728,6 +754,12 @@
         pet.mode = 'ground'; pet.landing = false; pet.grounded = false; pet.thrown = true; pet.thrust = 0;
         pet.spinV = rand(-5, 5);
         break;
+      case 'chute':
+        openChute();
+        break;
+      case 'chute-cut':
+        cutChute(true);
+        break;
       default:
         break;
     }
@@ -735,6 +767,7 @@
 
   // ---------------------------------------------------------------- pointer
   function grab() {
+    cutChute(false);
     pet.held = true;
     pet.grounded = false;
     pet.surprise = 1.4;
@@ -768,6 +801,7 @@
     const imp = clamp(vy / 1600, 0, 0.4);
     pet.knee = clamp(imp * 1.8, 0.15, 0.75);
     pet.spin = 0; pet.spinV = 0; pet.thrown = false;
+    cutChute(false);
     pet.mode = 'ground'; pet.landing = false; pet.thrust = 0;
     if (imp > 0.12) {
       spawn('dust', pet.x, groundY - 4, 6, { spread: petR() * 0.8, vx: 70, vy: -25, g: -10, size: 9, dur: 0.7 });
@@ -861,6 +895,9 @@
     pet.t += dt;
     for (const k of ['chew', 'happy', 'surprise', 'yawn', 'dizzy', 'glance', 'shake', 'screenT', 'wave', 'workT', 'tilt', 'stomp', 'turnT', 'stretchT', 'tapT']) pet[k] = Math.max(0, pet[k] - dt);
     pet.knee = lerp(pet.knee, 0, Math.min(1, dt * 6));
+    pet.chuteCut = Math.max(0, pet.chuteCut - dt);
+    pet.chute = clamp(pet.chute + (pet.chuteOpen ? dt * 4 : -dt * 5), 0, 1);
+    if (pet.chuteOpen) pet.chuteSway += dt * (1.6 + 0.5 * Math.sin(pet.t * 0.7));
     if (pet.working && pet.workT <= 0) pet.working = false;
     if (pet.screenT <= 0 && (pet.screenText || (pet.screenTint && !pet.deploying))) { pet.screenText = ''; if (!pet.deploying) pet.screenTint = ''; }
     if (pet.deploying) pet.deployProgress = Math.min(0.92, pet.deployProgress + dt * 0.05);
@@ -898,15 +935,23 @@
           }
         } else if (DESKTOP) {
           // The host moves the window while thrown; only the tumble is simulated here.
-          if (pet.thrown) pet.spin += pet.spinV * dt;
+          if (pet.thrown && !pet.chuteOpen) pet.spin += pet.spinV * dt;
         } else {
-          pet.vy += 2400 * dt;
+          if (!pet.chuteOpen && pet.vy > 620 && groundY - pet.y > groundY * 0.28) openChute();
+          if (pet.chuteOpen) {
+            pet.vy = lerp(pet.vy, 150, Math.min(1, dt * 3));
+            pet.vx = lerp(pet.vx, Math.sin(pet.chuteSway) * 70, Math.min(1, dt * 2));
+          } else {
+            pet.vy += 2400 * dt;
+            if (pet.thrown) pet.spin += pet.spinV * dt;
+          }
           pet.y += pet.vy * dt;
           pet.x += pet.vx * dt;
-          if (pet.thrown) pet.spin += pet.spinV * dt;
           if (pet.y >= groundY) {
             pet.y = groundY; pet.grounded = true;
-            land(pet.vy); pet.vy = 0; pet.vx *= 0.4;
+            const chuted = pet.chuteOpen;
+            cutChute(true);
+            land(chuted ? 200 : pet.vy); pet.vy = 0; pet.vx *= 0.4;
             pet.ax = clamp(pet.x, r, W - r);
           }
         }
@@ -1107,7 +1152,7 @@
     if (bubbleUntil && performance.now() > bubbleUntil) { bubble.hidden = true; bubbleUntil = 0; }
     if (!bubble.hidden) {
       const r = state.hatched ? petR() : eggR();
-      const top = state.hatched ? pet.y - r * 3.05 - (pet.mode === 'fly' ? 8 : 0) - 10 : groundY - r * 2.2 - 12;
+      const top = state.hatched ? pet.y - r * (pet.chute > 0.05 ? 4.85 : 3.15) - (pet.mode === 'fly' ? 8 : 0) - 10 : groundY - r * 2.2 - 12;
       bubble.style.left = `${Math.round(clamp(pet.x, 70, W - 70))}px`;
       bubble.style.top = `${Math.round(Math.max(60, top))}px`;
     }
@@ -1309,7 +1354,8 @@
     ctx.save();
     ctx.translate(pet.x + (pet.shake > 0 ? Math.sin(t * 70) * r * 0.08 : 0), pet.y + (flying ? Math.sin(t * 2.4) * r * 0.06 : 0));
     let lean = 0;
-    if (pet.thrown) lean = pet.spin;
+    if (pet.chuteOpen || pet.chute > 0.05) lean = Math.sin(pet.chuteSway) * 0.16;
+    else if (pet.thrown) lean = pet.spin;
     else if (flying) lean = pet.facing * 0.07 + Math.sin(t * 1.7) * 0.03;
     else if (pet.walking) lean = pet.facing * 0.04;
     ctx.rotate(lean);
@@ -1329,6 +1375,51 @@
     const kneeDrop = pet.knee * r * 0.22 + (asleep ? r * 0.1 : 0);
     const stretchUp = pet.stretchT > 0 ? Math.sin(Math.PI * clamp(pet.stretchT / 1.6, 0, 1)) : 0;
 
+    const chute = pet.chute;
+    if (chute > 0.02) {
+      // Canopy above, cords down to the hands: drawn first so the robot sits in front.
+      const open = chute * chute * (3 - 2 * chute);
+      const cw = r * 2.5 * open, ch = r * 0.95 * open;
+      const cy = -r * 3.3 - r * 0.5 * open;
+      const flap = Math.sin(t * 3) * r * 0.05 * open;
+      ctx.save();
+      ctx.globalAlpha = clamp(chute, 0, 1);
+      ctx.strokeStyle = `hsl(${hue}, 20%, 45%)`;
+      ctx.lineWidth = Math.max(1, r * 0.03);
+      for (const cx of [-r * 0.62, -r * 0.2, r * 0.2, r * 0.62]) {
+        ctx.beginPath();
+        ctx.moveTo(cx * open, cy + ch * 0.55);
+        ctx.lineTo(Math.sign(cx) * r * 0.85, -r * 2.0);
+        ctx.stroke();
+      }
+      const panels = ['hsl(8, 78%, 62%)', 'hsl(38, 88%, 62%)', 'hsl(190, 70%, 58%)', 'hsl(150, 55%, 55%)'];
+      for (let i = 0; i < 4; i++) {
+        const x0 = -cw / 2 + (cw / 4) * i, x1 = x0 + cw / 4;
+        ctx.fillStyle = panels[i];
+        ctx.beginPath();
+        ctx.moveTo(x0, cy + ch * 0.5);
+        ctx.quadraticCurveTo((x0 + x1) / 2, cy - ch * 0.95 - flap, x1, cy + ch * 0.5);
+        ctx.quadraticCurveTo((x0 + x1) / 2, cy + ch * 0.66 + flap, x0, cy + ch * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = Math.max(1, r * 0.035);
+      ctx.beginPath();
+      ctx.moveTo(-cw / 2, cy + ch * 0.5);
+      ctx.quadraticCurveTo(0, cy - ch * 1.0 - flap, cw / 2, cy + ch * 0.5);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (pet.chuteCut > 0) {
+      ctx.save();
+      ctx.globalAlpha = pet.chuteCut / 0.9;
+      ctx.fillStyle = 'hsl(38, 70%, 62%)';
+      ctx.beginPath();
+      ctx.ellipse(pet.facing * r * 0.5, -r * 0.35, r * 0.5 * (1 - pet.chuteCut / 0.9) + r * 0.2, r * 0.16, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     if (pet.thrust > 0.05 && !asleep) {
       const f = pet.thrust * (0.8 + 0.2 * Math.sin(t * 40));
       ctx.save();
@@ -1348,7 +1439,8 @@
       if (pet.stomp > 0 && sgn === pet.facing) footY -= Math.sin(Math.PI * clamp(pet.stomp / 0.35, 0, 1)) * r * 0.4;
       if (pet.tapT > 0 && sgn === 1) footY -= Math.max(0, Math.sin(t * 16)) * r * 0.1;
       if (flying) { footY -= r * 0.3; footX = sgn * r * 0.3; }
-      if (carried || pet.thrown) footY += r * 0.12 + Math.sin(t * 5 + sgn) * r * 0.08;
+      if (pet.chuteOpen) { footY += r * 0.18; footX = sgn * r * 0.34 + Math.sin(t * 3 + sgn * 1.5) * r * 0.16; }
+      else if (carried || pet.thrown) footY += r * 0.12 + Math.sin(t * 5 + sgn) * r * 0.08;
       const hipX = sgn * r * 0.33, hipY = -r * 0.5 + kneeDrop;
       ctx.strokeStyle = outline; ctx.lineWidth = r * 0.17;
       ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(footX, footY - r * 0.1); ctx.stroke();
@@ -1364,7 +1456,8 @@
     for (const sgn of [-1, 1]) {
       const sx = sgn * r * 0.78, sy = -r * 1.25;
       let theta = 0.35 + breathe * 3;
-      if (carried) theta = 2.9;
+      if (pet.chuteOpen) theta = 2.75;
+      else if (carried) theta = 2.9;
       else if (pet.thrown) theta = 1.6 + Math.sin(t * 9 + sgn) * 0.6;
       else if (pet.wave > 0) theta = 2.5 + Math.sin(t * 14) * 0.5 * (sgn === 1 ? 1 : 0.3);
       else if (stretchUp > 0) theta = 0.35 + stretchUp * 2.5;

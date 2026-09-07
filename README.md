@@ -35,6 +35,9 @@ Bitling has no Dock icon. Look for the smiling face in the menu bar.
 - **Click** the robot to pat it (it tilts its head). **Drag** to carry it: legs dangle.
   Let go mid-air and it drops, tumbling, and lands on its feet with a knee bend. Fling
   it and it glances off the screen edges.
+- **Thrown from a height** it pops a striped parachute, grabs the cords with both
+  arms, and drifts down swaying with its legs swinging. The chute collapses and folds
+  away on touchdown. Short drops are taken on its knees.
 - It **walks** with a real stride and turns to face where it is going. On its own it
   strolls, turns around, stretches, taps a foot when bored, and now and then fires
   its thrusters and **flies** to a spot anywhere on the screen, hovers there for a
@@ -52,11 +55,19 @@ Bitling has no Dock icon. Look for the smiling face in the menu bar.
 
 ## Git reactions
 
-The app watches every repository under its watched folders (default `~/Desktop/AI`,
-plus `~/Developer`, `~/Projects`, `~/Documents/GitHub`, `~/code`, `~/src`, `~/repos`
-when they exist; up to three folders deep). Add or remove folders from the menu bar
-under Dev activity. Detection tails each repository's reflog, so reactions land within
-two seconds without polling `git status`.
+The app finds **every git repository on the Mac by itself**. There is nothing to
+configure and no folder to pick: it scans your home folder and any mounted volumes
+(skipping node_modules, caches, Library and similar), remembers what it found so the
+next launch is instant, and rescans every ten minutes. Detection tails each
+repository's reflog, so reactions land within two seconds without polling
+`git status`. "Rescan for repositories now" forces a fresh sweep, and "Also watch a
+folder outside home…" adds anything the sweep cannot reach.
+
+For repositories anywhere at all, including outside your home folder, **global git
+hooks** are the belt-and-braces option: "Connect global git hooks…" points git's
+global `core.hooksPath` at Bitling's hook folder. Each hook reports the event and then
+runs your repository's own hook, and any global hooks path you already use is chained
+too. Disconnect restores your previous setting.
 
 | You do | Bitling does |
 |---|---|
@@ -71,6 +82,7 @@ two seconds without polling `git status`.
 | checkout | glances around: "now on feature/x" |
 | rebase start / finish | dizzy spinning eyes, then relief |
 | pull, stash, reset, cherry-pick | a line each |
+| any of the above in any repo on the Mac | same reactions; no setup needed |
 | 10+ uncommitted files | nags now and then |
 | no commit for a day | "git log is lonely" (daytime only) |
 

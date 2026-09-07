@@ -12,7 +12,8 @@ import WebKit
 
 let stateDefaultsKey = "petState"
 let windowXDefaultsKey = "petWindowX"
-let petWindowSize = NSSize(width: 280, height: 300)
+// Tall enough for the full robot plus a deployed parachute, wide enough for its arms.
+let petWindowSize = NSSize(width: 300, height: 340)
 
 func jsString(_ value: String) -> String {
     // JSON-encode a single string so it can be embedded as a JS literal.
@@ -24,6 +25,14 @@ func jsString(_ value: String) -> String {
 // MARK: - Window that turns mouse drags into window movement
 
 final class PetWindow: NSWindow {
+    /// Keeps the whole pet on screen while it is dragged, so no part is clipped at an edge.
+    static func clamped(_ origin: NSPoint, in visible: NSRect, size: NSSize) -> NSPoint {
+        NSPoint(
+            x: min(max(origin.x, visible.minX), max(visible.minX, visible.maxX - size.width)),
+            y: min(max(origin.y, visible.minY), max(visible.minY, visible.maxY - size.height))
+        )
+    }
+
     var onDragStart: (() -> Void)?
     var onDrag: ((CGFloat, CGFloat) -> Void)?
     var onDragEnd: ((CGFloat, CGFloat) -> Void)?
@@ -61,6 +70,8 @@ final class PetWindow: NSWindow {
             var origin = frame.origin
             origin.x += point.x - lastPoint.x
             origin.y += point.y - lastPoint.y
+            let visible = (screen ?? NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main)?.visibleFrame
+            if let visible { origin = Self.clamped(origin, in: visible, size: frame.size) }
             setFrameOrigin(origin)
             lastPoint = point
             lastTime = event.timestamp
@@ -142,6 +153,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var hoverBase = NSPoint.zero
     private var hoverT: CGFloat = 0
     private var wasFlying = false
+    private var chuteOpen = false
+    private var chuteSway: CGFloat = 0
     private var lastMouse = NSPoint(x: -1, y: -1)
     private var dragEventCount = 0
 
@@ -174,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let claudeTodayItem = NSMenuItem(title: "Today: 0 prompts · 0 tool calls", action: nil, keyEquivalent: "")
     private let claudeLastItem = NSMenuItem(title: "Last: nothing yet", action: nil, keyEquivalent: "")
     private let hooksItem = NSMenuItem(title: "Connect Claude Code hooks…", action: #selector(toggleClaudeHooks), keyEquivalent: "")
+    private let gitHooksItem = NSMenuItem(title: "Connect global git hooks…", action: #selector(toggleGitHooks), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -293,10 +307,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         hooksItem.target = self
         gitMenu.addItem(hooksItem)
         gitMenu.addItem(.separator())
-        let watchFolder = NSMenuItem(title: "Watch a folder…", action: #selector(watchFolder), keyEquivalent: "")
+        gitHooksItem.target = self
+        gitMenu.addItem(gitHooksItem)
+        let rescan = NSMenuItem(title: "Rescan for repositories now", action: #selector(rescanRepos), keyEquivalent: "")
+        rescan.target = self
+        gitMenu.addItem(rescan)
+        let watchFolder = NSMenuItem(title: "Also watch a folder outside home…", action: #selector(watchFolder), keyEquivalent: "")
         watchFolder.target = self
         gitMenu.addItem(watchFolder)
-        let stopItem = NSMenuItem(title: "Stop watching", action: nil, keyEquivalent: "")
+        let stopItem = NSMenuItem(title: "Stop watching extra folder", action: nil, keyEquivalent: "")
         stopItem.submenu = stopWatchingMenu
         gitMenu.addItem(stopItem)
         gitMenu.addItem(.separator())
@@ -403,8 +422,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         sleepItem.isEnabled = snapshot.hatched
         sleepItem.title = snapshot.asleep ? "Wake" : "Sleep"
         showItem.title = window.isVisible ? "Hide pet" : "Show pet"
-        let folders = git.roots.count
-        gitWatchingItem.title = "Watching \(git.repositoryCount) repos in \(folders) folder\(folders == 1 ? "" : "s")"
+        let extras = git.extraRoots.count
+        let scope = extras == 0 ? "this Mac" : "this Mac + \(extras) extra folder\(extras == 1 ? "" : "s")"
+        gitWatchingItem.title = "Watching \(git.repositoryCount) repositories across \(scope)"
+        gitHooksItem.title = GitHooks.installed() ? "Disconnect global git hooks" : "Connect global git hooks…"
         gitTodayItem.title = "Today: \(git.commitsToday) commit\(git.commitsToday == 1 ? "" : "s") · \(git.pushesToday) push\(git.pushesToday == 1 ? "" : "es")"
         gitLastItem.title = "Last: \(git.lastEventSummary)"
         gitTotalsItem.title = "Lifetime: \(snapshot.commits) commits caught · \(snapshot.pushes) pushes · \(snapshot.bugs) bugs squashed"
@@ -417,7 +438,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         claudeLastItem.title = "Last: \(claude.lastSummary)"
         hooksItem.title = hooked ? "Disconnect Claude Code hooks" : "Connect Claude Code hooks…"
         stopWatchingMenu.removeAllItems()
-        for root in git.roots {
+        stopWatchingMenu.autoenablesItems = false
+        if git.extraRoots.isEmpty {
+            let none = NSMenuItem(title: "No extra folders", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            stopWatchingMenu.addItem(none)
+        }
+        for root in git.extraRoots {
             let item = NSMenuItem(title: root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"), action: #selector(stopWatching(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = root
@@ -530,6 +557,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         git.removeRoot(url)
     }
 
+    @objc private func rescanRepos() {
+        git.rescan()
+        js("petNative.gitEvent({kind:'say', message: 'looking for repos…'})")
+    }
+
+    @objc private func toggleGitHooks() {
+        NSApp.activate(ignoringOtherApps: true)
+        let installed = GitHooks.installed()
+        let alert = NSAlert()
+        alert.messageText = installed ? "Disconnect global git hooks?" : "Connect global git hooks?"
+        alert.informativeText = installed
+            ? "Restores your previous global core.hooksPath setting. Bitling keeps noticing git activity by watching repositories directly."
+            : "Sets git's global core.hooksPath to Bitling's hook folder so every repository on this Mac reports commits, merges, checkouts, rebases and pushes the moment they happen, even ones outside your home folder. Each hook calls your repository's own hook afterwards, and any global hooks path you already use is chained too."
+        alert.addButton(withTitle: installed ? "Disconnect" : "Connect")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            if installed { try GitHooks.uninstall() } else { try GitHooks.install() }
+            js("petNative.gitEvent({kind:'say', message: \(jsString(installed ? "hooks off" : "hooks on, every repo"))})")
+        } catch {
+            let failure = NSAlert()
+            failure.messageText = "Could not update the git hooks setting"
+            failure.informativeText = error.localizedDescription
+            failure.runModal()
+        }
+    }
+
     @objc private func pretendCommit() {
         let samples = ["fix: stop the widget from eating cookies", "wip", "feat: add jelly physics", "typo in README", "Revert \"remove tests\"", "refactor everything"]
         deliverGitEvent(GitEvent(kind: "commit", repo: "demo", branch: "main", message: samples.randomElement() ?? "commit", hash: String(UUID().uuidString.prefix(7)).lowercased(), insertions: Int.random(in: 1...600), deletions: Int.random(in: 0...80), files: Int.random(in: 1...12)))
@@ -610,12 +664,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         min(max(x, visible.minX), max(visible.minX, visible.maxX - petWindowSize.width))
     }
 
+
     private func saveWindowX() {
         UserDefaults.standard.set(Double(window.frame.minX), forKey: windowXDefaultsKey)
     }
 
     private func dragStarted() {
         dragging = true
+        chuteOpen = false
         wasFlying = flight != .none
         flight = .none
         airborne = false
@@ -681,6 +737,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         switch flight {
         case .flying:
+            chuteOpen = false
             let dx = flyTarget.x - frame.origin.x, dy = flyTarget.y - frame.origin.y
             let dist = hypot(dx, dy)
             if dist < 3 {
@@ -713,19 +770,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             window.setFrameOrigin(frame.origin)
         case .none:
             if airborne {
-                velocityY -= 2600 * dt
+                let height = frame.minY - floor
+                if chuteOpen {
+                    // Under canopy: slow terminal descent with a gentle side-to-side drift.
+                    velocityY += max(0, (-140 - velocityY)) * min(1, dt * 3)
+                    velocityY = max(velocityY, -170)
+                    chuteSway += dt * 1.7
+                    velocityX += (sin(chuteSway) * 70 - velocityX) * min(1, dt * 2)
+                } else {
+                    velocityY -= 2600 * dt
+                    // Falling fast with room to spare: pop the chute.
+                    if velocityY < -620 && height > max(220, visible.height * 0.22) {
+                        chuteOpen = true
+                        js("petNative.flight('chute')")
+                    }
+                }
                 frame.origin.x += velocityX * dt
                 frame.origin.y += velocityY * dt
-                if frame.minX < visible.minX { frame.origin.x = visible.minX; velocityX = -velocityX * 0.5 }
-                if frame.maxX > visible.maxX { frame.origin.x = visible.maxX - frame.width; velocityX = -velocityX * 0.5 }
-                if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.height; velocityY = -velocityY * 0.3 }
+                if frame.minX < visible.minX { frame.origin.x = visible.minX; velocityX = abs(velocityX) * (chuteOpen ? 0.4 : 0.5) }
+                if frame.maxX > visible.maxX { frame.origin.x = visible.maxX - frame.width; velocityX = -abs(velocityX) * (chuteOpen ? 0.4 : 0.5) }
+                if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.height; velocityY = -abs(velocityY) * 0.3 }
                 if frame.minY <= floor {
                     // Robots land on their feet: no bounce, a knee bend instead.
                     frame.origin.y = floor
-                    let impact = min(0.45, abs(velocityY) / 2600)
+                    let impact = chuteOpen ? 0.12 : min(0.45, abs(velocityY) / 2600)
                     velocityY = 0
                     velocityX = 0
                     airborne = false
+                    if chuteOpen { chuteOpen = false; js("petNative.flight('chute-cut')") }
                     js("petNative.land(\(String(format: "%.2f", impact)))")
                     saveWindowX()
                 }
@@ -759,6 +831,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 js("petNative.cursor(\(Int(localX)), \(Int(localY)))")
             }
         }
+    }
+}
+
+// MARK: - Global git hooks (core.hooksPath)
+
+enum GitHooks {
+    static let hookNames = ["post-commit", "post-merge", "post-checkout", "post-rewrite", "pre-push"]
+    private static let previousKey = "gitPreviousHooksPath"
+
+    struct HooksError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    /// Placeholders: __TOOL__ (path to the bitling command), __NAME__ (hook name),
+    /// __CHAIN__ (an optional call into a pre-existing global hooks path).
+    private static let hookTemplate = """
+    #!/bin/sh
+    # Installed by Bitling. Reports this event to the desktop pet, then runs your own hooks.
+    "__TOOL__" git __NAME__ "$@" >/dev/null 2>&1 || true
+    __CHAIN__
+    repo_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/__NAME__"
+    if [ -x "$repo_hook" ]; then exec "$repo_hook" "$@"; fi
+    exit 0
+    """
+
+    static var directory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Bitling/githooks")
+    }
+
+    @discardableResult
+    private static func git(_ arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func currentHooksPath() -> String {
+        (try? git(["config", "--global", "--get", "core.hooksPath"])) ?? ""
+    }
+
+    static func installed() -> Bool {
+        currentHooksPath() == directory.path
+    }
+
+    static func install() throws {
+        let previous = currentHooksPath()
+        if !previous.isEmpty, previous != directory.path {
+            UserDefaults.standard.set(previous, forKey: previousKey)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let tool = "\(Bundle.main.bundlePath)/Contents/Resources/bitling"
+        let chained = UserDefaults.standard.string(forKey: previousKey) ?? ""
+        for name in hookNames {
+            // Built from a template so the shell quoting stays readable.
+            var script = Self.hookTemplate
+                .replacingOccurrences(of: "__TOOL__", with: tool)
+                .replacingOccurrences(of: "__NAME__", with: name)
+            if chained.isEmpty {
+                script = script.replacingOccurrences(of: "__CHAIN__", with: "")
+            } else {
+                let chain = """
+                if [ -x "\(chained)/\(name)" ]; then
+                  "\(chained)/\(name)" "$@" || exit $?
+                fi
+                """
+                script = script.replacingOccurrences(of: "__CHAIN__", with: chain)
+            }
+            let url = directory.appendingPathComponent(name)
+            try script.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        }
+        try git(["config", "--global", "core.hooksPath", directory.path])
+        guard installed() else { throw HooksError(message: "git did not accept the new core.hooksPath value") }
+    }
+
+    static func uninstall() throws {
+        let previous = UserDefaults.standard.string(forKey: previousKey) ?? ""
+        if previous.isEmpty {
+            try git(["config", "--global", "--unset", "core.hooksPath"])
+        } else {
+            try git(["config", "--global", "core.hooksPath", previous])
+        }
+        UserDefaults.standard.removeObject(forKey: previousKey)
     }
 }
 

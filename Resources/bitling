@@ -6,6 +6,7 @@
 #   bitling event <kind> [key=value...]   raw event, e.g. `bitling event test-failed count=3 name=api`
 #   bitling say <text>                    make the pet say something
 #   bitling claude                        Claude Code hook adapter (reads hook JSON on stdin)
+#   bitling git <hook> [args]             global git hook adapter (installed for you by the menu)
 #
 # Events travel over the bitling:// URL scheme, so this works from any shell, Makefile,
 # npm script or git hook on the same Mac. Exit status of the wrapped command is preserved.
@@ -74,6 +75,31 @@ case "$command_name" in
   say)
     [ $# -gt 0 ] || { usage; exit 2; }
     send say "text=$*"
+    ;;
+  git)
+    # Global git hook adapter: `bitling git <hook-name> [hook args]` inside a repository.
+    hook="${1:-}"
+    shift || true
+    top="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+    repo="$(basename "$top")"
+    branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    case "$hook" in
+      post-commit)
+        hash="$(git rev-parse HEAD 2>/dev/null || true)"
+        message="$(git log -1 --format=%s 2>/dev/null || true)"
+        stat="$(git show --shortstat --format= HEAD 2>/dev/null | tail -1)"
+        files="$(printf '%s' "$stat" | grep -Eo '[0-9]+ file' | grep -Eo '[0-9]+' || true)"
+        ins="$(printf '%s' "$stat" | grep -Eo '[0-9]+ insertion' | grep -Eo '[0-9]+' || true)"
+        del="$(printf '%s' "$stat" | grep -Eo '[0-9]+ deletion' | grep -Eo '[0-9]+' || true)"
+        send commit "repo=$repo" "branch=$branch" "hash=$hash" "message=$message" "files=${files:-0}" "insertions=${ins:-0}" "deletions=${del:-0}"
+        ;;
+      post-merge) send merge "repo=$repo" "branch=$branch" ;;
+      post-checkout) [ "${3:-0}" = "1" ] && send checkout "repo=$repo" "branch=$branch" ;;
+      post-rewrite) if [ "${1:-}" = "amend" ]; then send amend "repo=$repo" "branch=$branch"; else send rebase-done "repo=$repo" "branch=$branch"; fi ;;
+      pre-push) send push "repo=$repo" "branch=$branch" ;;
+      *) ;;
+    esac
+    exit 0
     ;;
   claude)
     # Claude Code hook adapter: reads the hook JSON on stdin and forwards one event.

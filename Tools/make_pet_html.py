@@ -43,7 +43,7 @@ def build(source: Path, target: Path) -> None:
         s,
         "    scale = clamp(Math.min(W, H) / 520, 0.7, 1.3);\n    if (W <= 0 || H <= 0) return;",
         "    scale = clamp(Math.min(W, H) / 520, 0.7, 1.3);\n"
-        "    if (DESKTOP) { groundY = Math.round(H - 36); scale = 0.85; }\n"
+        "    if (DESKTOP) { groundY = Math.round(H - 34); scale = 0.8; }\n"
         "    if (W <= 0 || H <= 0) return;",
     )
 
@@ -200,6 +200,12 @@ def build(source: Path, target: Path) -> None:
         "    reset() { doReset(); },\n"
         "    gitEvent(ev) { handleGitEvent(ev); pushState(true); },\n"
         "    gitStatus(info) { handleGitStatus(info); },\n"
+        "    // Read-only snapshot for diagnostics.\n"
+        "    debug() {\n"
+        "      return { mode: pet.mode, grounded: pet.grounded, thrown: pet.thrown, chuteOpen: pet.chuteOpen,\n"
+        "        chute: Number(pet.chute.toFixed(3)), knee: Number(pet.knee.toFixed(3)), r: petR(), scale, W, H, groundY,\n"
+        "        x: Math.round(pet.x), y: Math.round(pet.y), stage: stageOf(state) };\n"
+        "    },\n"
         "  };\n\n"
         "  // ---------------------------------------------------------------- boot\n",
     )

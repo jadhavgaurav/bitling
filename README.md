@@ -11,12 +11,21 @@ and reacts to what you are actually doing: your commits, your test runs, your de
 your Claude Code sessions.
 
 [![Download](https://img.shields.io/github/v/release/jadhavgaurav/bitling?color=6f63d6&label=download&style=flat-square)](https://github.com/jadhavgaurav/bitling/releases/latest)
+[![Try it in your browser](https://img.shields.io/badge/try%20it-in%20your%20browser-2fd4b5?style=flat-square)](https://jadhavgaurav.github.io/bitling/)
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-8a8a99?style=flat-square)
 ![Apple Silicon and Intel](https://img.shields.io/badge/universal-Apple%20Silicon%20%2B%20Intel-8a8a99?style=flat-square)
 
 </div>
 
 ---
+
+## Try it without installing anything
+
+**[jadhavgaurav.github.io/bitling](https://jadhavgaurav.github.io/bitling/)** runs the whole
+creature in your browser. Tap the box to unbox it, pat it, drag it, throw it, and use the
+**Try it** row to fire real developer events at it: commit, push, merge, rebase, failing
+tests, passing tests, a deploy, a Claude Code session. Everything the desktop app does to the
+pet itself, minus the parts that need your actual repositories.
 
 ## Install
 

@@ -20,6 +20,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "-> deriving desktop page from $WEB_SOURCE"
 python3 Tools/make_pet_html.py "$WEB_SOURCE" Resources/pet.html
+python3 Tools/make_demo.py
 
 SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift Sources/Overlay.swift)
 compile() {  # compile <arch> <output>

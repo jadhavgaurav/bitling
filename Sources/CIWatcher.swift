@@ -221,14 +221,20 @@ final class CIWatcher {
     private func reportPytest(dir: URL) {
         let lastFailed = dir.appendingPathComponent(".pytest_cache/v/cache/lastfailed")
         var failing = 0
+        var names: [String] = []
         if let data = try? Data(contentsOf: lastFailed), let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             failing = dict.count
+            // "tests/test_billing.py::test_webhook_signature" reads better as the test name alone.
+            names = dict.keys.sorted().prefix(6).map { key in
+                if let last = key.components(separatedBy: "::").last, !last.isEmpty { return last }
+                return key.components(separatedBy: "/").last ?? key
+            }
         }
         let repos = repositories()
         let owner = repos.first { dir.path.hasPrefix($0.workTree.path) }
         var name = dir.lastPathComponent
         if let owner, owner.workTree.path != dir.path { name = "\(owner.workTree.lastPathComponent)/\(dir.lastPathComponent)" }
-        let event = GitEvent(kind: failing > 0 ? "test-failed" : "test-passed", repo: owner?.workTree.lastPathComponent ?? name, branch: "", message: "pytest", hash: "", count: failing, target: "", name: name)
+        let event = GitEvent(kind: failing > 0 ? "test-failed" : "test-passed", repo: owner?.workTree.lastPathComponent ?? name, branch: "", message: "pytest", hash: "", count: failing, target: "", name: name, tests: names)
         emit(event)
     }
 

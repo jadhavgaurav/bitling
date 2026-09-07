@@ -235,6 +235,10 @@
       'one less ticket', 'stomped', 'resolved', 'cannot reproduce now'],
     allSquashed: ['all bugs squashed!', 'clean build!', 'zero bugs. for now.', 'the board is empty',
       'inbox zero, bug edition', 'nothing left to stomp'],
+    zapped: ['pew!', 'zap!', 'vaporised', 'target eliminated', 'lasers work', 'pew pew',
+      'bug: deleted', 'from orbit, just to be sure', 'no survivors', 'eyes have their uses'],
+    bossHit: ['it is still moving!', 'bigger than usual', 'keep firing', 'that one has armour'],
+    bossDown: ['the big one is down!', 'boss eliminated', 'that was the last of it', 'flawless'],
     someEscaped: ['some got away...', 'they fled into prod', 'reopening those tickets',
       'known issues, then'],
     egg: ['unbox me!', 'something is beeping in here', '*rattle*', 'knock knock', 'this side up',
@@ -453,6 +457,8 @@
     grow() { [659, 784, 988, 1318, 1568].forEach((f, i) => setTimeout(() => this.tone(f, f * 1.01, 0.22), i * 90)); },
     whoosh() { this.tone(160, 900, 0.5, 'sawtooth', 0.035); },
     poof() { this.tone(700, 240, 0.28, 'triangle', 0.05); },
+    charge() { this.tone(280, 900, 0.28, 'sine', 0.028); },
+    zap() { this.tone(1500, 170, 0.16, 'sawtooth', 0.05); setTimeout(() => this.tone(300, 80, 0.12, 'square', 0.03), 90); },
     error() { this.tone(320, 120, 0.3, 'square', 0.05); setTimeout(() => this.tone(260, 100, 0.35, 'square', 0.05), 220); },
     ok() { this.tone(660, 660, 0.12, 'triangle', 0.07); setTimeout(() => this.tone(990, 990, 0.2, 'triangle', 0.07), 130); },
   };
@@ -474,6 +480,7 @@
     facing: 1, stride: 0, walking: false, knee: 0, tilt: 0, stomp: 0, turnT: 0, stretchT: 0, tapT: 0,
     spin: 0, spinV: 0, thrown: false,
     chuteOpen: false, chute: 0, chuteSway: 0, chuteCut: 0,
+    zap: 0, zapCharge: 0, zapCool: 0, zapAim: null, zapLocal: false, zapX: 0, zapY: 0,
     screenText: '', screenTint: '', screenT: 0, shake: 0, deploying: false, deployProgress: 0,
   };
   const egg = { wobble: 0 };
@@ -483,6 +490,9 @@
   const drop = { active: false, x: 0, y: 0, vy: 0, kind: 'commit', label: '', rest: false };
   const rocket = { active: false, x: 0, y: 0, vy: 0, t: 0, fade: 1 };
   let gitInfo = { dirty: 0, repo: '', branch: '', minutesSinceCommit: -1 };
+  // When the host runs a full-screen stage, beetles live out there instead of in here.
+  let hostSwarm = false;
+  let hostBugs = [];
   const particles = [];
   const pointer = { x: 0, y: 0, over: false, lastT: -10, vx: 0, vy: 0, pt: 0 };
   const recentPets = [];
@@ -698,7 +708,7 @@
     comeDown();
     debug.active = true;
     debug.until = 25;
-    for (let i = 0; i < 4; i++) spawnBug();
+    releaseBugs(4, ['flaky_test', 'off_by_one', 'race_condition', 'null_deref']);
     state.games += 1;
     state.care += 2;
     state.energy = clamp(state.energy - 8);
@@ -708,23 +718,52 @@
   function endDebug() {
     debug.active = false;
     bugs.length = 0;
+    if (swarmOn()) native({ type: 'doomAll' });
   }
   function spawnBug(x) {
     const bx = x !== undefined ? x : (Math.random() < 0.5 ? rand(14, W * 0.3) : rand(W * 0.7, W - 14));
     const bugEdge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
     bugs.push({ x: clamp(bx, bugEdge, W - bugEdge), vx: rand(50, 90) * (Math.random() < 0.5 ? -1 : 1), dart: rand(0.5, 2), alive: true, squash: 0, wig: rand(0, 6) });
   }
-  function squashBug(b, byPet) {
+  function squashBug(b, byPet, byLaser) {
     if (!b.alive) return;
     b.alive = false;
     b.squash = 0.45;
-    state.bugs += 1;
-    state.joy = clamp(state.joy + 4);
-    state.care += 1;
-    audio.pop();
-    spawn('check', b.x, groundY - 12, 2, { spread: 6, vx: 30, vy: -70, size: 12, dur: 0.9 });
-    say(line('squash'), 1300);
+    countKill(byLaser);
+    if (byLaser) {
+      spawn('flame', b.x, groundY - 10, 7, { spread: 7, vx: 70, vy: -90, size: 8, dur: 0.5, hue: rand(0, 40) });
+      spawn('spark', b.x, groundY - 10, 4, { spread: 5, vx: 90, vy: -70, size: 7, hue: 12, dur: 0.6 });
+    } else {
+      audio.pop();
+      spawn('check', b.x, groundY - 12, 2, { spread: 6, vx: 30, vy: -70, size: 12, dur: 0.9 });
+      say(line('squash'), 1300);
+    }
     if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
+  }
+  function countKill(byLaser, boss) {
+    state.bugs += 1;
+    state.joy = clamp(state.joy + (boss ? 12 : 4));
+    state.care += boss ? 3 : 1;
+    if (byLaser) { audio.zap(); say(line(boss ? 'bossDown' : 'zapped'), 1400); }
+    saveState();
+  }
+  function eyePoints() {
+    const r = petR();
+    const y = pet.y - r * 2.28;
+    const dx = pet.facing * r * 0.12;
+    return [{ x: Math.round(pet.x + dx - r * 0.38), y: Math.round(y) },
+            { x: Math.round(pet.x + dx + r * 0.38), y: Math.round(y) }];
+  }
+  const swarmOn = () => DESKTOP && hostSwarm;
+  function activeBugCount() { return swarmOn() ? hostBugs.length : bugs.filter((b) => b.alive).length; }
+  function releaseBugs(n, labels, persistent) {
+    if (swarmOn()) native({ type: 'bugs', n, labels: labels || [], persistent: !!persistent });
+    else for (let i = 0; i < n; i++) spawnBug();
+  }
+  function clearBugs() {
+    // Everything passed, so the whole swarm is fair game and the pet clears it.
+    if (swarmOn()) native({ type: 'doomAll' });
+    for (const b of bugs) if (b.alive) squashBug(b, false);
   }
   function bugAt(x, y) {
     return bugs.find((b) => b.alive && Math.hypot(x - b.x, y - (groundY - 8)) < 20);
@@ -752,17 +791,22 @@
     saveState();
   }
   function launchRocket(label) {
+    pet.stretchT = 1.4;
+    pet.happy = 2;
+    audio.whoosh();
+    spawn('spark', pet.x, pet.y - petR(), 10, { spread: petR(), vx: 120, vy: -100, size: 8, hue: 45, dur: 1.2 });
+    say(label, 3200);
+    if (swarmOn()) {
+      // The host flies it up the whole screen instead of the height of this window.
+      native({ type: 'rocketScreen', label, y: Math.round(pet.y - petR() * 3.6) });
+      return;
+    }
     rocket.active = true;
     rocket.x = pet.x;
     rocket.y = pet.y - petR() * 3.6;
     rocket.vy = -55;
     rocket.t = 0;
     rocket.fade = 1;
-    pet.stretchT = 1.4;
-    pet.happy = 2;
-    audio.whoosh();
-    spawn('spark', pet.x, pet.y - petR(), 10, { spread: petR(), vx: 120, vy: -100, size: 8, hue: 45, dur: 1.2 });
-    say(label, 3200);
   }
   function toggleSleep() {
     if (!state.hatched) return;
@@ -1029,7 +1073,7 @@
 
   function updatePet(dt) {
     pet.t += dt;
-    for (const k of ['chew', 'happy', 'surprise', 'yawn', 'dizzy', 'glance', 'shake', 'screenT', 'wave', 'workT', 'tilt', 'stomp', 'turnT', 'stretchT', 'tapT']) pet[k] = Math.max(0, pet[k] - dt);
+    for (const k of ['chew', 'happy', 'surprise', 'yawn', 'dizzy', 'glance', 'shake', 'screenT', 'wave', 'workT', 'tilt', 'stomp', 'turnT', 'stretchT', 'tapT', 'zap', 'zapCool']) pet[k] = Math.max(0, pet[k] - dt);
     pet.knee = lerp(pet.knee, 0, Math.min(1, dt * 6));
     pet.chuteCut = Math.max(0, pet.chuteCut - dt);
     pet.chute = clamp(pet.chute + (pet.chuteOpen ? dt * 4 : -dt * 5), 0, 1);
@@ -1169,9 +1213,10 @@
   }
 
   function updateBugs(dt) {
-    if (!bugs.length) { if (debug.active) debug.active = false; return; }
     const r = petR();
     const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried;
+    const canFire = canStomp && pet.grounded && pet.mode !== 'fly' && !pet.thrown;
+
     for (let i = bugs.length - 1; i >= 0; i--) {
       const b = bugs[i];
       if (!b.alive) { b.squash -= dt; if (b.squash <= 0) bugs.splice(i, 1); continue; }
@@ -1183,16 +1228,64 @@
       const away = b.x - pet.x;
       if (Math.abs(away) < r * 1.6 && Math.random() < 0.06) b.vx = Math.sign(away || 1) * rand(90, 150);
       b.x += b.vx * dt;
-      // Keep beetles where the pet can actually reach them to stomp.
       const edge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
       if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx); }
       if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx); }
       if (canStomp && pet.grounded && Math.abs(b.x - pet.x) < r * 0.62) squashBug(b, true);
     }
+
+    // Take aim whether or not this is a debug run. A beetle from a "fix" commit used to
+    // wander for ever because all the hunting sat behind debug.active.
+    if (pet.zapCharge > 0) {
+      const aim = pet.zapAim;
+      const stillThere = aim && (aim.host ? hostBugs.some((b) => b.id === aim.id) : aim.bug && aim.bug.alive);
+      if (!stillThere) { pet.zapCharge = 0; pet.zapAim = null; }
+      else {
+        const live = aim.host ? hostBugs.find((b) => b.id === aim.id) : aim.bug;
+        pet.facing = Math.sign(live.x - pet.x) || pet.facing;
+        pet.zapCharge -= dt;
+        if (pet.zapCharge <= 0) {
+          pet.zapCharge = 0;
+          pet.zapCool = (swarmOn() && hostBugs.filter((b) => b.huntable).length > 2) ? rand(0.16, 0.28) : rand(0.45, 0.85);
+          pet.zap = 0.2;
+          const eyes = eyePoints();
+          if (aim.host) {
+            // The host draws the real beam across the desktop; keep only the muzzle flash here.
+            pet.zapLocal = false;
+            native({ type: 'zap', id: aim.id, eyes });
+          } else {
+            pet.zapLocal = true;
+            pet.zapX = live.x;
+            pet.zapY = groundY - 9 * scale;
+            squashBug(live, false, true);
+          }
+          for (const e of eyes) spawn('spark', e.x, e.y, 2, { spread: 3, vx: 50, vy: -30, size: 6, hue: 8, dur: 0.35 });
+          pet.zapAim = null;
+        }
+      }
+    } else if (canFire && pet.zapCool <= 0 && pet.zap <= 0) {
+      let aim = null, near = Infinity;
+      if (swarmOn()) {
+        // Only beetles the host marks huntable: a test-backed one stays until its test passes.
+        for (const b of hostBugs) {
+          if (!b.huntable) continue;
+          const d = Math.abs(b.x - pet.x);
+          if (d < near) { near = d; aim = { host: true, id: b.id }; }
+        }
+      } else {
+        for (const b of bugs) {
+          if (!b.alive) continue;
+          const d = Math.abs(b.x - pet.x);
+          if (d > r * 0.62 && d < near) { near = d; aim = { host: false, bug: b }; }
+        }
+      }
+      if (aim) { pet.zapAim = aim; pet.zapCharge = 0.3; audio.charge(); }
+    }
+
     if (!debug.active) return;
     debug.until -= dt;
-    const alive = bugs.filter((b) => b.alive);
-    if (!alive.length) {
+    const remaining = activeBugCount();
+    if (!remaining) {
       debug.active = false;
       state.joy = clamp(state.joy + 10);
       say(line('allSquashed'), 2600);
@@ -1200,6 +1293,9 @@
       return;
     }
     if (debug.until <= 0) { endDebug(); say(line('someEscaped'), 2200); return; }
+    if (swarmOn()) return;   // no need to walk: it can shoot across the screen
+    const alive = bugs.filter((b) => b.alive);
+    if (!alive.length) return;
     let best = alive[0], bestDist = Infinity;
     for (const b of alive) { const d = Math.abs(b.x - pet.x); if (d < bestDist) { bestDist = d; best = b; } }
     pet.ax = clamp(best.x, petHalfWidth(), W - petHalfWidth());
@@ -1431,6 +1527,8 @@
     const ew = r * 0.26, eh = r * 0.3 * (pet.surprise > 0 ? 1.25 : 1);
     const lids = f.asleep ? 1 : Math.max(pet.blink, f.sleepy ? 0.45 : 0, pet.yawn > 0 ? 0.7 : 0);
     const erroring = pet.screenTint === 'error' && pet.screenT > 0;
+    const charging = pet.zapCharge > 0 && !f.asleep;
+    if (charging) { ctx.fillStyle = 'hsl(2, 100%, 64%)'; ctx.strokeStyle = 'hsl(2, 100%, 64%)'; }
     const happyEyes = pet.happy > 0 && !f.asleep && pet.surprise <= 0 && pet.dizzy <= 0 && !erroring;
     ctx.lineWidth = Math.max(1.5, r * 0.07);
     for (const sgn of [-1, 1]) {
@@ -1443,6 +1541,12 @@
         continue;
       }
       if (pet.dizzy > 0) { ctx.beginPath(); ctx.arc(x, ey, ew * 0.5, t * 9 + sgn, t * 9 + sgn + 4.5); ctx.stroke(); continue; }
+      if (charging) {
+        const slit = Math.max(1.5, eh * 0.34);
+        roundRect(x - ew / 2, ey - slit / 2, ew, slit, slit * 0.4);
+        ctx.fill();
+        continue;
+      }
       if (happyEyes) { ctx.beginPath(); ctx.arc(x, ey + eh * 0.35, ew * 0.75, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); continue; }
       if (lids >= 0.97) { ctx.beginPath(); ctx.moveTo(x - ew * 0.5, ey); ctx.lineTo(x + ew * 0.5, ey); ctx.stroke(); continue; }
       const px = pet.look.x * ew * 0.25, py = pet.look.y * eh * 0.2;
@@ -1704,7 +1808,8 @@
 
     const tint = pet.screenTint;
     let tipColor = 'hsl(170, 90%, 62%)';
-    if (tint === 'error') tipColor = 'hsl(0, 90%, 60%)';
+    if (pet.zapCharge > 0 || pet.zap > 0) tipColor = 'hsl(2, 100%, 62%)';
+    else if (tint === 'error') tipColor = 'hsl(0, 90%, 60%)';
     else if (tint === 'ok') tipColor = 'hsl(150, 80%, 55%)';
     else if (tint === 'deploy') tipColor = `hsl(40, 95%, ${55 + 15 * Math.sin(t * 8)}%)`;
     else if (pet.wave > 0) tipColor = `hsl(200, 95%, ${55 + 20 * Math.abs(Math.sin(t * 12))}%)`;
@@ -1736,7 +1841,7 @@
     ctx.fillStyle = 'rgba(255,255,255,0.05)';
     roundRect(-sw / 2, -sh / 2, sw, sh * 0.45, r * 0.22); ctx.fill();
 
-    const glow = tint === 'error' ? 'hsl(0, 90%, 65%)' : tint === 'ok' ? 'hsl(150, 85%, 60%)' : tint === 'deploy' ? 'hsl(40, 95%, 65%)' : (asleep ? 'hsl(170, 40%, 45%)' : 'hsl(170, 90%, 68%)');
+    const glow = (pet.zapCharge > 0 || pet.zap > 0) ? 'hsl(2, 100%, 66%)' : tint === 'error' ? 'hsl(0, 90%, 65%)' : tint === 'ok' ? 'hsl(150, 85%, 60%)' : tint === 'deploy' ? 'hsl(40, 95%, 65%)' : (asleep ? 'hsl(170, 40%, 45%)' : 'hsl(170, 90%, 68%)');
     ctx.save();
     ctx.translate(pet.facing * r * 0.07, 0);
     ctx.shadowColor = glow; ctx.shadowBlur = r * 0.25;
@@ -1796,6 +1901,28 @@
       ctx.fillStyle = 'hsl(25, 55%, 28%)';
       for (const [dx, dy] of [[-0.4, -0.3], [0.35, -0.1], [-0.1, 0.45], [0.4, 0.5]]) { ctx.beginPath(); ctx.arc(dx * u, dy * u, u * 0.17, 0, Math.PI * 2); ctx.fill(); }
     }
+    ctx.restore();
+  }
+
+  function drawLaser() {
+    if (pet.zap <= 0 || !pet.zapLocal) return;
+    const r = petR();
+    const k = clamp(pet.zap / 0.2, 0, 1);
+    const oy = pet.y - r * 2.28;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (const sgn of [-1, 1]) {
+      const ox = pet.x + pet.facing * r * 0.12 + sgn * r * 0.38;
+      ctx.strokeStyle = `hsla(0, 100%, 60%, ${0.75 * k})`;
+      ctx.lineWidth = Math.max(2, r * 0.11 * k);
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(pet.zapX, pet.zapY); ctx.stroke();
+      ctx.strokeStyle = `hsla(12, 100%, 92%, ${0.95 * k})`;
+      ctx.lineWidth = Math.max(1, r * 0.04 * k);
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(pet.zapX, pet.zapY); ctx.stroke();
+    }
+    ctx.fillStyle = `hsla(25, 100%, 72%, ${0.85 * k})`;
+    ctx.beginPath(); ctx.arc(pet.zapX, pet.zapY, r * 0.26 * (1.5 - k), 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
@@ -1884,7 +2011,7 @@
   function draw() {
     drawBackground();
     if (!state.hatched) drawBox();
-    else { drawSnack(); drawDrop(); drawBugs(); drawPet(); drawRocket(); }
+    else { drawSnack(); drawDrop(); drawBugs(); drawPet(); drawLaser(); drawRocket(); }
     drawParticles();
     if (state.asleep) {
       ctx.fillStyle = 'rgba(10,14,40,0.42)';
@@ -1918,7 +2045,7 @@
         state.lastCommitAt = now();
         spawnDrop('commit', ev.hash ? String(ev.hash).slice(0, 7) : 'commit');
         let said = msg.trim() ? `commit: ${shortMessage(msg)}` : line('commitPlain');
-        if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { said = line('commitFix'); spawnBug(clamp(pet.x + rand(-80, 80), 14, W - 14)); }
+        if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { said = line('commitFix'); releaseBugs(1, [shortMessage(msg).slice(0, 22)]); }
         else if (/\bwip\b/.test(lower)) said = line('commitWip');
         else if (/typo/.test(lower)) said = line('commitTypo');
         else if (/^revert\b/i.test(msg.trim())) { said = line('commitRevert'); pet.surprise = 1.2; }
@@ -1980,9 +2107,19 @@
         pet.happy = 0; pet.deploying = false;
         state.joy = clamp(state.joy - 3);
         audio.error();
-        const bugCount = count > 0 ? Math.min(5, count) : 2;
-        for (let i = 0; i < bugCount; i++) spawnBug();
-        debug.active = true; debug.until = 45;
+        const names = Array.isArray(ev.tests) ? ev.tests.map((t) => String(t).slice(0, 26)) : [];
+        if (swarmOn() && names.length) {
+          // The swarm mirrors the suite: one beetle per failing test, and the pet only
+          // shoots the ones that have since been fixed.
+          native({ type: 'tests', failing: names, count });
+          debug.active = false;
+        } else if (count >= 6 && swarmOn()) {
+          native({ type: 'boss', hp: Math.min(12, count), label: label || 'the suite' });
+          debug.active = true; debug.until = 150;
+        } else {
+          releaseBugs(count > 0 ? Math.min(5, count) : 2, names);
+          debug.active = true; debug.until = 45;
+        }
         const line = count > 0
           ? `${count} test${count === 1 ? '' : 's'} failing${label ? ` in ${label}` : ''}`
           : (label ? `${label} is red` : line('testFail'));
@@ -1994,7 +2131,7 @@
         pet.screenText = 'OK'; pet.screenTint = 'ok'; pet.screenT = 2; pet.happy = 1.6;
         state.joy = clamp(state.joy + 6);
         audio.ok();
-        for (const b of bugs) if (b.alive) squashBug(b, false);
+        clearBugs();
         say(label ? `${label} is green!` : line('testPass'), 2800);
         break;
       }
@@ -2203,6 +2340,7 @@
     pet.ax = W / 2; pet.x = W / 2; pet.y = groundY; pet.sq = 0; pet.sqv = 0; pet.happy = 0;
     pet.mode = 'ground'; pet.landing = false; pet.thrown = false; pet.spin = 0; pet.spinV = 0; pet.thrust = 0; pet.knee = 0;
     pet.chuteOpen = false; pet.chute = 0; pet.chuteCut = 0; pet.walkDir = 0; pet.walking = false;
+    pet.zap = 0; pet.zapCharge = 0; pet.zapCool = 0; pet.zapAim = null; hostBugs = [];
     pet.working = false; pet.workT = 0; pet.wave = 0; pet.deploying = false; pet.deployProgress = 0;
     pet.screenText = ''; pet.screenTint = ''; pet.screenT = 0; pet.dizzy = 0; pet.shake = 0;
     canvas.classList.remove('holding');

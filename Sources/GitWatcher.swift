@@ -22,11 +22,12 @@ struct GitEvent {
     var count = 0
     var target = ""
     var name = ""
+    var tests: [String] = []
 
     var asDictionary: [String: Any] {
         ["kind": kind, "repo": repo, "branch": branch, "message": message, "hash": hash,
          "insertions": insertions, "deletions": deletions, "files": files,
-         "count": count, "target": target, "name": name]
+         "count": count, "target": target, "name": name, "tests": tests]
     }
 }
 

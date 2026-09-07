@@ -21,7 +21,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 echo "-> deriving desktop page from $WEB_SOURCE"
 python3 Tools/make_pet_html.py "$WEB_SOURCE" Resources/pet.html
 
-SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift)
+SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift Sources/Overlay.swift)
 compile() {  # compile <arch> <output>
   swiftc -O -swift-version 5 -target "$1-apple-macosx$MIN_MACOS" \
     -framework Cocoa -framework WebKit -framework ServiceManagement \

@@ -113,9 +113,34 @@ Disconnecting puts the setting back.
 </tr>
 </table>
 
-When tests fail its screen goes red, its eyes become crosses, it shakes, and one beetle
-appears per failure for it to hunt. When they pass, every beetle dies on the spot. A deploy
-fills a progress bar on its screen and ends in a rocket, or in smoke and "rollback time".
+When tests fail its screen goes red, its eyes become crosses, and it shakes. A deploy fills
+a progress bar on its screen and ends in a rocket, or in smoke and "rollback time".
+
+## Your whole screen is the stage
+
+<div align="center">
+<img src="docs/media/desktop-stage.png" width="820" alt="Beetles labelled with failing test names crawling across a desktop, twin red laser beams striking one of them, a boss beetle with a health bar, and a rocket climbing away">
+</div>
+
+A failing test suite does not stay politely inside the pet's little window. The beetles
+crawl out across your **entire screen**, over your editor and your browser, and **each one
+wears the name of the test that is failing**. You can read what is broken without opening CI.
+
+The pet turns, charges its eyes red, and fires twin laser beams across the desktop.
+
+**It only shoots the ones you have actually fixed.** A beetle stands for a currently failing
+test, so it stays there, crawling around, until that test passes. Run the suite again and the
+pet vaporises exactly the beetles whose tests now pass, and leaves the rest alone. Go green
+and it clears the board in a volley. Scorch marks fade where they fell.
+
+A badly failing run sends out a boss instead: bigger, armoured, with a health bar equal to the
+number of failures, whittled down as you fix them. A push launches the rocket up the full
+height of your screen rather than fading at the top of a small window.
+
+None of this can be clicked. The overlay never accepts a mouse event, so it cannot steal a
+click or block anything you are working in, and it disappears completely when there is
+nothing to draw. Turn it off with **Let bugs loose on the screen** in the menu and everything
+stays inside the pet's own window, where it stomps and lasers as before.
 
 Three sources feed this, all optional:
 
@@ -123,14 +148,15 @@ Three sources feed this, all optional:
    origin is on github.com. Run `gh auth login` once. Workflows named deploy, release,
    publish, cd or rollout count as deploys; the rest count as tests. Vercel and similar
    services record GitHub Deployments, so those appear too.
-2. **Local pytest runs**, detected from `.pytest_cache`, including the failure count.
+2. **Local pytest runs**, detected from `.pytest_cache`, including the failure count and the
+   names of the failing tests, which is what the beetles wear.
 3. **The `bitling` command**, for everything else.
 
 ```bash
 bitling run npm test                    # reports pass or fail, keeps the exit status
 bitling run pytest -q
 bitling deploy production ./deploy.sh   # start, then finished or failed
-bitling event test-failed count=3 name=api
+bitling event test-failed count=3 name=api tests=test_alpha,test_beta,test_gamma
 bitling say "lunch?"
 ```
 

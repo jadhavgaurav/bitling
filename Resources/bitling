@@ -4,6 +4,7 @@
 #   bitling run <command...>              run tests; the pet reacts to pass or fail
 #   bitling deploy <target> <command...>  run a deploy; the pet shows progress, then rocket or error
 #   bitling event <kind> [key=value...]   raw event, e.g. `bitling event test-failed count=3 name=api`
+#                                         test names: tests=test_a,test_b (they crawl your screen)
 #   bitling say <text>                    make the pet say something
 #   bitling claude                        Claude Code hook adapter (reads hook JSON on stdin)
 #   bitling git <hook> [args]             global git hook adapter (installed for you by the menu)

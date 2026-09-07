@@ -136,6 +136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let git = GitWatcher()
     private let ci = CIWatcher()
     private let claude = ClaudeWatcher()
+    private let overlay = Overlay()
+    private var swarmEnabled = UserDefaults.standard.object(forKey: "swarmOnDesktop") as? Bool ?? true
+    private var lastSwarmCount = -1
     private var recentEvents: [String: Date] = [:]
 
     // Motion
@@ -187,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let claudeTodayItem = NSMenuItem(title: "Today: 0 prompts · 0 tool calls", action: nil, keyEquivalent: "")
     private let claudeLastItem = NSMenuItem(title: "Last: nothing yet", action: nil, keyEquivalent: "")
     private let hooksItem = NSMenuItem(title: "Connect Claude Code hooks…", action: #selector(toggleClaudeHooks), keyEquivalent: "")
+    private let swarmItem = NSMenuItem(title: "Let bugs loose on the screen", action: #selector(toggleSwarm), keyEquivalent: "")
     private let gitHooksItem = NSMenuItem(title: "Connect global git hooks…", action: #selector(toggleGitHooks), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -203,6 +207,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         ci.start()
         claude.onEvent = { [weak self] event in self?.deliverGitEvent(event) }
         claude.start()
+        overlay.onKill = { [weak self] beetle in
+            guard let self else { return }
+            self.js("petNative.killed(\(beetle.boss ? "true" : "false"))")
+        }
         timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(timer!, forMode: .common)
         NotificationCenter.default.addObserver(
@@ -223,7 +231,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let event = GitEvent(
                 kind: kind, repo: query["repo"] ?? "", branch: query["branch"] ?? "",
                 message: query["message"] ?? query["text"] ?? "", hash: query["hash"] ?? "",
-                count: Int(query["count"] ?? "") ?? 0, target: query["target"] ?? "", name: query["name"] ?? ""
+                count: Int(query["count"] ?? "") ?? 0, target: query["target"] ?? "", name: query["name"] ?? "",
+                tests: (query["tests"] ?? "").split(separator: ",").map(String.init)
             )
             deliverGitEvent(event)
         }
@@ -306,6 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         for item in [claudeStatusItem, claudeTodayItem, claudeLastItem] { item.isEnabled = false; gitMenu.addItem(item) }
         hooksItem.target = self
         gitMenu.addItem(hooksItem)
+        swarmItem.target = self
+        gitMenu.addItem(swarmItem)
         gitMenu.addItem(.separator())
         gitHooksItem.target = self
         gitMenu.addItem(gitHooksItem)
@@ -385,12 +396,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             guard flight != .none else { return }
             flight = .landing
             js("petNative.flight('landing')")
+        case "bugs":
+            guard swarmEnabled else { return }
+            overlay.release(count: body["n"] as? Int ?? 1,
+                            labels: body["labels"] as? [String] ?? [],
+                            persistent: body["persistent"] as? Bool ?? false,
+                            on: screenForWindow(), floorScreenY: petFloorY(), fromScreenX: window.frame.midX)
+        case "tests":
+            guard swarmEnabled else { return }
+            overlay.reconcile(failing: body["failing"] as? [String] ?? [],
+                              on: screenForWindow(), floorScreenY: petFloorY(), fromScreenX: window.frame.midX)
+            overlay.syncBoss(failures: body["count"] as? Int ?? 0)
+        case "doomAll":
+            overlay.doomAll()
+        case "boss":
+            guard swarmEnabled else { return }
+            overlay.releaseBoss(hp: body["hp"] as? Int ?? 3,
+                                label: body["label"] as? String ?? "",
+                                on: screenForWindow(), floorScreenY: petFloorY(), fromScreenX: window.frame.midX)
+        case "clearBugs":
+            overlay.clearBeetles()
+        case "zap":
+            let id = body["id"] as? Int ?? -1
+            let eyes = (body["eyes"] as? [[String: Any]] ?? []).map { eye in
+                CGPoint(x: window.frame.minX + CGFloat(eye["x"] as? Double ?? 0),
+                        y: window.frame.maxY - CGFloat(eye["y"] as? Double ?? 0))
+            }
+            overlay.fire(at: id, fromEyes: eyes)
+        case "rocketScreen":
+            guard swarmEnabled else { return }
+            overlay.launchRocket(label: body["label"] as? String ?? "",
+                                 on: screenForWindow(),
+                                 fromScreen: CGPoint(x: window.frame.midX,
+                                                     y: window.frame.maxY - CGFloat(body["y"] as? Double ?? 90)))
         case "askName":
             let first = body["first"] as? Bool ?? false
             let suggestion = body["suggestion"] as? String ?? "Pip"
             DispatchQueue.main.async { self.askName(first: first, suggestion: suggestion) }
         case "ready":
             pageReady = true
+            js("petNative.swarmMode(\(swarmEnabled ? "true" : "false"))")
         default:
             break
         }
@@ -437,6 +482,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         claudeTodayItem.title = "Today: \(claude.promptsToday) prompt\(claude.promptsToday == 1 ? "" : "s") · \(claude.toolsToday) tool calls · \(claude.sessionsToday) new session\(claude.sessionsToday == 1 ? "" : "s")"
         claudeLastItem.title = "Last: \(claude.lastSummary)"
         hooksItem.title = hooked ? "Disconnect Claude Code hooks" : "Connect Claude Code hooks…"
+        swarmItem.state = swarmEnabled ? .on : .off
         stopWatchingMenu.removeAllItems()
         stopWatchingMenu.autoenablesItems = false
         if git.extraRoots.isEmpty {
@@ -613,6 +659,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             failure.informativeText = error.localizedDescription
             failure.runModal()
         }
+    }
+
+    /// The line the pet stands on, in screen coordinates. The page keeps its ground
+    /// 34px above the bottom of the window.
+    private func petFloorY() -> CGFloat { window.frame.minY + 34 }
+
+    @objc private func toggleSwarm() {
+        swarmEnabled.toggle()
+        UserDefaults.standard.set(swarmEnabled, forKey: "swarmOnDesktop")
+        if !swarmEnabled { overlay.clearBeetles() }
+        js("petNative.swarmMode(\(swarmEnabled ? "true" : "false"))")
     }
 
     @objc private func pretendTestsFailed() {
@@ -819,6 +876,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             } else if abs(frame.minY - floor) > 1 {
                 airborne = true
                 js("petNative.flight('thrown')")
+            }
+        }
+
+        if tickCount % 6 == 0 && swarmEnabled && window.isVisible {
+            let list = overlay.swarm(relativeTo: window.frame)
+            if !list.isEmpty || lastSwarmCount != 0 {
+                lastSwarmCount = list.count
+                if let data = try? JSONSerialization.data(withJSONObject: list),
+                   let json = String(data: data, encoding: .utf8) {
+                    js("petNative.swarm(\(json))")
+                }
             }
         }
 

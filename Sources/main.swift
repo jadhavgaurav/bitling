@@ -136,6 +136,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var velocityY: CGFloat = 0
     private var walkRemaining: CGFloat = 0
     private var walkDirection: CGFloat = 0
+    private enum Flight { case none, flying, hovering, landing }
+    private var flight: Flight = .none
+    private var flyTarget = NSPoint.zero
+    private var hoverBase = NSPoint.zero
+    private var hoverT: CGFloat = 0
+    private var wasFlying = false
     private var lastMouse = NSPoint(x: -1, y: -1)
     private var dragEventCount = 0
 
@@ -344,6 +350,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "walk":
             let direction = (body["dir"] as? Double ?? 1) < 0 ? CGFloat(-1) : CGFloat(1)
             startWalk(direction: direction)
+        case "fly":
+            guard !dragging, !airborne, flight == .none else { return }
+            let fx = CGFloat(body["x"] as? Double ?? 0.5), fy = CGFloat(body["y"] as? Double ?? 0.5)
+            let visible = screenForWindow().visibleFrame
+            flyTarget = NSPoint(
+                x: visible.minX + min(max(fx, 0), 1) * max(0, visible.width - petWindowSize.width),
+                y: visible.minY + (1 - min(max(fy, 0), 1)) * max(0, visible.height - petWindowSize.height)
+            )
+            walkRemaining = 0
+            if walkDirection != 0 { walkDirection = 0; js("petNative.walking(0)") }
+            flight = .flying
+            js("petNative.flight('takeoff')")
+        case "land":
+            guard flight != .none else { return }
+            flight = .landing
+            js("petNative.flight('landing')")
         case "askName":
             let first = body["first"] as? Bool ?? false
             let suggestion = body["suggestion"] as? String ?? "Pip"
@@ -425,6 +447,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let screen = screenUnderMouse()
         let visible = screen.visibleFrame
         airborne = false
+        flight = .none
+        js("petNative.flight('landed')")
         walkRemaining = 0
         velocityX = 0
         velocityY = 0
@@ -592,6 +616,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     private func dragStarted() {
         dragging = true
+        wasFlying = flight != .none
+        flight = .none
         airborne = false
         walkRemaining = 0
         if walkDirection != 0 { walkDirection = 0; js("petNative.walking(0)") }
@@ -606,14 +632,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     private func dragEnded(_ vx: CGFloat, _ vy: CGFloat) {
         dragging = false
+        js("petNative.release()")
+        let onFloor = abs(window.frame.minY - screenForWindow().visibleFrame.minY) < 2
+        if wasFlying && hypot(vx, vy) < 260 && !onFloor {
+            // Let go gently mid-air while it was flying: it hovers where it was left.
+            flight = .hovering
+            hoverBase = window.frame.origin
+            hoverT = 0
+            js("petNative.flight('hover')")
+            return
+        }
         velocityX = max(-2200, min(2200, vx))
         velocityY = max(-2200, min(2200, vy))
         airborne = true
-        js("petNative.release()")
+        js("petNative.flight('thrown')")
     }
 
     private func startWalk(direction: CGFloat) {
-        guard !dragging, !airborne, walkRemaining <= 0, window.isVisible else { return }
+        guard !dragging, !airborne, flight == .none, walkRemaining <= 0, window.isVisible else { return }
         let visible = screenForWindow().visibleFrame
         let distance = CGFloat.random(in: 80...200)
         var dir = direction
@@ -631,6 +667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         origin.x = clampX(origin.x, in: visible)
         if origin.y < visible.minY { origin.y = visible.minY }
         window.setFrameOrigin(origin)
+        if flight != .none { hoverBase = origin; flyTarget = origin; return }
         airborne = true
     }
 
@@ -642,44 +679,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         var frame = window.frame
         let floor = visible.minY
 
-        if airborne {
-            velocityY -= 2600 * dt
-            frame.origin.x += velocityX * dt
-            frame.origin.y += velocityY * dt
-            if frame.minX < visible.minX { frame.origin.x = visible.minX; velocityX = -velocityX * 0.6 }
-            if frame.maxX > visible.maxX { frame.origin.x = visible.maxX - frame.width; velocityX = -velocityX * 0.6 }
-            if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.height; velocityY = -velocityY * 0.4 }
-            if frame.minY <= floor {
+        switch flight {
+        case .flying:
+            let dx = flyTarget.x - frame.origin.x, dy = flyTarget.y - frame.origin.y
+            let dist = hypot(dx, dy)
+            if dist < 3 {
+                flight = .hovering
+                hoverBase = frame.origin
+                hoverT = 0
+                js("petNative.flight('hover')")
+            } else {
+                let speed = min(380, 70 + dist * 2.2)
+                frame.origin.x += dx / dist * speed * dt
+                frame.origin.y += dy / dist * speed * dt
+                window.setFrameOrigin(frame.origin)
+            }
+        case .hovering:
+            hoverT += dt
+            frame.origin = NSPoint(x: hoverBase.x + sin(hoverT * 0.9) * 8, y: hoverBase.y + sin(hoverT * 2.1) * 5)
+            window.setFrameOrigin(frame.origin)
+        case .landing:
+            frame.origin.y -= 230 * dt
+            frame.origin.x = clampX(frame.origin.x, in: visible)
+            if frame.origin.y <= floor {
                 frame.origin.y = floor
-                let impact = min(0.45, abs(velocityY) / 2600)
-                js("petNative.land(\(String(format: "%.2f", impact)))")
-                if abs(velocityY) > 260 {
-                    velocityY = -velocityY * 0.45
-                    velocityX *= 0.75
-                } else {
+                flight = .none
+                airborne = false
+                velocityX = 0
+                velocityY = 0
+                js("petNative.flight('landed')")
+                saveWindowX()
+            }
+            window.setFrameOrigin(frame.origin)
+        case .none:
+            if airborne {
+                velocityY -= 2600 * dt
+                frame.origin.x += velocityX * dt
+                frame.origin.y += velocityY * dt
+                if frame.minX < visible.minX { frame.origin.x = visible.minX; velocityX = -velocityX * 0.5 }
+                if frame.maxX > visible.maxX { frame.origin.x = visible.maxX - frame.width; velocityX = -velocityX * 0.5 }
+                if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.height; velocityY = -velocityY * 0.3 }
+                if frame.minY <= floor {
+                    // Robots land on their feet: no bounce, a knee bend instead.
+                    frame.origin.y = floor
+                    let impact = min(0.45, abs(velocityY) / 2600)
                     velocityY = 0
                     velocityX = 0
                     airborne = false
+                    js("petNative.land(\(String(format: "%.2f", impact)))")
                     saveWindowX()
                 }
+                window.setFrameOrigin(frame.origin)
+            } else if walkRemaining > 0 {
+                let step = min(walkRemaining, 70 * dt)
+                frame.origin.x += step * walkDirection
+                walkRemaining -= step
+                if frame.minX < visible.minX || frame.maxX > visible.maxX {
+                    frame.origin.x = clampX(frame.origin.x, in: visible)
+                    walkRemaining = 0
+                }
+                window.setFrameOrigin(frame.origin)
+                if walkRemaining <= 0 {
+                    walkDirection = 0
+                    js("petNative.walking(0)")
+                    saveWindowX()
+                }
+            } else if abs(frame.minY - floor) > 1 {
+                airborne = true
+                js("petNative.flight('thrown')")
             }
-            window.setFrameOrigin(frame.origin)
-        } else if walkRemaining > 0 {
-            let step = min(walkRemaining, 70 * dt)
-            frame.origin.x += step * walkDirection
-            walkRemaining -= step
-            if frame.minX < visible.minX || frame.maxX > visible.maxX {
-                frame.origin.x = clampX(frame.origin.x, in: visible)
-                walkRemaining = 0
-            }
-            window.setFrameOrigin(frame.origin)
-            if walkRemaining <= 0 {
-                walkDirection = 0
-                js("petNative.walking(0)")
-                saveWindowX()
-            }
-        } else if abs(frame.minY - floor) > 1 {
-            airborne = true
         }
 
         if tickCount % 4 == 0 && window.isVisible {

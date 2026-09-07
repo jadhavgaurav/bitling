@@ -23,32 +23,6 @@ def patch(src: str, old: str, new: str) -> str:
 def build(source: Path, target: Path) -> None:
     s = source.read_text(encoding="utf-8")
 
-    # --- desktop flag + native bridge helper
-    s = patch(
-        s,
-        "  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;\n",
-        "  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;\n"
-        "  const HOST = (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pet) || null;\n"
-        "  // ?desktop=1 previews the desktop layout in an ordinary browser (no host, bridge calls are dropped).\n"
-        "  const DESKTOP = !!HOST || /[?&]desktop=1/.test(window.location.search) || window.__forceDesktop === true;\n"
-        "  if (DESKTOP) document.documentElement.classList.add('desktop');\n"
-        "  function native(msg) {\n"
-        "    if (!HOST) return;\n"
-        "    try { HOST.postMessage(msg); } catch (_) { /* host gone */ }\n"
-        "  }\n",
-    )
-
-    # --- desktop CSS
-    s = patch(
-        s,
-        "  @media (prefers-reduced-motion:reduce){ .bubble{animation:none} }\n",
-        "  @media (prefers-reduced-motion:reduce){ .bubble{animation:none} }\n"
-        "  html.desktop,html.desktop body,html.desktop #app{background:transparent}\n"
-        "  html.desktop .hud,html.desktop .dock{display:none}\n"
-        "  html.desktop #stage{cursor:default}\n"
-        "  html.desktop .bubble{white-space:normal;max-width:calc(100vw - 16px);text-align:center;font-size:15px;padding:6px 11px;line-height:1.25}\n",
-    )
-
     # --- state: prefer the host-injected snapshot, mirror saves to the host
     s = patch(
         s,
@@ -96,25 +70,6 @@ def build(source: Path, target: Path) -> None:
         "      if (!state.asleep) {\n"
         "        if (pet.carried) {\n          pet.lookT.x = 0; pet.lookT.y = 0.7;\n        } else if (pet.walkDir) {\n"
         "          pet.lookT.x = pet.walkDir * 0.8; pet.lookT.y = 0.1;\n        } else if (snack.active) {",
-    )
-
-    # --- idle wander walks the window instead of the anchor
-    s = patch(
-        s,
-        "    else if (r < 0.82) { pet.ax = clamp(W / 2 + rand(-W * 0.25, W * 0.25), petR(), W - petR()); }",
-        "    else if (r < 0.82) {\n"
-        "      if (DESKTOP) native({ type: 'walk', dir: Math.random() < 0.5 ? -1 : 1 });\n"
-        "      else pet.ax = clamp(W / 2 + rand(-W * 0.25, W * 0.25), petR(), W - petR());\n"
-        "    }",
-    )
-
-    # --- walking bob
-    s = patch(
-        s,
-        "    const sqy = (1 + pet.sq) * (1 + pet.stretch);\n    const sqx = (1 - pet.sq * 0.85) * (1 - pet.stretch * 0.6);\n\n    drawShadow",
-        "    const bob = pet.walkDir && pet.grounded ? 0.04 * Math.sin(t * 16) : 0;\n"
-        "    const sqy = (1 + pet.sq + bob) * (1 + pet.stretch);\n"
-        "    const sqx = (1 - pet.sq * 0.85 - bob * 0.8) * (1 - pet.stretch * 0.6);\n\n    drawShadow",
     )
 
     # --- transparent stage, no sleep dimming over the desktop
@@ -229,12 +184,10 @@ def build(source: Path, target: Path) -> None:
         "    land(impact) {\n"
         "      const imp = clamp(Number(impact) || 0, 0, 0.45);\n"
         "      if (!state.hatched) { egg.wobble = Math.max(egg.wobble, imp * 2); return; }\n"
-        "      pet.sq = -imp; pet.sqv = 0;\n"
-        "      if (imp > 0.12) {\n"
-        "        spawn('dust', pet.x, groundY - 4, 6, { spread: petR() * 0.8, vx: 70, vy: -25, g: -10, size: 9, dur: 0.7 });\n"
-        "        audio.thud();\n"
-        "      }\n"
+        "      pet.grounded = true; pet.y = groundY;\n"
+        "      land(imp * 1600);\n"
         "    },\n"
+        "    flight(phase) { handleFlight(phase); },\n"
         "    walking(dir) { pet.walkDir = Math.sign(Number(dir) || 0); },\n"
         "    cursor(x, y) { pointer.x = Number(x) || 0; pointer.y = Number(y) || 0; pointer.over = true; pointer.lastT = pet.t; },\n"
         "    setName(name) {\n"

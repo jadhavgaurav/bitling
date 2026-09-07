@@ -32,8 +32,14 @@ Bitling has no Dock icon. Look for the smiling face in the menu bar.
 ## Using it
 
 - **Tap the box three times** to unbox it. You will be asked for a name.
-- **Click** the robot to pat it. **Drag** to carry it. Let go mid-air and it drops.
-  Fling it and it bounces off the screen edges.
+- **Click** the robot to pat it (it tilts its head). **Drag** to carry it: legs dangle.
+  Let go mid-air and it drops, tumbling, and lands on its feet with a knee bend. Fling
+  it and it glances off the screen edges.
+- It **walks** with a real stride and turns to face where it is going. On its own it
+  strolls, turns around, stretches, taps a foot when bored, and now and then fires
+  its thrusters and **flies** to a spot anywhere on the screen, hovers there for a
+  while looking around, then lands. Drop it gently while it is flying and it hovers
+  where you left it.
 - **Menu bar**: Pat, Feed, Debug bugs, Sleep, plus Tummy, Energy and Joy meters (also
   shown as the three LEDs on its chest once it has grown). Hide/Show, Bring pet to this
   screen, Rename, Sound, Start over, Open at login.

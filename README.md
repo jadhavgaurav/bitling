@@ -4,9 +4,9 @@
 
 **A desktop pet for macOS that lives on your dev activity.**
 
-<img src="docs/media/goku.gif" width="560" alt="Kid Goku flying on the Flying Nimbus across your screen, spotting a bug, charging up and destroying it with the Kamehameha wave">
+<img src="docs/media/goku.gif" width="560" alt="Kid Goku flying on the Flying Nimbus across Mount Paozu, catching git commits, launching push rockets, blasting failing test bugs with Ki blasts, and obliterating boss bugs with the full Kamehameha wave">
 
-<sub>Kid Goku, flying on his golden Flying Nimbus. He watches your screen, hunts the bugs your failing tests let loose, and blasts them with rapid Ki energy balls and the full Kamehameha.</sub>
+<sub>Kid Goku, flying on his golden Flying Nimbus over Mount Paozu and Karin Tower. He lives on your dev activity: catches git commits, celebrates pushes, hunts failing test bugs with rapid Ki blasts, and obliterates boss bugs with the full Kamehameha wave.</sub>
 
 ### ▶ [Play with it in your browser](https://jadhavgaurav.github.io/bitling/)
 

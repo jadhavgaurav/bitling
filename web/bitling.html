@@ -2410,6 +2410,10 @@
 
   // ---------------------------------------------------------------- draw
   function drawBackground() {
+    if (window.customBgImage && window.customBgImage.complete) {
+      ctx.drawImage(window.customBgImage, 0, 0, W, H);
+      return;
+    }
     const g = ctx.createLinearGradient(0, 0, 0, groundY);
     g.addColorStop(0, sky.top);
     g.addColorStop(1, sky.bottom);
@@ -4574,7 +4578,7 @@
 
   function drawBugs() {
     for (const b of bugs) {
-      const u = 6.5 * scale;
+      const u = (b.boss ? 11 : 6.5) * scale;
       ctx.save();
       ctx.translate(b.x, groundY - 1);
       if (!b.alive) {
@@ -4583,6 +4587,18 @@
         ctx.beginPath(); ctx.ellipse(0, -u * 0.3, u * 2, u * 0.45, 0, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
         continue;
+      }
+      if (b.boss) {
+        const bw = 64, bh = 5;
+        ctx.fillStyle = 'rgba(18, 20, 26, 0.85)';
+        ctx.fillRect(-bw / 2 - 1, -u * 2.8 - 1, bw + 2, bh + 2);
+        ctx.fillStyle = '#ef4444';
+        const hpPct = clamp((b.hp || 1) / (b.maxHp || 1), 0, 1);
+        ctx.fillRect(-bw / 2, -u * 2.8, bw * hpPct, bh);
+        ctx.font = 'bold 8px ui-monospace, Menlo, monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.label || 'BOSS BUG', 0, -u * 2.8 - 4);
       }
       ctx.scale(Math.sign(b.vx) || 1, 1);
       const wig = Math.sin(pet.t * 28 + b.wig);
@@ -4593,7 +4609,7 @@
         const swing = wig * (k === 0 ? -1 : 1) * u * 0.35;
         ctx.beginPath(); ctx.moveTo(k * u * 0.7, -u * 0.6); ctx.lineTo(k * u * 0.7 + swing - u * 0.2, 0); ctx.stroke();
       }
-      ctx.fillStyle = '#d9534f';
+      ctx.fillStyle = b.boss ? '#b91c1c' : '#d9534f';
       ctx.beginPath(); ctx.ellipse(0, -u * 0.95, u * 1.35, u * 0.85, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#3a2a33';
       ctx.beginPath(); ctx.moveTo(0, -u * 1.8); ctx.lineTo(0, -u * 0.1); ctx.lineWidth = 1; ctx.stroke();
@@ -5080,6 +5096,14 @@
     say(text, dur) { say(text, dur); },
     species(id) { return species(id); },
     draw() { draw(); },
+    bugs() { return bugs; },
+    drop() { return drop; },
+    rocket() { return rocket; },
+    particles() { return particles; },
+    spawnDrop(kind, label) { spawnDrop(kind, label); },
+    releaseBugs(n, labels, persistent) { releaseBugs(n, labels, persistent); },
+    launchRocket(label) { launchRocket(label); },
+    spawn(kind, x, y, n, opts) { spawn(kind, x, y, n, opts); },
   };
 
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveState(); });

@@ -12,6 +12,7 @@ import WebKit
 
 let stateDefaultsKey = "petState"
 let windowXDefaultsKey = "petWindowX"
+let dockIconDefaultsKey = "showInDock"
 // Tall enough for the full robot plus a deployed parachute, wide enough for its arms.
 let petWindowSize = NSSize(width: 300, height: 340)
 
@@ -149,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let claude = ClaudeWatcher()
     private let overlay = Overlay()
     private let panel = ControlPanel()
+    private var dockIconEnabled = UserDefaults.standard.object(forKey: dockIconDefaultsKey) as? Bool ?? true
     private let activity = ActivityLog()
     private var swarmEnabled = UserDefaults.standard.object(forKey: "swarmOnDesktop") as? Bool ?? true
     private var lastSwarmCount = -1
@@ -208,7 +210,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let gitHooksItem = NSMenuItem(title: "Connect global git hooks…", action: #selector(toggleGitHooks), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(dockIconEnabled ? .regular : .accessory)
+        buildMainMenu()
         buildWebView()
         buildWindow()
         buildStatusItem()
@@ -232,6 +235,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         NotificationCenter.default.addObserver(
             self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil
         )
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        panel.show()
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -301,6 +309,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let x = savedX.map { CGFloat($0) } ?? (visible.maxX - petWindowSize.width - 48)
         window.setFrameOrigin(NSPoint(x: clampX(x, in: visible), y: visible.minY))
         window.orderFrontRegardless()
+    }
+
+    /// The menu bar strip a Dock app is expected to have. Harmless while running as an accessory.
+    private func buildMainMenu() {
+        let main = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "About Bitling", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        let room = NSMenuItem(title: "Control Room", action: #selector(openPanel), keyEquivalent: ",")
+        room.target = self
+        appMenu.addItem(room)
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide Bitling", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let others = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        others.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(others)
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Bitling", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redo)
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        main.addItem(editItem)
+
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowItem.submenu = windowMenu
+        main.addItem(windowItem)
+
+        NSApp.mainMenu = main
+        NSApp.windowsMenu = windowMenu
+    }
+
+    private func setDockIcon(_ enabled: Bool) {
+        dockIconEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: dockIconDefaultsKey)
+        NSApp.setActivationPolicy(enabled ? .regular : .accessory)
+        if enabled { NSApp.activate(ignoringOtherApps: true) }
     }
 
     private func buildStatusItem() {
@@ -564,6 +625,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "gitHooks": GitHooks.installed(),
                 "swarm": swarmEnabled,
                 "petVisible": window.isVisible,
+                "dock": dockIconEnabled,
                 "version": version,
             ],
             "events": activity.entries.map(\.asDictionary),
@@ -587,6 +649,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "reset": resetAction()
         case "watchFolder": watchFolder()
         case "bringHere": bringHere()
+        case "dock": setDockIcon(!dockIconEnabled)
         case "repo": NSWorkspace.shared.open(URL(string: "https://github.com/jadhavgaurav/bitling")!)
         case "quit": NSApp.terminate(nil)
         default: return

@@ -42,7 +42,9 @@ That downloads the latest release, installs it to `/Applications`, links the `bi
 command and opens it. Nothing to click through. ([Read the script first](install.sh) if you
 would rather see what it does.)
 
-Bitling has no Dock icon. Look for the smiling face in the menu bar.
+Bitling puts an icon in the Dock: click it to open the control room. There is also a
+smiling face in the menu bar. If you would rather it stayed out of the way, turn off
+**Show in the Dock** in the control room's Setup tab and use the menu bar instead.
 
 <details>
 <summary><b>Prefer to download the .dmg by hand?</b></summary>
@@ -253,8 +255,9 @@ on demand.
 
 ## The control room
 
-Right click the pet (or use the menu bar) and pick **Control room**, or run `bitling panel`.
-It opens a small window that answers "what has this thing actually seen today?".
+Click Bitling's Dock icon, or right click the pet, or use the menu bar, and pick **Control
+room**. `bitling panel` opens it from a shell. It answers "what has this thing actually seen
+today?".
 
 **Activity** holds a live portrait of your pet, blinking, dozing or thinking in orange while
 Claude works, with its name, stage, age and three gauges. Under it: today's commits, pushes,

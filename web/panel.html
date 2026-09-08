@@ -51,7 +51,7 @@
 
   /* ------------------------------------------------------------------ headings */
   .rule{
-    display:flex;align-items:center;gap:10px;padding:0 16px;margin:15px 0 7px;
+    display:flex;align-items:center;gap:10px;padding:0 16px;margin:12px 0 6px;
     font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);
   }
   .rule::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -107,7 +107,7 @@
 
   /* ------------------------------------------------------------------ list rows */
   .rows{padding:0 16px}
-  .row{display:flex;align-items:center;gap:12px;height:32px;
+  .row{display:flex;align-items:center;gap:12px;height:31px;
     border-bottom:1px solid var(--line);width:100%}
   .rows .row:last-child{border-bottom:0}
   button.row:hover{background:rgba(255,255,255,.03);box-shadow:0 0 0 16px rgba(255,255,255,.03)}
@@ -120,7 +120,7 @@
   button.row:hover .v .do{color:var(--accent)}
   .row .k small{display:block;margin-top:1px;font-size:10.5px;color:var(--faint);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row.tall{height:44px;align-items:center}
+  .row.tall{height:42px;align-items:center}
 
   .sw{width:26px;height:15px;border-radius:8px;background:rgba(255,255,255,.11);position:relative;flex:0 0 auto;transition:background .18s}
   .sw::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
@@ -244,6 +244,10 @@
         <span class="k">Open at login</span>
         <span class="v"><i class="sw" id="swLogin"></i></span>
       </button>
+      <button class="row tall" data-act="dock">
+        <span class="k">Show in the Dock<small>Click the icon to bring this window back</small></span>
+        <span class="v"><i class="sw" id="swDock"></i></span>
+      </button>
       <button class="row" data-act="hide">
         <span class="k">Pet window</span>
         <span class="v"><em class="do" id="doHide">hide</em><span class="n" id="vShown">shown</span></span>
@@ -257,7 +261,7 @@
         <span class="v"><em class="do">erase and re-box</em></span>
       </button>
     </div>
-    <div style="height:14px"></div>
+    <div style="height:8px"></div>
   </section>
 
   <footer class="foot">
@@ -495,7 +499,7 @@
     cl.textContent = `${active} active`;
     cl.className = 'n ' + (active ? 'good' : 'off');
     sw('#swGit', w.gitHooks); sw('#swClaude', w.claudeHooks); sw('#swSwarm', w.swarm);
-    sw('#swSound', p.sound); sw('#swLogin', w.login);
+    sw('#swSound', p.sound); sw('#swLogin', w.login); sw('#swDock', w.dock);
     $('#vName').textContent = p.hatched ? (p.name || 'Bitling') : 'unnamed';
     $('#vShown').textContent = w.petVisible === false ? 'hidden' : 'shown';
     $('#doHide').textContent = w.petVisible === false ? 'show' : 'hide';

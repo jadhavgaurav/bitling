@@ -168,7 +168,7 @@ final class ControlPanel: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         controller.add(self, name: "panel")
         config.userContentController = controller
 
-        let frame = NSRect(x: 0, y: 0, width: 420, height: 680)
+        let frame = NSRect(x: 0, y: 0, width: 420, height: 690)
         let view = WKWebView(frame: frame, configuration: config)
         view.navigationDelegate = self
         view.setValue(false, forKey: "drawsBackground")

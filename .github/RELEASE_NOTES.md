@@ -14,7 +14,9 @@ Apple Developer ID. Click **Done** (never "Move to Trash"), then either open **S
 Settings → Privacy & Security** and click **Open Anyway**, or run
 `xattr -dr com.apple.quarantine /Applications/Bitling.app`.
 
-Bitling has no Dock icon. Look for the smiling face in the menu bar.
+Bitling puts an icon in the Dock: click it to open the control room. There is also a
+smiling face in the menu bar. If you would rather it stayed out of the way, turn off
+**Show in the Dock** in the control room's Setup tab and use the menu bar instead.
 
 **What it reacts to**
 

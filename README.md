@@ -91,7 +91,9 @@ and with it how it moves, what it says and how it deals with a bug.
 | <img src="web/avatars/kaiju.png" width="48" height="48" alt="Rumble"> | **Rumble**<br><sub>Atomic Titan</sub> | Walker | Heavy planted footsteps, sweeping tail, and luminous cyan dorsal plates | Stomps nearby bugs; fires cyan atomic breath |
 | <img src="web/avatars/naruto.png" width="48" height="48" alt="Naruto"> | **Naruto**<br><sub>Ninja of the Leaf</sub> | Walker | Low-profile ninja sprint with arms swept back, Konoha headband and orange jumpsuit | Spinning Chakra Shurikens for small bugs; spiraling Fuuton Rasenshuriken for bosses |
 | <img src="web/avatars/ronaldo.png" width="48" height="48" alt="CR7"> | **CR7**<br><sub>Cristiano Ronaldo</sub> | Walker | High-definition real CR7 likeness with free unattached soccer ball physics, dynamic dribbles, juggling, and interactive kicking | Kicks the free soccer ball with knuckleball/SIUUU strikes to smash and kill bugs; blasts top bins into a stadium goal net on git push |
+| <img src="web/avatars/mario.png" width="48" height="48" alt="Mario"> | **Mario**<br><sub>Super Mario</sub> | Walker | Authentic 16-bit Super Mario with commit-based evolution (Small &rarr; Super &rarr; Fire &rarr; Star Mario) | Jump stomps bugs with retro bounce; hurls bouncing fireballs; leaps into `?` blocks for mushrooms/coins and enters green Warp Pipes |
 
+- **Mario** (Super Mario) delivers the authentic retro arcade experience powered by your git activity. Mario starts as Small Mario (0 commits), leaping up to punch floating `?` Question Mark blocks on commits to spawn Super Mushrooms and spinning coins. With more commits, he levels up and grows into **Super Mario** (1.35&times; height), **Fire Mario** (classic fire suit, hurling bouncing fireballs that extinguish bugs), and **Star Mario** (rainbow cycling invincibility). Failing test suites trigger a retro power-down shrink penalty, and code deployments (`git push`) summon a green Warp Pipe with the nostalgic 8-bit *Course Clear!* flagpole victory fanfare.
 - **Rumble** takes off the way Godzilla did in *Godzilla vs. Hedorah* (1971), the one film where he flies: it points its jaw at the ground and rides its own breath.
 - **Goku** flies on his golden Flying Nimbus with his Power Pole and Turtle School Gi, firing rapid Ki energy balls at small pests and charging the full Kamehameha wave against boss bugs.
 - **Pikachu** speaks real synthesized voice lines ("Pika-pika!", "Pikachu!", "Pika-CHUUU!"), sparks its rosy cheeks, flings crackling yellow Electro Balls at small pests, and summons 100,000-Volt sky Thunderbolts with ground shockwaves against boss bugs.
@@ -108,7 +110,7 @@ A **walker** stands on the bottom edge of the screen, wanders, and opens a parac
 throw it. A **floater** never touches the ground: it hangs in mid air, drifts somewhere new
 now and then, and when you drag it and let go it stays exactly where you left it.
 
-From a shell: `bitling pet ronaldo`, `bitling pet naruto`, `bitling pet ironman`, `bitling pet pikachu`, `bitling pet goku`, `bitling pet kaiju`, `bitling pet dragon`, `bitling pet rider`, or `bitling pet robot`.
+From a shell: `bitling pet mario`, `bitling pet ronaldo`, `bitling pet naruto`, `bitling pet ironman`, `bitling pet pikachu`, `bitling pet goku`, `bitling pet kaiju`, `bitling pet dragon`, `bitling pet rider`, or `bitling pet robot`.
 
 Adding one is a drawing and a voice, not a fork. A species declares its look, its
 proportions, how it gets around, the phrases it replaces, and how it attacks; the needs,

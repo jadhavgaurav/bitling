@@ -119,6 +119,8 @@ final class OverlayView: NSView {
         if b.style == "shuriken" { drawShuriken(ctx, b); return }
         if b.style == "knuckleball" { drawKnuckleball(ctx, b); return }
         if b.style == "siuuu" { drawSiuuu(ctx, b); return }
+        if b.style == "fireball" { drawMarioFireball(ctx, b); return }
+        if b.style == "stomp" { drawMarioStomp(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -563,6 +565,122 @@ final class OverlayView: NSView {
         let whiteCore = ballR * 0.45
         ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.98 * k).cgColor)
         ctx.fillEllipse(in: CGRect(x: -whiteCore, y: -whiteCore, width: whiteCore * 2, height: whiteCore * 2))
+
+        ctx.restoreGState()
+    }
+
+    /// Super Mario's Bouncing Fireball: rotating 8-bit fireball orb with fiery trail and retro pixel burst at target
+    private func drawMarioFireball(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.32))
+        let prog = 1.0 - k // 0 (start) to 1 (target)
+        let currX = b.from.x + (b.to.x - b.from.x) * prog
+        // Add a bouncy parabolic arch to the trajectory
+        let arch = sin(prog * .pi * 2) * -24.0
+        let currY = b.from.y + (b.to.y - b.from.y) * prog + arch
+
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+
+        // Trailing fireball embers
+        let steps = 6
+        for s in 1...steps {
+            let u = CGFloat(s) / CGFloat(steps)
+            let trailProg = max(0, prog - u * 0.15)
+            let tx = b.from.x + (b.to.x - b.from.x) * trailProg
+            let ty = b.from.y + (b.to.y - b.from.y) * trailProg + sin(trailProg * .pi * 2) * -24.0
+            let trailR: CGFloat = 8 * (1.0 - u * 0.7) * k
+            ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.3 + 0.5 * u, blue: 0.05, alpha: 0.6 * k * (1.0 - u)).cgColor)
+            ctx.fillEllipse(in: CGRect(x: tx - trailR, y: ty - trailR, width: trailR * 2, height: trailR * 2))
+        }
+
+        // Rotating fireball orb
+        ctx.translateBy(x: currX, y: currY)
+        ctx.rotate(by: b.life * 40)
+
+        // Outer red-orange flame petals
+        let orbR: CGFloat = 13 * (0.8 + k * 0.3)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.22, blue: 0.05, alpha: 0.95 * k).cgColor)
+        for i in 0..<4 {
+            let a = CGFloat(i) * .pi / 2
+            let ox = cos(a) * (orbR * 0.35)
+            let oy = sin(a) * (orbR * 0.35)
+            let petalR = orbR * 0.75
+            ctx.fillEllipse(in: CGRect(x: ox - petalR * 0.5, y: oy - petalR * 0.5, width: petalR, height: petalR))
+        }
+
+        // Inner golden yellow fiery core
+        let yellowR = orbR * 0.65
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.88, blue: 0.12, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -yellowR, y: -yellowR, width: yellowR * 2, height: yellowR * 2))
+
+        // Center white-hot kernel
+        let whiteR = orbR * 0.32
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 1.0, blue: 0.9, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -whiteR, y: -whiteR, width: whiteR * 2, height: whiteR * 2))
+
+        ctx.restoreGState()
+
+        // Authentic retro 8-bit starburst spark burst at target
+        let flash = 24 * (1.3 - k)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.05, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
+
+        // 8-direction pixel sparks
+        for dir in 0..<8 {
+            let angle = CGFloat(dir) * .pi / 4
+            let spDist = flash * 1.1
+            let sx = b.to.x + cos(angle) * spDist
+            let sy = b.to.y + sin(angle) * spDist
+            let spSize: CGFloat = 5.0 * k
+            ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.9, blue: 0.2, alpha: 0.95 * k).cgColor)
+            ctx.fill(CGRect(x: sx - spSize / 2, y: sy - spSize / 2, width: spSize, height: spSize))
+        }
+        ctx.restoreGState()
+    }
+
+    /// Super Mario's Jump Stomp: dynamic leap shockwave with Super Star burst and coin particles
+    private func drawMarioStomp(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+
+        // Downward impact beam line
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.85, blue: 0.15, alpha: 0.75 * k).cgColor)
+        ctx.setLineWidth(3.0 * k)
+        ctx.beginPath()
+        ctx.move(to: b.from)
+        ctx.addLine(to: b.to)
+        ctx.strokePath()
+
+        // Expanding ground stomp shockwave rings
+        ctx.translateBy(x: b.to.x, y: b.to.y)
+        let ringR = 26 * (1.3 - k * 0.6)
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.8, blue: 0.1, alpha: 0.9 * k).cgColor)
+        ctx.setLineWidth(2.5)
+        ctx.strokeEllipse(in: CGRect(x: -ringR, y: -ringR * 0.4, width: ringR * 2, height: ringR * 0.8))
+
+        let innerRingR = ringR * 0.55
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.95, blue: 0.4, alpha: 0.95 * k).cgColor)
+        ctx.setLineWidth(1.8)
+        ctx.strokeEllipse(in: CGRect(x: -innerRingR, y: -innerRingR * 0.4, width: innerRingR * 2, height: innerRingR * 0.8))
+
+        // Mario 5-point Super Star impact burst
+        ctx.rotate(by: b.life * 25)
+        let starR: CGFloat = 16 * (0.8 + k * 0.4)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.9, blue: 0.1, alpha: 0.95 * k).cgColor)
+        ctx.beginPath()
+        for i in 0..<5 {
+            let a1 = CGFloat(i) * (.pi * 2 / 5) - .pi / 2
+            let a2 = a1 + .pi / 5
+            let p1 = CGPoint(x: cos(a1) * starR, y: sin(a1) * starR)
+            let p2 = CGPoint(x: cos(a2) * (starR * 0.42), y: sin(a2) * (starR * 0.42))
+            if i == 0 { ctx.move(to: p1) } else { ctx.addLine(to: p1) }
+            ctx.addLine(to: p2)
+        }
+        ctx.closePath()
+        ctx.fillPath()
 
         ctx.restoreGState()
     }
@@ -1191,7 +1309,7 @@ final class Overlay {
     func fire(at id: Int, fromEyes eyes: [CGPoint], style: String = "beam") -> Bool {
         guard let index = view.beetles.firstIndex(where: { $0.id == id && $0.alive }) else { return false }
         let target = CGPoint(x: view.beetles[index].x, y: view.beetles[index].y)
-        let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam" || style == "rasenshuriken" || style == "siuuu") ? 0.35 : 0.2
+        let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam" || style == "rasenshuriken" || style == "siuuu" || style == "fireball") ? 0.35 : 0.2
         for eye in eyes {
             view.beams.append(Beam(from: screenPoint(eye), to: target, life: beamLife, style: style))
         }

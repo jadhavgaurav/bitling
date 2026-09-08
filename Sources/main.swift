@@ -531,6 +531,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     @objc private func openPanel() { panel.show() }
 
+    private func openAtLoginEnabled() -> Bool {
+        guard #available(macOS 13.0, *) else { return false }
+        return SMAppService.mainApp.status == .enabled
+    }
+
     private func panelPayload() -> [String: Any] {
         let ghConnected = ci.ghStatus.hasPrefix("GitHub Actions")
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
@@ -540,6 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "full": snapshot.full, "energy": snapshot.energy, "joy": snapshot.joy,
                 "asleep": snapshot.asleep, "hatched": snapshot.hatched,
                 "working": snapshot.working, "screen": snapshot.screen,
+                "sound": snapshot.sound,
             ],
             "today": [
                 "commits": git.commitsToday, "pushes": git.pushesToday,
@@ -548,6 +554,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             "lifetime": ["commits": snapshot.commits, "pushes": snapshot.pushes, "bugs": snapshot.bugs],
             "watch": [
                 "repos": git.repositoryCount,
+                "roots": git.extraRoots.count,
+                "claudeActive": claude.activeSessionCount,
+                "login": openAtLoginEnabled(),
                 "ci": ghConnected ? "GitHub Actions" : "CI needs gh",
                 "ciOn": ghConnected,
                 "ciDetail": "\(ci.ghStatus). Last: \(ci.lastSummary)",
@@ -573,6 +582,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "swarm": toggleSwarm()
         case "hide": toggleShown()
         case "rename": renameAction()
+        case "sound": soundAction()
+        case "login": toggleLogin()
+        case "reset": resetAction()
+        case "watchFolder": watchFolder()
+        case "bringHere": bringHere()
         case "repo": NSWorkspace.shared.open(URL(string: "https://github.com/jadhavgaurav/bitling")!)
         case "quit": NSApp.terminate(nil)
         default: return

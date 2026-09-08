@@ -256,18 +256,20 @@ on demand.
 Right click the pet (or use the menu bar) and pick **Control room**, or run `bitling panel`.
 It opens a small window that answers "what has this thing actually seen today?".
 
-- A live portrait of your pet, blinking, dozing or flashing orange while Claude works,
-  next to its name, stage, age and three vitals.
-- Pat, Feed, Debug and Sleep as buttons instead of menu items.
-- Today's tally: commits, pushes, Claude prompts and tool calls.
-- A running activity stream: every commit subject, push, merge, failing suite, deploy and
-  Claude turn, with a twelve-hour sparkline above it. It survives a restart, and "Start
-  over" wipes it along with the pet.
-- Chips along the bottom for what is connected: how many repositories are being watched,
-  whether GitHub Actions is reachable, and switches for the Claude Code hooks, the global
-  git hooks and the screen-wide bug swarm.
+**Activity** holds a live portrait of your pet, blinking, dozing or thinking in orange while
+Claude works, with its name, stage, age and three gauges. Under it: today's commits, pushes,
+prompts and tool calls, a twelve-hour timeline where every event is a tick coloured by what
+it was, and the stream itself, every commit subject, push, merge, failing suite, deploy and
+Claude turn in the order they happened. The stream survives a restart, and "Start over" wipes
+it along with the pet. Pat, Feed, Debug and Sleep sit along the bottom.
 
-Nothing in it phones home. Every number comes from the same watchers the pet reacts to.
+**Setup** is everything the menu used to bury: how many repositories are being watched and a
+rescan, extra folders outside home, whether GitHub Actions is reachable, how many Claude Code
+sessions are open, switches for the global git hooks, the Claude Code hooks and the
+screen-wide bug swarm, and the pet's own name, sound, open at login, hide and start over.
+
+Nothing in it phones home. Every number comes from the same watchers the pet reacts to, and
+the window loads no fonts, scripts or images from the network.
 
 ## What connects to where
 

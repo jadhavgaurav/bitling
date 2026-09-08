@@ -30,9 +30,10 @@ Bitling has no Dock icon. Look for the smiling face in the menu bar.
 
 **The control room**
 
-Right click the pet and pick **Control room** (or run `bitling panel`) for a small window with
-a live portrait, its vitals, today's commits, pushes and Claude turns, a running activity
-stream with a twelve-hour sparkline, and switches for the hooks and the screen-wide swarm.
+Right click the pet and pick **Control room** (or run `bitling panel`). Two tabs: **Activity**
+has a live portrait, its gauges, today's commits, pushes and Claude turns, a twelve-hour
+timeline and the full stream of everything it noticed. **Setup** has what is being watched and
+every switch that used to be buried in the menu.
 
 **Care**
 

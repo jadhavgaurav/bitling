@@ -168,7 +168,7 @@ final class ControlPanel: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         controller.add(self, name: "panel")
         config.userContentController = controller
 
-        let frame = NSRect(x: 0, y: 0, width: 420, height: 640)
+        let frame = NSRect(x: 0, y: 0, width: 420, height: 680)
         let view = WKWebView(frame: frame, configuration: config)
         view.navigationDelegate = self
         view.setValue(false, forKey: "drawsBackground")
@@ -187,7 +187,7 @@ final class ControlPanel: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         win.isMovableByWindowBackground = true
         win.appearance = NSAppearance(named: .darkAqua)
         win.backgroundColor = NSColor(red: 0.078, green: 0.086, blue: 0.165, alpha: 1)
-        win.minSize = NSSize(width: 390, height: 520)
+        win.minSize = NSSize(width: 384, height: 520)
         win.contentView = view
         win.isReleasedWhenClosed = false
         win.setFrameAutosaveName("BitlingControlRoom")

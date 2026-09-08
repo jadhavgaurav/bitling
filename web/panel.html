@@ -4,181 +4,270 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitling Control Room</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap">
 <style>
   :root{
-    --bg:#14162a;
-    --bg-2:#1b1e38;
-    --panel:#20244180;
-    --edge:#33386a;
-    --ink:#e7e9ff;
-    --dim:#8f95c9;
-    --faint:#5d6398;
-    --cyan:#7ef5e6;
-    --amber:#ffb14e;
-    --red:#ff6b6b;
-    --green:#5ddba0;
-    --violet:#b28dff;
-    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
-    --round:14px;
+    --bg:#0d0e12;
+    --raise:#15171e;
+    --line:rgba(255,255,255,.07);
+    --ink:#e9eaef;
+    --dim:#8b8f9c;
+    --faint:#585d6a;
+    --accent:#7ee7d7;
+    --red:#ff7a7a;
+    --green:#5fd493;
+    --amber:#f0b45e;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
-    margin:0;color:var(--ink);
-    font:13px/1.45 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
-    background:
-      radial-gradient(120% 80% at 50% -10%, #2b2f5c 0%, transparent 60%),
-      radial-gradient(80% 60% at 110% 110%, #1d3b4a 0%, transparent 55%),
-      var(--bg);
-    overflow:hidden;-webkit-font-smoothing:antialiased;
+    margin:0;background:var(--bg);color:var(--ink);
+    font:12px/1.45 var(--sans);
+    -webkit-font-smoothing:antialiased;overflow:hidden;
+    font-variant-numeric:tabular-nums;
   }
-  /* the faint grid gives the room its instrument-panel feel */
-  body::before{
-    content:"";position:fixed;inset:0;pointer-events:none;opacity:.35;
-    background-image:linear-gradient(var(--edge) 1px,transparent 1px),linear-gradient(90deg,var(--edge) 1px,transparent 1px);
-    background-size:34px 34px;
-    mask-image:radial-gradient(120% 90% at 50% 0%,#000 20%,transparent 75%);
+  button{all:unset;display:block;cursor:default;font:inherit;color:inherit}
+  button:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+
+  #app{height:100%;display:flex;flex-direction:column}
+
+  /* ------------------------------------------------------------------ chrome */
+  .bar{
+    height:38px;flex:0 0 auto;display:flex;align-items:center;gap:10px;
+    padding:0 14px 0 76px;                 /* 76px keeps clear of the traffic lights */
+    border-bottom:1px solid var(--line);
   }
-  #app{position:relative;height:100%;display:flex;flex-direction:column;gap:12px;padding:14px 14px 12px}
-  h1,h2,h3{margin:0;font-family:Fredoka,system-ui,sans-serif;font-weight:600}
+  .mark{font-size:10px;letter-spacing:.18em;color:var(--faint);font-weight:600}
+  .tabs{margin-left:auto;display:flex;gap:2px}
+  .tabs button{padding:5px 10px;font-size:11.5px;color:var(--faint);border-radius:5px}
+  .tabs button:hover{color:var(--dim)}
+  .tabs button[aria-selected="true"]{color:var(--ink);background:var(--raise)}
 
-  /* ---------------------------------------------------------------- header */
-  .hero{display:flex;gap:13px;align-items:center;padding:12px 13px;border:1px solid var(--edge);border-radius:var(--round);
-    background:linear-gradient(180deg,#242a52aa,#1b1f3caa);backdrop-filter:blur(8px)}
-  #portrait{width:74px;height:74px;flex:0 0 auto;border-radius:12px;background:#11132400;display:block}
-  .who{flex:1;min-width:0}
-  .who h1{font-size:21px;line-height:1.05;letter-spacing:.2px}
-  .who .sub{color:var(--dim);font-size:11px;letter-spacing:.09em;text-transform:uppercase;margin-top:3px}
-  .status{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:3px 9px;border-radius:99px;
-    font-size:11px;font-weight:600;background:#7ef5e618;color:var(--cyan);border:1px solid #7ef5e63a}
-  .status i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
-  .status.working{background:#ffb14e18;color:var(--amber);border-color:#ffb14e3a}
-  .status.error{background:#ff6b6b18;color:var(--red);border-color:#ff6b6b3a}
-  .status.asleep{background:#8f95c918;color:var(--dim);border-color:#8f95c93a}
+  .pane{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .pane[hidden]{display:none}
+  .scroll{overflow-y:auto;overscroll-behavior:contain}
+  .scroll::-webkit-scrollbar{width:10px}
+  .scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.13);border-radius:10px;border:3px solid transparent;background-clip:content-box}
+  .scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22);background-clip:content-box}
 
-  /* ---------------------------------------------------------------- vitals */
-  .vitals{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .vital{display:flex;flex-direction:column;gap:4px}
-  .vital span{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
-  .meter{height:7px;border-radius:99px;background:#0e1026;overflow:hidden;border:1px solid #2b2f57}
-  .meter i{display:block;height:100%;border-radius:99px;transition:width .5s ease,background .4s;
-    background:linear-gradient(90deg,#3ecf8e,#5ddba0);box-shadow:0 0 10px #5ddba055}
-  .meter.low i{background:linear-gradient(90deg,#e0912f,#ffb14e);box-shadow:0 0 10px #ffb14e55}
-  .meter.crit i{background:linear-gradient(90deg,#e04b4b,#ff6b6b);box-shadow:0 0 10px #ff6b6b66}
+  /* ------------------------------------------------------------------ headings */
+  .rule{
+    display:flex;align-items:center;gap:10px;padding:0 16px;margin:15px 0 7px;
+    font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);
+  }
+  .rule::after{content:"";flex:1;height:1px;background:var(--line)}
 
-  /* ---------------------------------------------------------------- actions */
-  .acts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-  .acts button{all:unset;cursor:pointer;text-align:center;padding:9px 4px;border-radius:11px;border:1px solid var(--edge);
-    background:#1e2340cc;font-size:12px;font-weight:600;color:var(--ink);transition:.16s}
-  .acts button:hover{background:#2a3059;border-color:#4a5197;transform:translateY(-1px)}
-  .acts button:active{transform:translateY(0) scale(.97)}
-  .acts button:disabled{opacity:.38;cursor:default;transform:none}
-  .acts button b{display:block;font-size:15px;margin-bottom:1px;font-weight:400}
-  .acts button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  /* ------------------------------------------------------------------ creature */
+  .creature{display:flex;gap:14px;align-items:center;padding:14px 16px 2px}
+  #portrait{width:98px;height:98px;flex:0 0 auto;margin:-4px 0}
+  .id{flex:1;min-width:0}
+  .id h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em;line-height:1.1;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .id .sub{margin-top:3px;color:var(--dim);font-size:11px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .id .sub b{font-weight:500;color:var(--accent)}
+  .id .sub b.warn{color:var(--amber)}
+  .id .sub b.bad{color:var(--red)}
+  .id .sub b.off{color:var(--faint)}
 
-  /* ---------------------------------------------------------------- tiles */
-  .today{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  .tile{padding:9px 10px;border-radius:12px;border:1px solid var(--edge);background:#1b1f3c99}
-  .tile b{display:block;font-family:var(--mono);font-size:19px;line-height:1.1;font-variant-numeric:tabular-nums}
-  .tile span{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
-  .tile.c b{color:var(--cyan)} .tile.p b{color:var(--amber)}
-  .tile.t b{color:var(--green)} .tile.k b{color:var(--violet)}
+  .gauges{margin-top:11px;display:grid;gap:6px}
+  .gauge{display:grid;grid-template-columns:40px 1fr 22px;gap:9px;align-items:center}
+  .gauge span{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+  .gauge .track{height:3px;background:rgba(255,255,255,.09)}
+  .gauge .track i{display:block;height:100%;background:#a9aebc;transition:width .45s ease,background .3s}
+  .gauge.low .track i{background:var(--amber)}
+  .gauge.crit .track i{background:var(--red)}
+  .gauge b{font:400 10.5px/1 var(--mono);color:var(--faint);text-align:right}
 
-  /* ---------------------------------------------------------------- stream */
-  .stream{flex:1;min-height:110px;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:var(--round);
-    background:#161933b3;overflow:hidden}
-  .stream header{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid var(--edge);
-    background:#1b1f3c99}
-  .stream header h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
-  #spark{width:104px;height:20px;display:block;opacity:.95}
-  .log{flex:1;overflow-y:auto;padding:6px 4px 8px;font-family:var(--mono);font-size:11.5px;scrollbar-width:thin}
-  .log::-webkit-scrollbar{width:9px}
-  .log::-webkit-scrollbar-thumb{background:#2d3260;border-radius:9px;border:3px solid transparent;background-clip:content-box}
-  .row{display:grid;grid-template-columns:50px 15px 1fr;gap:7px;align-items:baseline;padding:3px 9px;border-radius:7px}
-  .row:hover{background:#ffffff08}
-  .row time{color:var(--faint);font-size:10.5px;font-variant-numeric:tabular-nums}
-  .row .g{text-align:center;font-size:11px}
-  .row p{margin:0;color:var(--ink);overflow-wrap:anywhere}
-  .row p em{font-style:normal;color:var(--faint)}
-  .row.commit .g{color:var(--cyan)} .row.push .g,.row.deploy .g{color:var(--amber)}
-  .row.merge .g{color:var(--violet)} .row.fail .g{color:var(--red)}
-  .row.pass .g{color:var(--green)} .row.claude .g{color:#ff9d5c}
-  .empty{padding:26px 14px;text-align:center;color:var(--faint);font-family:system-ui;font-size:12px}
+  /* ------------------------------------------------------------------ counters */
+  .counts{display:flex;padding:0 16px;gap:24px}
+  .count b{display:block;font:400 21px/1.15 var(--mono);letter-spacing:-.02em}
+  .count span{font-size:10px;color:var(--faint)}
+  .count.zero b{color:var(--faint)}
 
-  /* ---------------------------------------------------------------- feet */
-  .feet{display:flex;flex-wrap:wrap;gap:6px}
-  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:99px;border:1px solid var(--edge);
-    background:#1b1f3c99;font-size:11px;color:var(--dim);cursor:pointer;transition:.16s;user-select:none}
-  .chip:hover{border-color:#4a5197;color:var(--ink)}
-  .chip i{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:0 0 auto}
-  .chip.on{color:var(--ink);border-color:#7ef5e64d;background:#7ef5e610}
-  .chip.on i{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
-  .chip.static{cursor:default}
-  .chip.static:hover{border-color:var(--edge);color:var(--dim)}
-  .chip.static.on:hover{color:var(--ink);border-color:#7ef5e64d}
-  .chip:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
-  .meta{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--faint);font-size:10.5px}
-  .meta span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .meta span:last-child{white-space:nowrap;flex:0 0 auto}
-  .meta a{color:var(--dim);text-decoration:none;border-bottom:1px dotted var(--faint)}
-  .meta a:hover{color:var(--cyan);border-color:var(--cyan)}
+  #timeline{display:block;width:100%;height:36px;margin-top:12px}
+  .tl-legend{display:flex;justify-content:space-between;padding:0 16px;
+    font:400 9px/1 var(--mono);color:var(--faint);letter-spacing:.05em}
+
+  /* ------------------------------------------------------------------ stream */
+  .log{flex:1;min-height:60px;padding:2px 0 10px}
+  .entry{display:grid;grid-template-columns:40px 3px 1fr;gap:9px;align-items:start;
+    padding:5px 16px 5px 14px}
+  .entry:hover{background:rgba(255,255,255,.028)}
+  .entry time{font:400 10.5px/1.5 var(--mono);color:var(--faint)}
+  .entry .tick{height:13px;margin-top:2px;background:var(--faint)}
+  .entry p{margin:0;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+  .entry p em{font-style:normal;color:var(--faint)}
+  .entry.push .tick,.entry.deploy .tick{background:var(--amber)}
+  .entry.fail .tick{background:var(--red)}
+  .entry.fail p{color:#ffc9c9}
+  .entry.pass .tick{background:var(--green)}
+  .entry.claude .tick{background:var(--accent)}
+  .entry.claude p{color:var(--dim)}
+  .blank{padding:28px 16px;color:var(--faint);font-size:11.5px;line-height:1.7}
+
+  /* ------------------------------------------------------------------ list rows */
+  .rows{padding:0 16px}
+  .row{display:flex;align-items:center;gap:12px;height:32px;
+    border-bottom:1px solid var(--line);width:100%}
+  .rows .row:last-child{border-bottom:0}
+  button.row:hover{background:rgba(255,255,255,.03);box-shadow:0 0 0 16px rgba(255,255,255,.03)}
+  .row .k{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+  .row .v{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+  .row .v .n{font:400 11.5px/1 var(--mono);color:var(--dim)}
+  .row .v .n.good{color:var(--accent)}
+  .row .v .n.off{color:var(--faint)}
+  .row .v .do{font-size:10.5px;color:var(--faint);transition:color .12s}
+  button.row:hover .v .do{color:var(--accent)}
+  .row .k small{display:block;margin-top:1px;font-size:10.5px;color:var(--faint);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.tall{height:44px;align-items:center}
+
+  .sw{width:26px;height:15px;border-radius:8px;background:rgba(255,255,255,.11);position:relative;flex:0 0 auto;transition:background .18s}
+  .sw::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
+    background:#9aa0ae;transition:transform .18s,background .18s}
+  .sw.on{background:rgba(126,231,215,.26)}
+  .sw.on::after{transform:translateX(11px);background:var(--accent)}
+
+  /* ------------------------------------------------------------------ footers */
+  .acts{flex:0 0 auto;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line)}
+  .acts button{height:40px;display:flex;align-items:center;justify-content:center;
+    font-size:12px;color:var(--dim);border-right:1px solid var(--line)}
+  .acts button:last-child{border-right:0}
+  .acts button:hover{background:var(--raise);color:var(--ink)}
+  .acts button:active{background:#1c1f27}
+  .acts button[disabled]{color:#3d414c;background:transparent}
+
+  .foot{flex:0 0 auto;display:flex;align-items:center;gap:12px;height:30px;padding:0 16px;
+    border-top:1px solid var(--line);font:400 10px/1 var(--mono);color:var(--faint)}
+  .foot .grow{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .foot button{display:inline;color:var(--faint);font:inherit}
+  .foot button:hover{color:var(--accent)}
+  .danger:hover{color:var(--red)}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <div id="app">
 
-  <section class="hero">
-    <canvas id="portrait" width="148" height="148" aria-label="Your Bitling"></canvas>
-    <div class="who">
-      <h1 id="petName">Bitling</h1>
-      <div class="sub" id="petSub">waking up…</div>
-      <div class="status" id="petStatus"><i></i><span>idle</span></div>
+  <header class="bar">
+    <span class="mark">BITLING</span>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="activity" aria-selected="true">Activity</button>
+      <button role="tab" data-tab="setup" aria-selected="false">Setup</button>
+    </nav>
+  </header>
+
+  <!-- ================================================================ activity -->
+  <section class="pane" id="paneActivity">
+    <div class="creature">
+      <canvas id="portrait" width="176" height="176" aria-label="Your Bitling"></canvas>
+      <div class="id">
+        <h1 id="petName">Bitling</h1>
+        <div class="sub" id="petSub"></div>
+        <div class="gauges">
+          <div class="gauge" id="gFull"><span>Tummy</span><div class="track"><i></i></div><b>0</b></div>
+          <div class="gauge" id="gEnergy"><span>Energy</span><div class="track"><i></i></div><b>0</b></div>
+          <div class="gauge" id="gJoy"><span>Joy</span><div class="track"><i></i></div><b>0</b></div>
+        </div>
+      </div>
     </div>
+
+    <div class="rule">Today</div>
+    <div class="counts">
+      <div class="count" id="cCommits"><b>0</b><span>commits</span></div>
+      <div class="count" id="cPushes"><b>0</b><span>pushes</span></div>
+      <div class="count" id="cPrompts"><b>0</b><span>prompts</span></div>
+      <div class="count" id="cTools"><b>0</b><span>tool calls</span></div>
+    </div>
+    <canvas id="timeline" height="72" aria-label="The last twelve hours"></canvas>
+    <div class="tl-legend"><span>12H AGO</span><span>NOW</span></div>
+
+    <div class="rule">Stream</div>
+    <div class="log scroll" id="log"></div>
+
+    <nav class="acts">
+      <button data-act="pat" id="bPat">Pat</button>
+      <button data-act="feed" id="bFeed">Feed</button>
+      <button data-act="play" id="bPlay">Debug</button>
+      <button data-act="sleep" id="bSleep">Sleep</button>
+    </nav>
   </section>
 
-  <section class="vitals">
-    <div class="vital"><span>Tummy</span><div class="meter" id="mFull"><i style="width:0"></i></div></div>
-    <div class="vital"><span>Energy</span><div class="meter" id="mEnergy"><i style="width:0"></i></div></div>
-    <div class="vital"><span>Joy</span><div class="meter" id="mJoy"><i style="width:0"></i></div></div>
+  <!-- =================================================================== setup -->
+  <section class="pane scroll" id="paneSetup" hidden>
+    <div class="rule">Watching</div>
+    <div class="rows">
+      <button class="row" data-act="rescan">
+        <span class="k">Repositories on this Mac</span>
+        <span class="v"><em class="do">rescan</em><span class="n" id="vRepos">0</span></span>
+      </button>
+      <button class="row" data-act="watchFolder">
+        <span class="k">Folders outside home</span>
+        <span class="v"><em class="do">choose</em><span class="n" id="vRoots">0</span></span>
+      </button>
+      <div class="row">
+        <span class="k">GitHub Actions and deploys</span>
+        <span class="v"><span class="n" id="vCi">off</span></span>
+      </div>
+      <div class="row">
+        <span class="k">Claude Code sessions</span>
+        <span class="v"><span class="n" id="vClaude">0 active</span></span>
+      </div>
+    </div>
+
+    <div class="rule">Connections</div>
+    <div class="rows">
+      <button class="row tall" data-act="gitHooks">
+        <span class="k">Global git hooks<small>Every repository reports the moment it happens</small></span>
+        <span class="v"><i class="sw" id="swGit"></i></span>
+      </button>
+      <button class="row tall" data-act="claudeHooks">
+        <span class="k">Claude Code hooks<small>Exact turns instead of tailing transcripts</small></span>
+        <span class="v"><i class="sw" id="swClaude"></i></span>
+      </button>
+      <button class="row tall" data-act="swarm">
+        <span class="k">Bugs loose on the screen<small>The whole desktop becomes the stage</small></span>
+        <span class="v"><i class="sw" id="swSwarm"></i></span>
+      </button>
+    </div>
+
+    <div class="rule">This pet</div>
+    <div class="rows">
+      <button class="row" data-act="rename">
+        <span class="k">Name</span>
+        <span class="v"><em class="do">rename</em><span class="n" id="vName">Bitling</span></span>
+      </button>
+      <button class="row" data-act="sound">
+        <span class="k">Sound</span>
+        <span class="v"><i class="sw" id="swSound"></i></span>
+      </button>
+      <button class="row" data-act="login">
+        <span class="k">Open at login</span>
+        <span class="v"><i class="sw" id="swLogin"></i></span>
+      </button>
+      <button class="row" data-act="hide">
+        <span class="k">Pet window</span>
+        <span class="v"><em class="do" id="doHide">hide</em><span class="n" id="vShown">shown</span></span>
+      </button>
+      <button class="row" data-act="bringHere">
+        <span class="k">Bring it to this screen</span>
+        <span class="v"><em class="do">move here</em></span>
+      </button>
+      <button class="row danger" data-act="reset">
+        <span class="k">Start over</span>
+        <span class="v"><em class="do">erase and re-box</em></span>
+      </button>
+    </div>
+    <div style="height:14px"></div>
   </section>
 
-  <nav class="acts" aria-label="Care">
-    <button data-act="pat"><b>✋</b>Pat</button>
-    <button data-act="feed" id="bFeed"><b>🔋</b>Feed</button>
-    <button data-act="play" id="bPlay"><b>🐞</b>Debug</button>
-    <button data-act="sleep" id="bSleep"><b>🌙</b>Sleep</button>
-  </nav>
-
-  <section class="today">
-    <div class="tile c"><b id="tCommits">0</b><span>Commits</span></div>
-    <div class="tile p"><b id="tPushes">0</b><span>Pushes</span></div>
-    <div class="tile k"><b id="tPrompts">0</b><span>Prompts</span></div>
-    <div class="tile t"><b id="tTools">0</b><span>Tools</span></div>
-  </section>
-
-  <section class="stream">
-    <header>
-      <h3>Activity</h3>
-      <canvas id="spark" width="208" height="40" aria-label="Activity over the last twelve hours"></canvas>
-    </header>
-    <div class="log" id="log"><div class="empty">Nothing yet today. Go and commit something.</div></div>
-  </section>
-
-  <nav class="feet" aria-label="Watching">
-    <button class="chip" id="cRepos" data-act="rescan" title="Rescan for repositories"><i></i><span>0 repos</span></button>
-    <div class="chip static" id="cCi"><i></i><span>CI</span></div>
-    <button class="chip" id="cClaude" data-act="claudeHooks"><i></i><span>Claude</span></button>
-    <button class="chip" id="cGitHooks" data-act="gitHooks"><i></i><span>Git hooks</span></button>
-    <button class="chip" id="cSwarm" data-act="swarm"><i></i><span>Desktop swarm</span></button>
-  </nav>
-
-  <div class="meta">
-    <span id="lifetime">Bitling</span>
-    <span><a href="#" data-act="hide" id="lnkHide">hide pet</a> · <a href="#" data-act="rename">rename</a> · <a href="#" data-act="repo">github</a> · <a href="#" data-act="quit">quit</a></span>
-  </div>
+  <footer class="foot">
+    <span class="grow" id="tally"></span>
+    <button data-act="repo">source</button>
+    <button data-act="quit" class="danger">quit</button>
+  </footer>
 </div>
 
 <script>
@@ -187,216 +276,263 @@
   const $ = (s) => document.querySelector(s);
   const HOST = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.panel;
   const send = (type, value) => { try { HOST && HOST.postMessage({ type, value }); } catch (_) {} };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   let data = { pet: {}, today: {}, lifetime: {}, watch: {}, events: [] };
 
-  // ---------------------------------------------------------------- portrait
+  // ------------------------------------------------------------------ portrait
   const pc = $('#portrait').getContext('2d');
   let blink = 0, nextBlink = 2, t = 0;
+
   function accent() {
-    const p = data.pet || {};
-    if (p.screen === 'error') return '#ff6b6b';
-    if (p.screen === 'deploy') return '#ffb14e';
-    if (p.working) return '#ff9d5c';
-    if (p.asleep) return '#6f76ad';
-    if ((p.full ?? 100) < 30) return '#ffb14e';
-    return '#7ef5e6';
+    const p = data.pet;
+    if (p.screen === 'error') return '#ff7a7a';
+    if (p.screen === 'deploy') return '#f0b45e';
+    if (p.working) return '#ffa06a';
+    if (p.asleep) return '#5d6270';
+    if ((p.full ?? 100) < 25) return '#f0b45e';
+    return '#7ee7d7';
   }
+
   function drawPortrait(dt) {
-    const p = data.pet || {};
-    const w = 148, h = 148, u = 16;
+    const p = data.pet, W = 176, H = 176, u = 19;
     t += dt;
     if (blink > 0) blink -= dt * 4;
-    else if ((nextBlink -= dt) <= 0) { blink = 1; nextBlink = 2.4 + Math.random() * 3.5; }
-    const asleep = !!p.asleep;
-    const mood = 0.4 * (p.joy ?? 60) + 0.35 * (p.full ?? 60) + 0.25 * (p.energy ?? 60);
-    const glow = accent();
-    const bob = Math.sin(t * 1.8) * 1.6;
+    else if ((nextBlink -= dt) <= 0) { blink = 1; nextBlink = 2.4 + Math.random() * 4; }
 
-    pc.clearRect(0, 0, w, h);
+    pc.clearRect(0, 0, W, H);
     pc.save();
-    pc.translate(w / 2, h / 2 + 10 + bob);
+    pc.translate(W / 2, H / 2 + 12 + Math.sin(t * 1.7) * 1.8);
 
     if (!p.hatched) {
-      // Before it is unboxed there is no robot to show, only the box it arrived in.
-      pc.rotate(Math.sin(t * 2.2) * 0.045);
-      const b = u * 1.5;
-      pc.fillStyle = '#c8a06a'; pc.strokeStyle = '#8a6a42'; pc.lineWidth = 2;
-      pc.beginPath(); pc.roundRect(-b, -b * 0.85, b * 2, b * 1.7, 6); pc.fill(); pc.stroke();
-      pc.fillStyle = '#b08b58';
-      pc.beginPath(); pc.roundRect(-b, -b * 0.85, b * 2, b * 0.5, 6); pc.fill();
-      pc.strokeStyle = '#8a6a42'; pc.lineWidth = 2.6;
-      pc.beginPath(); pc.moveTo(0, -b * 0.85); pc.lineTo(0, b * 0.85); pc.stroke();
-      pc.fillStyle = '#5b4525'; pc.font = '600 15px Fredoka, system-ui, sans-serif';
-      pc.textAlign = 'center'; pc.textBaseline = 'middle';
-      pc.fillText('?', b * 0.52, b * 0.28);
+      // Nothing to show but the crate it shipped in.
+      pc.rotate(Math.sin(t * 2.1) * 0.05);
+      const b = u * 1.45;
+      pc.fillStyle = '#3a3f4b'; pc.strokeStyle = '#535968'; pc.lineWidth = 1.5;
+      pc.beginPath(); pc.roundRect(-b, -b * 0.8, b * 2, b * 1.6, 4); pc.fill(); pc.stroke();
+      pc.fillStyle = '#454b59';
+      pc.beginPath(); pc.roundRect(-b, -b * 0.8, b * 2, b * 0.44, 4); pc.fill();
+      pc.strokeStyle = '#535968';
+      pc.beginPath(); pc.moveTo(0, -b * 0.8); pc.lineTo(0, b * 0.8); pc.stroke();
       pc.restore();
       return;
     }
 
-    // antenna
-    pc.strokeStyle = '#6f76ad'; pc.lineWidth = 2.4; pc.lineCap = 'round';
-    pc.beginPath(); pc.moveTo(0, -u * 2.5); pc.lineTo(0, -u * 3.3); pc.stroke();
-    pc.save(); pc.shadowColor = glow; pc.shadowBlur = 12; pc.fillStyle = glow;
-    pc.beginPath(); pc.arc(0, -u * 3.5, 4.4, 0, Math.PI * 2); pc.fill(); pc.restore();
+    const asleep = !!p.asleep;
+    const glow = accent();
+    const mood = 0.4 * (p.joy ?? 60) + 0.35 * (p.full ?? 60) + 0.25 * (p.energy ?? 60);
 
-    // neck, body and feet
-    pc.fillStyle = '#9aa0cc';
-    pc.beginPath(); pc.roundRect(-u * 0.3, u * 0.18, u * 0.6, u * 0.5, 3); pc.fill();
-    pc.fillStyle = '#8f95c9';
-    for (const s of [-1, 1]) { pc.beginPath(); pc.roundRect(s * u * 0.72 - u * 0.34, u * 2.1, u * 0.68, u * 0.34, 4); pc.fill(); }
-    pc.fillStyle = '#cdd0ea'; pc.strokeStyle = '#5b5f96'; pc.lineWidth = 2;
-    pc.beginPath(); pc.roundRect(-u * 1.15, u * 0.5, u * 2.3, u * 1.7, 7); pc.fill(); pc.stroke();
-    // arms
-    pc.strokeStyle = '#5b5f96'; pc.lineWidth = 5;
-    pc.beginPath(); pc.moveTo(-u * 1.2, u * 0.95); pc.lineTo(-u * 1.75, u * 1.35);
-    pc.moveTo(u * 1.2, u * 0.95); pc.lineTo(u * 1.75, u * 1.35); pc.stroke();
-    // head
-    pc.fillStyle = '#dcdff4'; pc.strokeStyle = '#5b5f96'; pc.lineWidth = 2;
-    pc.beginPath(); pc.roundRect(-u * 1.6, -u * 2.4, u * 3.2, u * 2.7, 11); pc.fill(); pc.stroke();
-    // screen
-    pc.fillStyle = '#141733';
-    pc.beginPath(); pc.roundRect(-u * 1.3, -u * 2.1, u * 2.6, u * 2.1, 8); pc.fill();
-
-    // face
+    // A contact shadow, so it stands somewhere instead of floating in a void.
     pc.save();
-    pc.shadowColor = glow; pc.shadowBlur = 9; pc.fillStyle = glow; pc.strokeStyle = glow;
-    pc.lineWidth = 2.4; pc.lineCap = 'round';
-    const ey = -u * 1.25, ex = u * 0.55, ew = 8, eh = asleep ? 2 : 10 * (1 - Math.max(0, Math.min(1, blink)) * 0.85);
+    pc.globalAlpha = 0.45; pc.fillStyle = '#000';
+    pc.beginPath(); pc.ellipse(0, u * 2.6, u * 1.1, u * 0.15, 0, 0, Math.PI * 2); pc.fill();
+    pc.restore();
+
+    pc.strokeStyle = '#6b7180'; pc.lineWidth = 2; pc.lineCap = 'round';
+    pc.beginPath(); pc.moveTo(0, -u * 2.42); pc.lineTo(0, -u * 3.2); pc.stroke();
+    pc.save(); pc.shadowColor = glow; pc.shadowBlur = 14; pc.fillStyle = glow;
+    pc.beginPath(); pc.arc(0, -u * 3.42, 4, 0, Math.PI * 2); pc.fill(); pc.restore();
+
+    pc.fillStyle = '#8f96a6';
+    pc.beginPath(); pc.roundRect(-u * 0.28, u * 0.16, u * 0.56, u * 0.5, 2); pc.fill();
+    pc.fillStyle = '#6b7180';
+    for (const s of [-1, 1]) { pc.beginPath(); pc.roundRect(s * u * 0.7 - u * 0.32, u * 2.14, u * 0.64, u * 0.32, 2); pc.fill(); }
+
+    pc.strokeStyle = '#6b7180'; pc.lineWidth = 4.5;
+    pc.beginPath();
+    pc.moveTo(-u * 1.12, u * 0.92); pc.lineTo(-u * 1.6, u * 1.3);
+    pc.moveTo(u * 1.12, u * 0.92); pc.lineTo(u * 1.6, u * 1.3);
+    pc.stroke();
+
+    pc.fillStyle = '#b9bfcc'; pc.strokeStyle = '#5c6270'; pc.lineWidth = 1.5;
+    pc.beginPath(); pc.roundRect(-u * 1.08, u * 0.5, u * 2.16, u * 1.66, 5); pc.fill(); pc.stroke();
+    pc.fillStyle = glow;
+    pc.beginPath(); pc.arc(0, u * 1.28, 2.4, 0, Math.PI * 2); pc.fill();
+
+    pc.fillStyle = '#ccd1dc'; pc.strokeStyle = '#5c6270';
+    pc.beginPath(); pc.roundRect(-u * 1.52, -u * 2.34, u * 3.04, u * 2.62, 8); pc.fill(); pc.stroke();
+    pc.fillStyle = '#101219';
+    pc.beginPath(); pc.roundRect(-u * 1.24, -u * 2.06, u * 2.48, u * 2.04, 6); pc.fill();
+
+    pc.save();
+    pc.shadowColor = glow; pc.shadowBlur = 10; pc.fillStyle = glow; pc.strokeStyle = glow;
+    pc.lineWidth = 2.2; pc.lineCap = 'round';
+    const ey = -u * 1.22, ex = u * 0.52, ew = 8.5;
+    const eh = asleep ? 2 : 11 * (1 - Math.max(0, Math.min(1, blink)) * 0.86);
     for (const s of [-1, 1]) {
-      if (asleep) { pc.beginPath(); pc.moveTo(s * ex - 5, ey); pc.lineTo(s * ex + 5, ey); pc.stroke(); }
-      else { pc.beginPath(); pc.roundRect(s * ex - ew / 2, ey - eh / 2, ew, Math.max(1.6, eh), 2.6); pc.fill(); }
+      if (asleep) { pc.beginPath(); pc.moveTo(s * ex - 5.5, ey); pc.lineTo(s * ex + 5.5, ey); pc.stroke(); }
+      else { pc.beginPath(); pc.roundRect(s * ex - ew / 2, ey - eh / 2, ew, Math.max(1.8, eh), 2.4); pc.fill(); }
     }
+    const my = -u * 0.5;
     if (p.working && !asleep) {
       for (let i = -1; i <= 1; i++) {
-        const ph = Math.sin(t * 6 - i * 1.1);
-        pc.globalAlpha = 0.45 + 0.55 * (ph * 0.5 + 0.5);
-        pc.beginPath(); pc.arc(i * 8, -u * 0.55, 2, 0, Math.PI * 2); pc.fill();
+        pc.globalAlpha = 0.35 + 0.65 * (Math.sin(t * 6 - i * 1.1) * 0.5 + 0.5);
+        pc.beginPath(); pc.arc(i * 9, my, 2.1, 0, Math.PI * 2); pc.fill();
       }
       pc.globalAlpha = 1;
     } else {
-      const curve = asleep ? 1 : (mood - 50) / 50 * 6;
-      pc.beginPath(); pc.moveTo(-7, -u * 0.55); pc.quadraticCurveTo(0, -u * 0.55 + curve, 7, -u * 0.55); pc.stroke();
+      const curve = asleep ? 1.5 : (mood - 50) / 50 * 6;
+      pc.beginPath(); pc.moveTo(-7.5, my); pc.quadraticCurveTo(0, my + curve, 7.5, my); pc.stroke();
     }
     pc.restore();
-    // chest light
-    pc.fillStyle = glow;
-    pc.beginPath(); pc.arc(0, u * 1.3, 2.6, 0, Math.PI * 2); pc.fill();
     pc.restore();
   }
 
-  // ---------------------------------------------------------------- sparkline
-  function drawSpark() {
-    const c = $('#spark'), g = c.getContext('2d');
-    const W = c.width, H = c.height;
-    g.clearRect(0, 0, W, H);
-    const now = Date.now(), buckets = new Array(12).fill(0);
+  // ------------------------------------------------------------------ timeline
+  const tl = $('#timeline'), tc = tl.getContext('2d');
+  const TL_HOURS = 12;
+  const TONE = { push: '#f0b45e', deploy: '#f0b45e', fail: '#ff7a7a', pass: '#5fd493', claude: '#7ee7d7', commit: '#8b8f9c' };
+
+  function drawTimeline() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = tl.clientWidth, h = 36;
+    if (!w) return;
+    if (tl.width !== Math.round(w * dpr)) { tl.width = Math.round(w * dpr); tl.height = Math.round(h * dpr); }
+    tc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    tc.clearRect(0, 0, w, h);
+
+    const pad = 16, span = w - pad * 2, base = h - 8, now = Date.now();
+    tc.fillStyle = 'rgba(255,255,255,.09)';
+    tc.fillRect(pad, base, span, 1);
+
+    // One faint tick an hour, a taller one every three.
+    for (let i = 0; i <= TL_HOURS; i++) {
+      const x = Math.round(pad + (span * i) / TL_HOURS) + 0.5;
+      const tall = i % 3 === 0;
+      tc.fillStyle = tall ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.07)';
+      tc.fillRect(x, base + 1, 1, tall ? 4 : 2);
+    }
+
     for (const e of data.events || []) {
       const age = (now - e.t) / 3600000;
-      if (age >= 0 && age < 12) buckets[11 - Math.floor(age)]++;
+      if (age < 0 || age >= TL_HOURS) continue;
+      const x = Math.round(pad + span * (1 - age / TL_HOURS));
+      const cls = classOf(e.kind);
+      const height = cls === 'fail' || cls === 'deploy' ? 20 : cls === 'commit' ? 11 : 15;
+      tc.fillStyle = TONE[cls] || TONE.commit;
+      tc.globalAlpha = cls === 'commit' ? 0.7 : 0.95;
+      tc.fillRect(Math.min(x, pad + span - 2), base - height, 2, height);
     }
-    const peak = Math.max(1, ...buckets);
-    const bw = W / buckets.length;
-    buckets.forEach((v, i) => {
-      const bh = Math.max(v > 0 ? 3 : 1.5, (v / peak) * (H - 6));
-      g.fillStyle = v > 0 ? 'rgba(126,245,230,0.85)' : 'rgba(93,99,152,0.35)';
-      g.beginPath(); g.roundRect(i * bw + 1.5, H - bh, bw - 3, bh, 2); g.fill();
-    });
+    tc.globalAlpha = 1;
   }
 
-  // ---------------------------------------------------------------- stream
-  const GLYPH = {
-    commit: ['●', 'commit'], amend: ['●', 'commit'], 'cherry-pick': ['●', 'commit'],
-    push: ['▲', 'push'], merge: ['⑂', 'merge'], checkout: ['⑂', 'merge'],
-    rebase: ['↻', 'merge'], 'rebase-done': ['↻', 'merge'], pull: ['▼', 'merge'],
-    stash: ['⌂', 'merge'], reset: ['⊘', 'fail'],
-    'test-failed': ['✕', 'fail'], 'test-passed': ['✓', 'pass'],
-    'deploy-started': ['⇡', 'deploy'], 'deploy-finished': ['✓', 'pass'], 'deploy-failed': ['✕', 'fail'],
-    'claude-prompt': ['✻', 'claude'], 'claude-done': ['✻', 'claude'], 'claude-notify': ['!', 'claude'],
-    'claude-session-start': ['✻', 'claude'], 'claude-session-end': ['✻', 'claude'],
-    bug: ['🐞', 'fail'], say: ['·', 'commit'],
+  // ------------------------------------------------------------------ stream
+  const KIND = {
+    commit: 'commit', amend: 'commit', 'cherry-pick': 'commit', checkout: 'commit',
+    stash: 'commit', pull: 'commit', merge: 'commit', rebase: 'commit', 'rebase-done': 'commit',
+    push: 'push', reset: 'fail',
+    'test-failed': 'fail', 'deploy-failed': 'fail', 'claude-tool-error': 'fail',
+    'test-passed': 'pass', 'deploy-finished': 'pass',
+    'deploy-started': 'deploy',
+    'claude-prompt': 'claude', 'claude-done': 'claude', 'claude-notify': 'claude',
+    'claude-session-start': 'claude',
   };
-  const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const classOf = (kind) => KIND[kind] || 'commit';
+  const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
   let logKey = null;
   function renderLog() {
-    const log = $('#log');
     const items = (data.events || []).slice().reverse();
     const key = `${items.length}:${items[0] ? items[0].t : 0}`;
     if (key === logKey) return;
     logKey = key;
+    const log = $('#log');
     if (!items.length) {
-      log.innerHTML = '<div class="empty">Nothing yet. Go and commit something.</div>';
+      log.innerHTML = '<div class="blank">Nothing recorded yet.<br>Commits, pushes, failing suites, deploys and Claude turns land here as they happen.</div>';
       return;
     }
     log.innerHTML = items.map((e) => {
-      const [g, cls] = GLYPH[e.kind] || ['·', 'commit'];
-      const where = e.repo ? `<em> ${esc(e.repo)}</em>` : '';
-      return `<div class="row ${cls}"><time>${clock(e.t)}</time><div class="g">${g}</div>` +
-             `<p>${esc(e.title)}${where}</p></div>`;
+      const repo = e.repo ? ` <em>${esc(e.repo)}</em>` : '';
+      return `<div class="entry ${classOf(e.kind)}"><time>${clock(e.t)}</time>` +
+             `<div class="tick"></div><p>${esc(e.title)}${repo}</p></div>`;
     }).join('');
   }
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  // ---------------------------------------------------------------- paint
-  function meter(el, v) {
-    const n = Math.max(0, Math.min(100, Number(v) || 0));
-    el.firstElementChild.style.width = n + '%';
-    el.classList.toggle('low', n < 40 && n >= 20);
-    el.classList.toggle('crit', n < 20);
+  // ------------------------------------------------------------------ paint
+  function gauge(id, value) {
+    const el = $(id), n = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    el.querySelector('i').style.width = n + '%';
+    el.querySelector('b').textContent = n;
+    el.classList.toggle('low', n < 40 && n >= 18);
+    el.classList.toggle('crit', n < 18);
   }
-  function chip(el, on, text, title) {
-    el.classList.toggle('on', !!on);
-    el.lastElementChild.textContent = text;
-    if (title) el.title = title;
+  function count(id, value) {
+    const el = $(id), n = Number(value) || 0;
+    el.querySelector('b').textContent = n;
+    el.classList.toggle('zero', n === 0);
   }
+  const sw = (id, on) => $(id).classList.toggle('on', !!on);
+
   function render() {
-    const p = data.pet || {}, d = data.today || {}, w = data.watch || {};
-    $('#petName').textContent = p.hatched ? (p.name || 'Bitling') : 'A mysterious box';
-    $('#petSub').textContent = p.hatched ? `${p.stage || ''} · ${p.age || ''}` : 'tap it three times to unbox';
-    const st = $('#petStatus');
-    const label = !p.hatched ? 'boxed' : p.asleep ? 'asleep' : p.screen === 'error' ? 'something is red'
-      : p.working ? 'Claude is working' : (p.full ?? 100) < 30 ? 'hungry' : 'idle';
-    st.className = 'status' + (p.asleep ? ' asleep' : p.screen === 'error' ? ' error' : p.working ? ' working' : '');
-    st.lastElementChild.textContent = label;
-    meter($('#mFull'), p.full); meter($('#mEnergy'), p.energy); meter($('#mJoy'), p.joy);
+    const p = data.pet || {}, d = data.today || {}, w = data.watch || {}, life = data.lifetime || {};
+
+    $('#petName').textContent = p.hatched ? (p.name || 'Bitling') : 'Unopened box';
+    let head = 'tap it three times to open it';
+    if (p.hatched) {
+      let mark = '<b>idle</b>';
+      if (p.asleep) mark = '<b class="off">asleep</b>';
+      else if (p.screen === 'error') mark = '<b class="bad">something went red</b>';
+      else if (p.working) mark = '<b class="warn">Claude is working</b>';
+      else if ((p.full ?? 100) < 25) mark = '<b class="warn">hungry</b>';
+      head = `${esc(p.stage || '')} · ${esc(p.age || '')} · ${mark}`;
+    }
+    $('#petSub').innerHTML = head;
+
+    gauge('#gFull', p.full); gauge('#gEnergy', p.energy); gauge('#gJoy', p.joy);
     $('#bFeed').disabled = !p.hatched || p.asleep;
     $('#bPlay').disabled = !p.hatched || p.asleep;
     $('#bSleep').disabled = !p.hatched;
-    $('#bSleep').lastChild.textContent = p.asleep ? 'Wake' : 'Sleep';
-    $('#tCommits').textContent = d.commits ?? 0;
-    $('#tPushes').textContent = d.pushes ?? 0;
-    $('#tPrompts').textContent = d.prompts ?? 0;
-    $('#tTools').textContent = d.tools ?? 0;
-    chip($('#cRepos'), (w.repos || 0) > 0, `${w.repos || 0} repos`, 'Click to rescan for git repositories');
-    chip($('#cCi'), !!w.ciOn, w.ci || 'CI off', w.ciDetail || '');
-    chip($('#cClaude'), !!w.claudeHooks, w.claudeHooks ? 'Claude hooks on' : 'Claude: transcripts',
-      'Click to connect or disconnect the Claude Code hooks');
-    chip($('#cGitHooks'), !!w.gitHooks, w.gitHooks ? 'Git hooks on' : 'Git hooks off',
-      'Click to connect or disconnect the global git hooks');
-    chip($('#cSwarm'), !!w.swarm, w.swarm ? 'Swarm on screen' : 'Swarm in window',
-      'Let beetles loose across the whole screen, or keep them in the pet window');
-    const life = data.lifetime || {};
-    $('#lifetime').textContent =
-      `${life.commits ?? 0} caught · ${life.pushes ?? 0} pushed · ${life.bugs ?? 0} zapped · v${w.version || '?'}`;
-    $('#lnkHide').textContent = w.petVisible === false ? 'show pet' : 'hide pet';
+    $('#bSleep').textContent = p.asleep ? 'Wake' : 'Sleep';
+    $('#bPat').textContent = p.hatched ? 'Pat' : 'Tap';
+
+    count('#cCommits', d.commits); count('#cPushes', d.pushes);
+    count('#cPrompts', d.prompts); count('#cTools', d.tools);
+
+    $('#vRepos').textContent = w.repos ?? 0;
+    $('#vRoots').textContent = w.roots ?? 0;
+    const ci = $('#vCi');
+    ci.textContent = w.ciOn ? 'connected' : 'needs gh';
+    ci.className = 'n ' + (w.ciOn ? 'good' : 'off');
+    const active = w.claudeActive ?? 0;
+    const cl = $('#vClaude');
+    cl.textContent = `${active} active`;
+    cl.className = 'n ' + (active ? 'good' : 'off');
+    sw('#swGit', w.gitHooks); sw('#swClaude', w.claudeHooks); sw('#swSwarm', w.swarm);
+    sw('#swSound', p.sound); sw('#swLogin', w.login);
+    $('#vName').textContent = p.hatched ? (p.name || 'Bitling') : 'unnamed';
+    $('#vShown').textContent = w.petVisible === false ? 'hidden' : 'shown';
+    $('#doHide').textContent = w.petVisible === false ? 'show' : 'hide';
+
+    $('#tally').textContent =
+      `v${w.version || '?'}  ·  ${life.commits ?? 0} caught  ·  ${life.pushes ?? 0} pushed  ·  ${life.bugs ?? 0} zapped`;
+
     renderLog();
-    drawSpark();
+    drawTimeline();
   }
 
+  // ------------------------------------------------------------------ input
   document.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-tab]');
+    if (tab) {
+      for (const b of document.querySelectorAll('[data-tab]')) {
+        const on = b === tab;
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        $(b.dataset.tab === 'activity' ? '#paneActivity' : '#paneSetup').hidden = !on;
+      }
+      if (tab.dataset.tab === 'activity') drawTimeline();
+      return;
+    }
     const el = e.target.closest('[data-act]');
-    if (!el) return;
-    e.preventDefault();
-    const act = el.dataset.act;
-    if (act && act !== 'none') send('action', act);
+    if (el && !el.disabled) send('action', el.dataset.act);
   });
 
   window.panel = { update(next) { data = next || data; render(); } };
+  window.addEventListener('resize', drawTimeline);
 
   let last = performance.now();
   (function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (!document.hidden) drawPortrait(dt);
+    drawPortrait(dt);   // rAF is already throttled when the window is not on screen
     requestAnimationFrame(frame);
   })(last);
 

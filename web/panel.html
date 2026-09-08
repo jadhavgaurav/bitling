@@ -80,8 +80,8 @@
   .gauge b{font:400 10.5px/1 var(--mono);color:var(--faint);text-align:right}
 
   /* ------------------------------------------------------------------ counters */
-  .counts{display:flex;padding:0 16px;gap:24px}
-  .count b{display:block;font:400 21px/1.15 var(--mono);letter-spacing:-.02em}
+  .counts{display:grid;grid-template-columns:repeat(5,1fr);padding:0 16px;gap:6px}
+  .count b{display:block;font:400 20px/1.15 var(--mono);letter-spacing:-.03em}
   .count span{font-size:10px;color:var(--faint)}
   .count.zero b{color:var(--faint)}
 
@@ -210,7 +210,8 @@
       <div class="count" id="cCommits"><b>0</b><span>commits</span></div>
       <div class="count" id="cPushes"><b>0</b><span>pushes</span></div>
       <div class="count" id="cPrompts"><b>0</b><span>prompts</span></div>
-      <div class="count" id="cTools"><b>0</b><span>tool calls</span></div>
+      <div class="count" id="cTools"><b>0</b><span>tools</span></div>
+      <div class="count" id="cZapped"><b>0</b><span>zapped</span></div>
     </div>
     <div id="span">
       <canvas id="timeline" height="72" aria-label="Today's activity over time"></canvas>
@@ -614,6 +615,7 @@
 
     count('#cCommits', d.commits); count('#cPushes', d.pushes);
     count('#cPrompts', d.prompts); count('#cTools', d.tools);
+    count('#cZapped', d.zapped);
 
     $('#vRepos').textContent = w.repos ?? 0;
     $('#vRoots').textContent = w.roots ?? 0;

@@ -185,6 +185,7 @@ def build(source: Path, target: Path) -> None:
         "      full: Math.round(state.full), energy: Math.round(state.energy), joy: Math.round(state.joy),\n"
         "      asleep: state.asleep, hatched: state.hatched, sound: state.sound, age: state.hatched ? ageText(state) : '',\n"
         "      commits: state.commits, pushes: state.pushes, bugs: state.bugs,\n"
+        "      bugsToday: state.bugsDay === new Date().toISOString().slice(0, 10) ? state.bugsToday : 0,\n"
         "      working: pet.working, screen: pet.screenT > 0 ? pet.screenTint : '',\n"
         "      species: state.species, locomotion: species().kind,\n"
         "      attack: (species().attack && species().attack.style) || 'beam',\n"

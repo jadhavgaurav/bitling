@@ -120,6 +120,7 @@ struct PetSnapshot {
     var commits = 0
     var pushes = 0
     var bugs = 0
+    var bugsToday = 0
     var working = false
     var screen = ""
     var species = "robot"
@@ -142,6 +143,7 @@ struct PetSnapshot {
         commits = message["commits"] as? Int ?? 0
         pushes = message["pushes"] as? Int ?? 0
         bugs = message["bugs"] as? Int ?? 0
+        bugsToday = message["bugsToday"] as? Int ?? 0
         working = message["working"] as? Bool ?? false
         screen = message["screen"] as? String ?? ""
         species = message["species"] as? String ?? "robot"
@@ -652,6 +654,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             "today": [
                 "commits": git.commitsToday, "pushes": git.pushesToday,
                 "prompts": claude.promptsToday, "tools": claude.toolsToday,
+                "zapped": snapshot.bugsToday,
             ],
             "lifetime": ["commits": snapshot.commits, "pushes": snapshot.pushes, "bugs": snapshot.bugs],
             "watch": [

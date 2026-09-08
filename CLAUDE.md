@@ -59,7 +59,11 @@ on every pet at least once, and neither is visible from reading the code.
 Run `node Tools/check_bubble_gap.mjs` after any change to a pet's art, proportions or
 growth stages. It renders each species, shows it a short line and a long one, and compares
 the topmost painted pixel with the bottom of the bubble's tail across a whole animation.
-The gap must land between 8 and 24 pixels.
+The gap must land between 8 and 24 pixels. Each species gets its own fresh page: measuring
+several in one shared page let idle timers and chatter cadence carry over between them, so
+the same species tested twice could read ten pixels apart depending on what had built up
+before the switch. If a gap check ever looks flaky, that class of bug, not the art, is the
+first thing to suspect.
 
 - Too small and the bubble sits on the creature's horns.
 - Too large and it floats with an obvious hole underneath. Pets shipped with 39 and 45

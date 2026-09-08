@@ -1769,8 +1769,24 @@
   function toggleSleep() {
     if (!state.hatched) return;
     if (state.asleep) { wake(); return; }
-    comeDown();
     state.asleep = true;
+    pet.vx = 0;
+    pet.vy = 0;
+    pet.ax = pet.x;
+    pet.fx = pet.x;
+    pet.walking = false;
+    pet.walkDir = 0;
+    pet.ironmanSpeed = 0;
+    pet.ironmanPitch = 0;
+    if (state.species === 'ironman') {
+      pet.mode = 'ground';
+      pet.landing = false;
+      pet.grounded = true;
+      pet.y = groundY;
+      pet.fy = groundY;
+    } else {
+      comeDown();
+    }
     endDebug();
     drop.active = false;
     rocket.active = false;
@@ -1787,6 +1803,13 @@
     state.asleep = false;
     pet.stretchT = 1.6;
     pet.yawn = 1.2;
+    if (floats()) {
+      pet.grounded = false;
+      pet.mode = 'ground';
+      pet.y = Math.min(pet.y, groundY - petR() * 1.5);
+      pet.vy = 0;
+      pet.thrust = 0.5;
+    }
     say(line('wake'));
     audio.squeak();
     saveState();
@@ -1863,6 +1886,14 @@
   }
   function comeDown() {
     if (pet.mode !== 'fly' || pet.landing) return;
+    if (state.asleep) {
+      pet.mode = 'ground';
+      pet.landing = false;
+      pet.grounded = true;
+      pet.vx = 0; pet.vy = 0;
+      pet.fx = pet.x; pet.fy = pet.y;
+      return;
+    }
     // A floater has nothing to come down to: it drifts somewhere else instead.
     if (floats()) {
       pet.hoverUntil = pet.t + rand(8, 16);

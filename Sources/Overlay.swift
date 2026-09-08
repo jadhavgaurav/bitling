@@ -103,7 +103,8 @@ final class OverlayView: NSView {
     }
 
     private func drawBeam(_ ctx: CGContext, _ b: Beam) {
-        if b.style == "flame" { drawFlame(ctx, b); return }
+        if b.style == "flame" { drawFlame(ctx, b, spread: 1); return }
+        if b.style == "blaze" { drawFlame(ctx, b, spread: 1.9); return }
         if b.style == "blast" { drawBlast(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
@@ -153,7 +154,7 @@ final class OverlayView: NSView {
 
     /// A breath of fire: a widening cone rather than a straight line, three layers
     /// from a dull red edge to a white core.
-    private func drawFlame(_ ctx: CGContext, _ b: Beam) {
+    private func drawFlame(_ ctx: CGContext, _ b: Beam, spread multiplier: CGFloat) {
         let k = max(0, min(1, b.life / 0.2))
         let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
         let len = max(1, hypot(dx, dy))
@@ -166,7 +167,7 @@ final class OverlayView: NSView {
             (8, NSColor(calibratedRed: 1, green: 0.95, blue: 0.76, alpha: 0.92 * k)),
         ]
         for (width, colour) in layers {
-            let spread = width * (1.3 - k * 0.5)
+            let spread = width * multiplier * (1.3 - k * 0.5)
             let midX = b.from.x + dx * 0.45, midY = b.from.y + dy * 0.45
             ctx.setFillColor(colour.cgColor)
             ctx.beginPath()

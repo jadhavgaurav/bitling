@@ -692,6 +692,76 @@
     },
   });
 
+  defineSpecies({
+    id: 'kaiju', name: 'Rumble', kind: 'ground',
+    blurb: 'Something very large that got into your dock. Stomps what it can reach and burns the rest.',
+    accent: '#f2c53d',
+    radius: [46, 32, 38, 44],
+    reach: () => 4.05,                  // the tallest back plate
+    half: (r) => r * 2.85,               // nose to tail tip, whichever way it faces
+    draw: () => drawKaiju(),
+    attack: {
+      style: 'blaze',
+      charge: 0.55,
+      behind: false,
+      origin: (r) => [{ x: Math.round(pet.x + pet.facing * r * 2.55), y: Math.round(pet.y - r * 3.06) }],
+      draw(r, k) {
+        const ox = pet.x + pet.facing * r * 2.55, oy = pet.y - r * 3.06;
+        const ang = Math.atan2(pet.zapY - oy, pet.zapX - ox);
+        const len = Math.hypot(pet.zapX - ox, pet.zapY - oy);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.translate(ox, oy);
+        ctx.rotate(ang);
+        const layers = [[1.25, `hsla(8, 100%, 48%, ${0.42 * k})`],
+                        [0.8, `hsla(26, 100%, 56%, ${0.62 * k})`],
+                        [0.42, `hsla(44, 100%, 70%, ${0.85 * k})`],
+                        [0.16, `hsla(56, 100%, 92%, ${0.95 * k})`]];
+        for (const [w, col] of layers) {
+          const spread = r * 0.62 * w * (1.2 - k * 0.35);
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(len * 0.4, -spread, len, -spread * 0.62);
+          ctx.lineTo(len, spread * 0.62);
+          ctx.quadraticCurveTo(len * 0.4, spread, 0, 0);
+          ctx.fill();
+        }
+        // embers riding the stream
+        for (let i = 0; i < 6; i++) {
+          const ph = ((pet.t * 3 + i * 0.37) % 1);
+          ctx.globalAlpha = (1 - ph) * 0.85 * k;
+          ctx.fillStyle = i % 2 ? '#ffd27a' : '#ff8a3c';
+          const ex = len * ph, ey = Math.sin(i * 2.1 + pet.t * 9) * r * 0.28 * ph;
+          ctx.beginPath(); ctx.arc(ex, ey, r * 0.06 * (1 - ph * 0.5), 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = `hsla(30, 100%, 74%, ${0.9 * k})`;
+        ctx.beginPath(); ctx.arc(len, 0, r * 0.42 * (1.4 - k), 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      },
+    },
+    voice: {
+      hello: ['RRRR', 'a small roar', 'I have arrived', 'the ground shakes, slightly'],
+      happy: ['stomp stomp', 'good rampage weather', 'nothing left to flatten', 'RRRR'],
+      hungry: ['I could eat a city block', 'feed me something large', 'empty. very empty'],
+      sleepy: ['returning to the sea', 'a long sleep is owed', 'settling into the trench'],
+      bored: ['nothing to flatten', 'peace is boring', 'where are the bugs'],
+      petted: ['hmph', 'you may pet the kaiju', 'that is acceptable', 'rrr'],
+      eat: ['CRUNCH', 'gone', 'more', 'swallowed whole'],
+      zapped: ['flattened', 'ash', 'gone', 'it is over for that one', 'RRRR'],
+      play: ['RAMPAGE', 'they are small and I am not', 'let them come', 'stomping time'],
+      working: ['rumbling…', 'building heat', 'the plates are glowing', 'wait for it'],
+      done: ['it is finished', 'the city is safe', 'flattened, all of it'],
+      testFail: ['they are EVERYWHERE', 'the suite has fallen', 'too many, even for me'],
+      testPass: ['nothing moves out there', 'all quiet', 'flattened, every one'],
+      shipped: ['it flies away', 'launched', 'off to the mainland'],
+      held: ['I am very heavy', 'you cannot lift a kaiju', 'put me DOWN'],
+      landed: ['THUD', 'the ground felt that', 'landed'],
+      night: ['the city lights are pretty', 'night rampage', 'quiet, for now'],
+    },
+  });
+
   // How far the drawing actually reaches sideways from pet.x: the head and its ear caps
   // are wider than the body, and an open parafoil is wider still.
   function petHalfWidth() { return species().half(petR(), stageOf(state)); }
@@ -1833,6 +1903,7 @@
     ctx.restore();
   }
 
+
   function drawRobot() {
     const st = stageOf(state);
     const r = petR();
@@ -2487,6 +2558,274 @@
         ctx.fillStyle = 'rgba(255,255,255,0.95)';
         ctx.beginPath(); ctx.arc(cx, cy, r * (0.04 + 0.12 * grow), 0, Math.PI * 2); ctx.fill();
         ctx.restore();
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------- Rumble, the kaiju
+  // Profile facing right, mirrored by pet.facing. The tail, body, neck, skull and upper
+  // jaw are ONE closed path, so it reads as a single creature with one outline instead of
+  // a pile of ellipses. The lower jaw is separate because it has to open.
+  function drawKaiju() {
+    const asleep = state.asleep;
+    const charging = pet.zapCharge > 0 && !asleep;
+    const firing = pet.zap > 0;
+    stageBody({ bob: 0.012, bobRate: 2.1 }, (r, t) => {
+      ctx.scale(pet.facing, 1);
+
+      const back = '#0f4726', body = '#2a8b4c', shade = '#1d6a39', lit = '#3da864';
+      const belly = '#cdd94a', bellyEdge = '#9aa92c';
+      const plate = '#f5c231', plateHot = '#ffae35', plateEdge = '#bf8214';
+      const claw = '#fdf9ec', maw = '#6f1a29', tongue = '#bd4055';
+
+      const stride = pet.walking ? Math.sin(pet.stride) : 0;
+      const held = pet.held || pet.carried;
+      const breathe = Math.sin(t * 1.8) * 0.02;
+      const hot = charging || firing;
+      const jaw = firing ? 1 : charging ? 0.45 : pet.chew > 0 ? 0.4 + 0.4 * Math.sin(t * 20) : asleep ? 0.02 : 0.14;
+      const lw = Math.max(1.6, r * 0.062);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      // The spine line: rump, back, neck, and on down the tail. Everything hangs off this.
+      const swing = Math.sin(t * 1.5 + stride * 0.6) * 0.1;
+      const tailPts = [];
+      for (let i = 0; i <= 10; i++) {
+        const u = i / 10;
+        tailPts.push([
+          (-0.5 - u * 1.95) * r,
+          (-1.5 - Math.sin(u * Math.PI * 0.7) * 0.44 + u * 0.34 + swing * u * u) * r,
+        ]);
+      }
+
+      // ---------------------------------------------------------- back plates (behind the body)
+      const ridge = [[0.68, -3.22, 0.28], [0.34, -3.34, 0.46], [-0.02, -3.24, 0.62],
+                     [-0.26, -2.92, 0.68], [-0.44, -2.52, 0.64]];
+      for (let i = 0; i < tailPts.length; i++) {
+        const u = i / (tailPts.length - 1);
+        ridge.push([tailPts[i][0] / r, tailPts[i][1] / r, Math.max(0.14, 0.56 * (1 - u * 0.78))]);
+      }
+      for (let i = 0; i < ridge.length - 1; i++) {
+        const [bx, by, size] = ridge[i];
+        const dx = ridge[i + 1][0] - bx, dy = ridge[i + 1][1] - by;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len, uy = dy / len;
+        // Canvas y grows downward, so "up" is negative. Flip the normal when it points
+        // the wrong way, or the plates on a descending tail hang underneath it.
+        let px = -uy, py = ux;
+        if (py > 0) { px = -px; py = -py; }
+        if (hot) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = `hsla(40, 100%, 66%, ${0.2 + 0.25 * Math.sin(t * 15 - i * 0.8)})`;
+          ctx.beginPath(); ctx.arc((bx + px * size * 0.6) * r, (by + py * size * 0.6) * r, size * r * 1.2, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+        // a flame shaped plate, root wide, tip swept back along the spine
+        ctx.fillStyle = hot ? plateHot : plate;
+        ctx.strokeStyle = plateEdge;
+        ctx.lineWidth = Math.max(1, r * 0.028);
+        ctx.beginPath();
+        ctx.moveTo((bx - ux * size * 0.62) * r, (by - uy * size * 0.62) * r);
+        ctx.quadraticCurveTo((bx + px * size * 0.66 - ux * size * 0.5) * r, (by + py * size * 0.66 - uy * size * 0.5) * r,
+                             (bx + px * size - ux * size * 0.72) * r, (by + py * size - uy * size * 0.72) * r);
+        ctx.quadraticCurveTo((bx + px * size * 0.5 + ux * size * 0.12) * r, (by + py * size * 0.5 + uy * size * 0.12) * r,
+                             (bx + ux * size * 0.62) * r, (by + uy * size * 0.62) * r);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+
+      // ---------------------------------------------------------- far limbs
+      ctx.fillStyle = shade;
+      ctx.beginPath(); ctx.ellipse(-r * (0.66 - stride * 0.06), -r * 1.06, r * 0.44, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(-r * (0.7 - stride * 0.12), -r * 0.66, r * 0.34, r * 0.64, r * 0.13); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-r * (0.56 - stride * 0.16), -r * 0.08, r * 0.44, r * 0.15, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = shade; ctx.lineWidth = r * 0.15;
+      ctx.beginPath(); ctx.moveTo(r * 0.62, -r * 2.62); ctx.lineTo(r * 0.94, -r * 2.4); ctx.lineTo(r * 1.14, -r * 2.34); ctx.stroke();
+      ctx.fillStyle = shade;
+      ctx.beginPath(); ctx.arc(r * 1.16, -r * 2.34, r * 0.09, 0, Math.PI * 2); ctx.fill();
+
+      const hx = r * 1.62, hy = -r * (3.26 + breathe * 4);   // skull centre
+
+      // ---------------------------------------------------------- mouth interior and lower jaw
+      ctx.save();
+      ctx.translate(hx - r * 0.42, hy + r * 0.26);
+      ctx.rotate(jaw * 0.62);
+      ctx.fillStyle = maw;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.1, -r * 0.28); ctx.lineTo(r * 1.12, r * 0.0);
+      ctx.quadraticCurveTo(r * 1.2, r * 0.2, r * 1.0, r * 0.28);
+      ctx.lineTo(-r * 0.1, r * 0.28); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = tongue;
+      ctx.beginPath(); ctx.ellipse(r * 0.52, r * 0.16, r * 0.36, r * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+      // the jaw itself
+      ctx.fillStyle = body; ctx.strokeStyle = back; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.12, r * 0.02);
+      ctx.lineTo(r * 1.02, r * 0.16);
+      ctx.quadraticCurveTo(r * 1.14, r * 0.34, r * 0.92, r * 0.44);
+      ctx.lineTo(0, r * 0.4);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = claw;
+      for (let i = 0; i < 6; i++) {
+        const x = r * (0.05 + i * 0.165), h = r * (i % 2 ? 0.1 : 0.18);
+        ctx.beginPath(); ctx.moveTo(x, r * 0.13); ctx.lineTo(x + r * 0.1, r * 0.14); ctx.lineTo(x + r * 0.05, r * 0.13 - h); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+
+      // ---------------------------------------------------------- the one silhouette
+      ctx.fillStyle = body;
+      ctx.strokeStyle = back;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      const tip = tailPts[tailPts.length - 1];
+      ctx.moveTo(tip[0], tip[1]);                                                          // tail tip
+      ctx.bezierCurveTo(-r * 1.9, -r * 1.86, -r * 1.24, -r * 1.86, -r * 0.72, -r * 1.94); // top of the tail
+      ctx.bezierCurveTo(-r * 0.62, -r * 2.46, -r * 0.4, -r * 3.06, r * 0.14, -r * 3.34);  // the back, near vertical
+      ctx.bezierCurveTo(r * 0.5, -r * 3.44, r * 0.86, -r * 3.5, r * 1.14, -r * 3.62);      // shoulders into the neck
+      ctx.bezierCurveTo(r * 1.5, -r * 3.8, r * 2.06, -r * 3.66, r * 2.3, -r * 3.4);        // skull top
+      ctx.bezierCurveTo(r * 2.58, -r * 3.3, r * 2.66, -r * 3.16, r * 2.54, -r * 3.06);     // snout tip
+      ctx.lineTo(r * 1.24, -r * 2.96);                                                     // the bite line
+      ctx.bezierCurveTo(r * 1.16, -r * 2.7, r * 1.0, -r * 2.5, r * 0.96, -r * 2.24);       // chin and throat
+      ctx.bezierCurveTo(r * 1.1, -r * 1.86, r * 1.06, -r * 1.4, r * 0.72, -r * 1.06);      // chest and belly
+      ctx.bezierCurveTo(r * 0.4, -r * 0.86, -r * 0.12, -r * 0.92, -r * 0.4, -r * 1.14);    // hip
+      ctx.bezierCurveTo(-r * 0.92, -r * 1.18, -r * 1.74, -r * 1.4, tip[0], tip[1] + r * 0.13);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+
+      // a lit band along the spine and skull
+      ctx.save(); ctx.clip();
+      ctx.fillStyle = lit;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.78, -r * 2.42);
+      ctx.bezierCurveTo(-r * 0.44, -r * 3.0, r * 0.3, -r * 3.4, r * 1.16, -r * 3.66);
+      ctx.lineTo(r * 2.34, -r * 3.42);
+      ctx.lineTo(r * 2.24, -r * 3.24);
+      ctx.bezierCurveTo(r * 1.26, -r * 3.44, r * 0.3, -r * 3.14, -r * 0.66, -r * 2.28);
+      ctx.closePath(); ctx.fill();
+
+      // belly and chest plates
+      ctx.fillStyle = belly;
+      ctx.beginPath();
+      ctx.moveTo(r * 1.02, -r * 2.6);
+      ctx.bezierCurveTo(r * 1.24, -r * 2.0, r * 1.18, -r * 1.36, r * 0.72, -r * 1.02);
+      ctx.lineTo(r * 0.0, -r * 0.92);
+      ctx.lineTo(r * 0.16, -r * 1.7);
+      ctx.bezierCurveTo(r * 0.36, -r * 2.16, r * 0.62, -r * 2.5, r * 1.02, -r * 2.6);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = bellyEdge;
+      ctx.lineWidth = Math.max(1.2, r * 0.04);
+      for (let i = 0; i < 7; i++) {
+        const u = i / 6;
+        const x0 = r * 0.12 + u * r * 0.42, y0 = -r * (1.02 + u * 1.42);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.quadraticCurveTo(x0 + r * 0.3, y0 + r * 0.08, x0 + r * (0.62 - u * 0.12), y0 - r * 0.02);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // ---------------------------------------------------------- upper fangs
+      ctx.fillStyle = claw;
+      for (let i = 0; i < 6; i++) {
+        const u = i / 5;
+        const x = r * (1.36 + u * 1.02), y = -r * (2.96 + u * 0.02);
+        const h = r * (i % 2 ? 0.1 : 0.19);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + r * 0.1, y); ctx.lineTo(x + r * 0.05, y + h); ctx.closePath(); ctx.fill();
+      }
+      // nostril
+      ctx.fillStyle = back;
+      ctx.beginPath(); ctx.ellipse(r * 2.34, -r * 3.24, r * 0.055, r * 0.04, 0, 0, Math.PI * 2); ctx.fill();
+
+      // ---------------------------------------------------------- eye under a heavy brow
+      const ex0 = r * 1.8, ey0 = -r * 3.36;
+      if (asleep) {
+        ctx.strokeStyle = back; ctx.lineWidth = Math.max(1.5, r * 0.055);
+        ctx.beginPath(); ctx.moveTo(ex0 - r * 0.14, ey0); ctx.lineTo(ex0 + r * 0.18, ey0 - r * 0.04); ctx.stroke();
+      } else {
+        ctx.fillStyle = '#fdf4d6';
+        ctx.beginPath();
+        ctx.moveTo(ex0 - r * 0.2, ey0 + r * 0.03);
+        ctx.quadraticCurveTo(ex0, ey0 - r * 0.16, ex0 + r * 0.22, ey0 - r * 0.02);
+        ctx.quadraticCurveTo(ex0, ey0 + r * 0.1, ex0 - r * 0.2, ey0 + r * 0.03);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#101408';
+        ctx.beginPath(); ctx.ellipse(ex0 + r * 0.06, ey0 - r * 0.02, r * 0.04, r * 0.075, -0.15, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = back;
+      ctx.beginPath();
+      ctx.moveTo(ex0 - r * 0.3, ey0 - r * 0.02);
+      ctx.quadraticCurveTo(ex0 + r * 0.06, ey0 - r * 0.26, ex0 + r * 0.34, ey0 - r * 0.08);
+      ctx.lineTo(ex0 + r * 0.3, ey0 - r * 0.2);
+      ctx.quadraticCurveTo(ex0 + r * 0.02, ey0 - r * 0.4, ex0 - r * 0.32, ey0 - r * 0.14);
+      ctx.closePath(); ctx.fill();
+
+      // ---------------------------------------------------------- near leg
+      const kick = held ? Math.sin(t * 10) * 0.3 : 0;
+      const hipY = -r * (2.02 + kick * 0.12), toeLift = kick * 0.6;
+      // The haunch is the same green as the body and is only outlined along the edge that
+      // actually leaves the silhouette, so it reads as muscle rather than a pasted egg.
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(-r * (0.5 - stride * 0.06), hipY);
+      ctx.bezierCurveTo(-r * 0.92, -r * 1.46, -r * 0.78, -r * (0.6 - toeLift * 0.8), -r * (0.26 - stride * 0.16), -r * (0.42 - toeLift));
+      ctx.bezierCurveTo(r * 0.2, -r * (0.34 - toeLift), r * 0.44, -r * (0.86 - kick * 0.2), r * 0.36, -r * (1.4 + kick * 0.1));
+      ctx.bezierCurveTo(r * 0.3, -r * 1.8, r * 0.04, -r * 2.08, -r * (0.5 - stride * 0.06), hipY);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = lit;                                       // a soft highlight up the thigh
+      ctx.beginPath();
+      ctx.ellipse(-r * (0.2 - stride * 0.08), -r * 1.24, r * 0.24, r * 0.5, 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = back; ctx.lineWidth = lw;
+      ctx.beginPath();                                           // outer contour only
+      ctx.moveTo(-r * (0.5 - stride * 0.06), hipY);
+      ctx.bezierCurveTo(-r * 0.92, -r * 1.46, -r * 0.78, -r * (0.6 - toeLift * 0.8), -r * (0.26 - stride * 0.16), -r * (0.42 - toeLift));
+      ctx.bezierCurveTo(r * 0.2, -r * (0.34 - toeLift), r * 0.44, -r * (0.86 - kick * 0.2), r * 0.36, -r * (1.4 + kick * 0.1));
+      ctx.stroke();
+      const fx = r * (0.08 + stride * 0.2), fy = -r * (0.14 - kick * 0.6);
+      ctx.fillStyle = body; ctx.strokeStyle = back; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(fx - r * 0.42, fy - r * 0.2);
+      ctx.lineTo(fx + r * 0.3, fy - r * 0.18);
+      ctx.quadraticCurveTo(fx + r * 0.62, fy - r * 0.1, fx + r * 0.6, fy + r * 0.13);
+      ctx.lineTo(fx - r * 0.36, fy + r * 0.14);
+      ctx.quadraticCurveTo(fx - r * 0.52, fy, fx - r * 0.42, fy - r * 0.2);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = shade; ctx.lineWidth = Math.max(1, r * 0.035);
+      for (let i = 0; i < 2; i++) {
+        const tx = fx + r * (0.06 + i * 0.22);
+        ctx.beginPath(); ctx.moveTo(tx, fy - r * 0.1); ctx.lineTo(tx + r * 0.04, fy + r * 0.12); ctx.stroke();
+      }
+      ctx.fillStyle = claw;
+      for (let i = 0; i < 3; i++) {
+        const cx = fx + r * (0.36 + i * 0.09), cy = fy + r * (0.13 - i * 0.09);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.2, cy - r * 0.07); ctx.lineTo(cx + r * 0.02, cy - r * 0.13);
+        ctx.closePath(); ctx.fill();
+      }
+
+      // ---------------------------------------------------------- near arm
+      const up = held ? 1 : hot ? 0.5 : 0;
+      ctx.fillStyle = body; ctx.strokeStyle = back; ctx.lineWidth = lw;
+      const sx = r * 0.9, sy = -r * 2.5;
+      const ax = sx + r * (0.36 + up * 0.05), ay = sy + r * (0.3 - up * 0.5);
+      const wx = ax + r * (0.34 + up * 0.18), wy = ay + r * (0.2 - up * 0.42);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - r * 0.2);
+      ctx.quadraticCurveTo(ax + r * 0.04, ay - r * 0.15, wx, wy - r * 0.085);
+      ctx.lineTo(wx, wy + r * 0.085);
+      ctx.quadraticCurveTo(ax - r * 0.04, ay + r * 0.16, sx, sy + r * 0.22);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = shade;                       // an elbow crease so it reads as a limb
+      ctx.beginPath(); ctx.ellipse(ax, ay, r * 0.05, r * 0.09, 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = claw;
+      ctx.fillStyle = claw;
+      for (let i = 0; i < 3; i++) {
+        const a = -0.5 + i * 0.4 - up * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(wx, wy);
+        ctx.lineTo(wx + Math.cos(a) * r * 0.3, wy + Math.sin(a) * r * 0.3);
+        ctx.lineTo(wx + Math.cos(a + 0.24) * r * 0.22, wy + Math.sin(a + 0.24) * r * 0.22);
+        ctx.closePath(); ctx.fill();
       }
     });
   }

@@ -43,7 +43,9 @@ every switch that used to be buried in the menu.
 
 Three of them now, in the control room's Pets tab. **Bitling** the machine walks your dock
 and lasers bugs. **Ember** the hatchling dragon floats and burns them. **Nimbo** sits cross
-legged on a small cloud and charges a two handed energy blast. Floaters never touch the
+legged on a small cloud and charges a two handed energy blast. **Rumble** is a kaiju in
+profile, with plates down its back and tail, that stomps what it can reach and breathes
+fire at the rest. Floaters never touch the
 ground: drag one, let go, and it stays hanging exactly where you left it. Your pet keeps its
 name, age and tally when you switch. Also `bitling pet <id>`.
 

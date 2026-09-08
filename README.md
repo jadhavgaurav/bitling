@@ -83,6 +83,7 @@ and with it how it moves, what it says and how it deals with a bug.
 | **Bitling**, a little machine | Walks along the bottom of your screen | Eye lasers |
 | **Ember**, a hatchling dragon | Floats, and stays where you let go of it | Breathes fire |
 | **Nimbo**, a fighter on a cloud | Floats, sitting cross legged | Charges a two handed energy blast |
+| **Rumble**, a kaiju | Walks, in profile | Stomps what it reaches, burns the rest |
 
 Bugs are not only about tests. They crawl out of a failing test suite, a failing GitHub
 Actions run, a failed deploy, a `revert` commit, a `fix` commit, and a run of three tool

@@ -571,6 +571,7 @@
     // parafoil swings wider still, because it sways about the feet.
     half: (r) => (pet.chute > 0.02 ? Math.max(r * 1.62, r * 2.15) : r * 1.62),
     draw: () => drawRobot(),
+    trail: 'thruster',                  // rockets in its feet; nothing else has them
     attack: null,                       // the eye beam is the house default
     voice: {},
   });
@@ -1347,7 +1348,9 @@
       if (pet.mode === 'fly') {
         pet.flyT += dt;
         pet.thrust = lerp(pet.thrust, pet.landing ? 0.6 : 1, Math.min(1, dt * 4));
-        if (!reduceMotion && Math.random() < 0.5) spawn('flame', pet.x, pet.y - r * 0.1, 1, { spread: r * 0.12, vx: 20, vy: 120, g: 0, size: 6, dur: 0.35, hue: rand(20, 45) });
+        if (species().trail === 'thruster' && !reduceMotion && Math.random() < 0.5) {
+          spawn('flame', pet.x, pet.y - r * 0.1, 1, { spread: r * 0.12, vx: 20, vy: 120, g: 0, size: 6, dur: 0.35, hue: rand(20, 45) });
+        }
         if (!pet.landing && pet.hoverUntil > 0 && pet.t > pet.hoverUntil) comeDown();
       } else {
         pet.thrust = lerp(pet.thrust, 0, Math.min(1, dt * 8));

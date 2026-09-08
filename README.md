@@ -4,9 +4,9 @@
 
 **A desktop pet for macOS that lives on your dev activity.**
 
-<img src="docs/media/rumble.gif" width="560" alt="Rumble, the kaiju pet, walking across the screen with its dorsal plates glowing, hunting a beetle and destroying it with atomic breath, then taking off by firing that breath at the ground">
+<img src="docs/media/goku.gif" width="560" alt="Kid Goku flying on the Flying Nimbus across your screen, spotting a bug, charging up and destroying it with the Kamehameha wave">
 
-<sub>Rumble, one of seven pets. It walks your screen, hunts the bugs your failing tests let loose, and takes off by breathing at the ground.</sub>
+<sub>Kid Goku, flying on his golden Flying Nimbus. He watches your screen, hunts the bugs your failing tests let loose, and blasts them with rapid Ki energy balls and the full Kamehameha.</sub>
 
 ### ▶ [Play with it in your browser](https://jadhavgaurav.github.io/bitling/)
 

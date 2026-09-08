@@ -1,0 +1,16 @@
+{
+  "name": "bitling",
+  "private": true,
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "lint": "node Tools/lint.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check:bubbles": "node Tools/check_bubble_gap.mjs",
+    "build": "INSTALL=0 NATIVE=1 ./build.sh"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "playwright": "^1.63.0"
+  }
+}

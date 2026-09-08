@@ -36,7 +36,8 @@ or, in Terminal:
 
   xattr -dr com.apple.quarantine /Applications/Bitling.app
 
-Bitling has no Dock icon. Look for the smiling face in the menu bar.
+Click Bitling's Dock icon for the control room, or use the smiling face in the
+menu bar. Setup has a switch to keep it out of the Dock if you prefer.
 Source: https://github.com/jadhavgaurav/bitling
 TXT
 

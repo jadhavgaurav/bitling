@@ -6,7 +6,7 @@
 
 <img src="docs/media/rumble.gif" width="560" alt="Rumble, the kaiju pet, walking across the screen with its dorsal plates glowing, hunting a beetle and destroying it with atomic breath, then taking off by firing that breath at the ground">
 
-<sub>Rumble, one of four pets. It walks your screen, hunts the bugs your failing tests let loose, and takes off by breathing at the ground.</sub>
+<sub>Rumble, one of seven pets. It walks your screen, hunts the bugs your failing tests let loose, and takes off by breathing at the ground.</sub>
 
 ### ▶ [Play with it in your browser](https://jadhavgaurav.github.io/bitling/)
 
@@ -80,24 +80,20 @@ Bitling is a roster, not a single creature. Open the control room, go to **Pets*
 one. Your pet keeps its name, its age and everything it has caught; only the body changes,
 and with it how it moves, what it says and how it deals with a bug.
 
-| | Moves | Deals with bugs |
-|---|---|---|
-| **Bitling**, a little machine | Walks along the bottom of your screen | Eye lasers |
-| **Ember**, a hatchling dragon | Floats, and stays where you let go of it | Breathes fire |
-| **Nimbo**, a fighter on a cloud | Floats, sitting cross legged | Charges a two handed energy blast |
-| **Goku**, a Saiyan warrior | Floats freely on the Flying Nimbus (Kintoun) | Ki blast energy balls for small bugs; Kamehameha for bosses |
-| **Pikachu**, an Electric Mouse Pokémon | Four-legged scamper, cute scruff-drag with dangling paws | Crackling Electro Ball for small bugs; 100,000-Volt Thunderbolt from the sky for bosses |
-| **Rumble**, a kaiju | Heavy planted steps, a broad upright body and a curled tail | Stomps nearby bugs; fires cyan atomic breath |
+| Avatar | Pet | Type | Moves | Deals with bugs |
+|:---:|---|---|---|---|
+| <img src="web/avatars/robot.png" width="48" height="48" alt="Bitling"> | **Bitling**<br><sub>The Little Machine</sub> | Walker | Stands on your dock, walks along the bottom edge of your screen | Twin cyan laser beams from its eyes |
+| <img src="web/avatars/dragon.png" width="48" height="48" alt="Ember"> | **Ember**<br><sub>Baby Dragon</sub> | Floater | Floats in mid-air, flaps its wings, and stays wherever you let go of it | Streams of dragon fire |
+| <img src="web/avatars/rider.png" width="48" height="48" alt="Nimbo"> | **Nimbo**<br><sub>Cloud Fighter</sub> | Floater | Sits cross-legged on a small golden cloud | Two-handed charging energy blast |
+| <img src="web/avatars/goku.png" width="48" height="48" alt="Goku"> | **Goku**<br><sub>Kid Goku</sub> | Floater | Rides the Flying Nimbus (Kintoun) with Power Pole and Turtle School Gi | Rapid Ki Blasts for small bugs; Kamehameha wave for bosses |
+| <img src="web/avatars/pikachu.png" width="48" height="48" alt="Pikachu"> | **Pikachu**<br><sub>Electric Mouse</sub> | Walker | Four-legged scamper, walks your screen, cute scruff-drag with dangling paws | Crackling Electro Balls for small bugs; 100,000-Volt sky Thunderbolts for bosses |
+| <img src="web/avatars/ironman.png" width="48" height="48" alt="Iron Man"> | **Iron Man**<br><sub>Armored Avenger</sub> | Floater | Hovers with active pulse repulsor boot thrusters in classic Mark III armor | Palm Repulsor Blasts for small bugs; chest Arc Reactor Unibeam for bosses |
+| <img src="web/avatars/kaiju.png" width="48" height="48" alt="Rumble"> | **Rumble**<br><sub>Atomic Titan</sub> | Walker | Heavy planted footsteps, sweeping tail, and luminous cyan dorsal plates | Stomps nearby bugs; fires cyan atomic breath |
 
-Rumble takes off the way Godzilla did in *Godzilla vs. Hedorah* (1971), the one film where
-he flies: it points its jaw at the ground and rides its own breath.
-
-Goku flies on his golden Flying Nimbus with his Power Pole and Turtle School Gi,
-firing rapid Ki energy balls at small pests and charging the full Kamehameha wave against boss bugs.
-
-Pikachu speaks real synthesized voice lines ("Pika-pika!", "Pikachu!", "Pika-CHUUU!"),
-sparks its rosy cheeks, flings crackling yellow Electro Balls at small pests, and summons
-100,000-Volt sky Thunderbolts with ground shockwaves against boss bugs.
+- **Rumble** takes off the way Godzilla did in *Godzilla vs. Hedorah* (1971), the one film where he flies: it points its jaw at the ground and rides its own breath.
+- **Goku** flies on his golden Flying Nimbus with his Power Pole and Turtle School Gi, firing rapid Ki energy balls at small pests and charging the full Kamehameha wave against boss bugs.
+- **Pikachu** speaks real synthesized voice lines ("Pika-pika!", "Pikachu!", "Pika-CHUUU!"), sparks its rosy cheeks, flings crackling yellow Electro Balls at small pests, and summons 100,000-Volt sky Thunderbolts with ground shockwaves against boss bugs.
+- **Iron Man** hovers with pulse repulsor boot jets firing, speaks Jarvis diagnostics, blasts small pests with palm repulsors, and unleashes the high-intensity chest Arc Reactor Unibeam against boss bugs.
 
 Bugs are not only about tests. They crawl out of a failing test suite, a failing GitHub
 Actions run, a failed deploy, a `revert` commit, a `fix` commit, and a run of three tool
@@ -108,7 +104,7 @@ A **walker** stands on the bottom edge of the screen, wanders, and opens a parac
 throw it. A **floater** never touches the ground: it hangs in mid air, drifts somewhere new
 now and then, and when you drag it and let go it stays exactly where you left it.
 
-From a shell: `bitling pet pikachu`, `bitling pet goku`, or `bitling pet dragon`.
+From a shell: `bitling pet ironman`, `bitling pet pikachu`, `bitling pet goku`, `bitling pet kaiju`, `bitling pet dragon`, `bitling pet rider`, or `bitling pet robot`.
 
 Adding one is a drawing and a voice, not a fork. A species declares its look, its
 proportions, how it gets around, the phrases it replaces, and how it attacks; the needs,

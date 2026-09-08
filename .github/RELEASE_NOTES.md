@@ -37,6 +37,14 @@ has a live portrait, its gauges, today's commits, pushes and Claude turns, a twe
 timeline and the full stream of everything it noticed. **Setup** has what is being watched and
 every switch that used to be buried in the menu.
 
+**Pick a pet**
+
+Three of them now, in the control room's Pets tab. **Bitling** the machine walks your dock
+and lasers bugs. **Ember** the hatchling dragon floats and burns them. **Nimbo** sits cross
+legged on a small cloud and charges a two handed energy blast. Floaters never touch the
+ground: drag one, let go, and it stays hanging exactly where you left it. Your pet keeps its
+name, age and tally when you switch. Also `bitling pet <id>`.
+
 **Care**
 
 Tap the box three times to unbox it. Click to pat, drag to carry, throw it and it

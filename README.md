@@ -72,6 +72,28 @@ The one-line installer above exists precisely so you can skip all of that.
 
 ---
 
+## Choose your pet
+
+Bitling is a roster, not a single creature. Open the control room, go to **Pets**, and pick
+one. Your pet keeps its name, its age and everything it has caught; only the body changes,
+and with it how it moves, what it says and how it deals with a bug.
+
+| | Moves | Deals with bugs |
+|---|---|---|
+| **Bitling**, a little machine | Walks along the bottom of your screen | Eye lasers |
+| **Ember**, a hatchling dragon | Floats, and stays where you let go of it | Breathes fire |
+| **Nimbo**, a fighter on a cloud | Floats, sitting cross legged | Charges a two handed energy blast |
+
+A **walker** stands on the bottom edge of the screen, wanders, and opens a parachute if you
+throw it. A **floater** never touches the ground: it hangs in mid air, drifts somewhere new
+now and then, and when you drag it and let go it stays exactly where you left it.
+
+From a shell: `bitling pet dragon`.
+
+Adding one is a drawing and a voice, not a fork. A species declares its look, its
+proportions, how it gets around, the phrases it replaces, and how it attacks; the needs,
+growth, events and speech bubbles are shared. See `SPECIES` in `web/bitling.html`.
+
 ## Meet Bitling
 
 <table>

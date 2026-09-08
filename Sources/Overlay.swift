@@ -113,6 +113,8 @@ final class OverlayView: NSView {
         if b.style == "blast" { drawBlast(ctx, b); return }
         if b.style == "unibeam" { drawUnibeam(ctx, b); return }
         if b.style == "repulsor" { drawRepulsor(ctx, b); return }
+        if b.style == "rasenshuriken" { drawRasenshuriken(ctx, b); return }
+        if b.style == "shuriken" { drawShuriken(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -333,6 +335,109 @@ final class OverlayView: NSView {
         ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
         ctx.setFillColor(NSColor(white: 1.0, alpha: 0.95 * k).cgColor)
         ctx.fillEllipse(in: CGRect(x: b.to.x - flash * 0.45, y: b.to.y - flash * 0.45, width: flash * 0.9, height: flash * 0.9))
+        ctx.restoreGState()
+    }
+
+    /// Naruto's spiraling Rasenshuriken: swirling double-helix cyan chakra beam with spinning 4-blade wind shuriken at target
+    private func drawRasenshuriken(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.35))
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let len = max(1, hypot(dx, dy))
+        let angle = atan2(dy, dx)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.translateBy(x: b.from.x, y: b.from.y)
+        ctx.rotate(by: angle)
+
+        // Core cyan chakra beam
+        let w: CGFloat = 18 * (0.8 + k * 0.5)
+        ctx.setFillColor(NSColor(calibratedRed: 0.0, green: 0.85, blue: 1.0, alpha: 0.5 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -w / 2, width: len, height: w))
+
+        // Inner pure white core
+        ctx.setFillColor(NSColor(calibratedRed: 0.9, green: 1.0, blue: 1.0, alpha: 0.9 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -w * 0.22, width: len, height: w * 0.44))
+
+        // Helical swirling chakra lines
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.2, green: 0.95, blue: 1.0, alpha: 0.85 * k).cgColor)
+        ctx.setLineWidth(2.5)
+        ctx.beginPath()
+        let steps = 12
+        for s in 0...steps {
+            let u = CGFloat(s) / CGFloat(steps)
+            let px = len * u
+            let py = sin(u * .pi * 4 + b.life * 25) * w * 0.85
+            if s == 0 { ctx.move(to: CGPoint(x: px, y: py)) }
+            else { ctx.addLine(to: CGPoint(x: px, y: py)) }
+        }
+        ctx.strokePath()
+
+        // Rotating 4-blade Rasenshuriken at target
+        ctx.translateBy(x: len, y: 0)
+        ctx.rotate(by: b.life * 35)
+
+        let bladeLen: CGFloat = 32 * (0.8 + k * 0.5)
+        let bladeW: CGFloat = bladeLen * 0.38
+        ctx.setFillColor(NSColor(calibratedRed: 0.0, green: 0.92, blue: 1.0, alpha: 0.85 * k).cgColor)
+        for i in 0..<4 {
+            ctx.saveGState()
+            ctx.rotate(by: CGFloat(i) * .pi / 2)
+            ctx.beginPath()
+            ctx.move(to: .zero)
+            ctx.addQuadCurve(to: CGPoint(x: bladeLen, y: 0), control: CGPoint(x: bladeLen * 0.5, y: bladeW))
+            ctx.addQuadCurve(to: .zero, control: CGPoint(x: bladeLen * 0.5, y: -bladeW * 0.3))
+            ctx.fillPath()
+            ctx.restoreGState()
+        }
+
+        // Central dense Rasengan sphere
+        let coreR: CGFloat = 14 * (0.8 + k * 0.4)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -coreR, y: -coreR, width: coreR * 2, height: coreR * 2))
+
+        ctx.restoreGState()
+    }
+
+    /// Naruto's Chakra Shuriken: spinning 4-point ninja star slicing through the target
+    private func drawShuriken(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+
+        // Trail line
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.55, blue: 0.0, alpha: 0.6 * k).cgColor)
+        ctx.setLineWidth(2.5 * k)
+        ctx.beginPath()
+        ctx.move(to: b.from)
+        ctx.addLine(to: b.to)
+        ctx.strokePath()
+
+        // Spinning Shuriken at target
+        ctx.translateBy(x: b.to.x, y: b.to.y)
+        ctx.rotate(by: b.life * 45)
+
+        let starR: CGFloat = 16 * (0.8 + k * 0.3)
+        ctx.setFillColor(NSColor(calibratedRed: 0.15, green: 0.15, blue: 0.2, alpha: 0.95 * k).cgColor)
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.0, green: 0.9, blue: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.setLineWidth(1.5)
+
+        ctx.beginPath()
+        for i in 0..<4 {
+            let a1 = CGFloat(i) * .pi / 2
+            let a2 = a1 + .pi / 4
+            let p1 = CGPoint(x: cos(a1) * starR, y: sin(a1) * starR)
+            let p2 = CGPoint(x: cos(a2) * (starR * 0.35), y: sin(a2) * (starR * 0.35))
+            if i == 0 { ctx.move(to: p1) } else { ctx.addLine(to: p1) }
+            ctx.addLine(to: p2)
+        }
+        ctx.closePath()
+        ctx.drawPath(using: .fillStroke)
+
+        // Spark flash
+        let spark: CGFloat = 14 * (1.2 - k)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.85, blue: 0.2, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -spark, y: -spark, width: spark * 2, height: spark * 2))
+
         ctx.restoreGState()
     }
 
@@ -884,7 +989,7 @@ final class Overlay {
     func fire(at id: Int, fromEyes eyes: [CGPoint], style: String = "beam") -> Bool {
         guard let index = view.beetles.firstIndex(where: { $0.id == id && $0.alive }) else { return false }
         let target = CGPoint(x: view.beetles[index].x, y: view.beetles[index].y + view.beetles[index].size)
-        let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam") ? 0.35 : 0.2
+        let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam" || style == "rasenshuriken") ? 0.35 : 0.2
         for eye in eyes {
             view.beams.append(Beam(from: screenPoint(eye), to: target, life: beamLife, style: style))
         }

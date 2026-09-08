@@ -26,8 +26,8 @@ async function run() {
   // Check pet switcher buttons
   const switcherBtns = await page.$$('.pet-chip');
   console.log(`Found ${switcherBtns.length} pet switcher buttons`);
-  if (switcherBtns.length !== 7) {
-    throw new Error(`Expected 7 pet buttons, got ${switcherBtns.length}`);
+  if (switcherBtns.length !== 8) {
+    throw new Error(`Expected 8 pet buttons, got ${switcherBtns.length}`);
   }
 
   // Check demo bar buttons
@@ -37,8 +37,8 @@ async function run() {
     throw new Error('Special attack or Boss button missing in demo bar!');
   }
 
-  // Switch between all 7 pets and verify their species state, title, and speech
-  const speciesList = ['robot', 'dragon', 'goku', 'rider', 'pikachu', 'ironman', 'kaiju'];
+  // Switch between all 8 pets and verify their species state, title, and speech
+  const speciesList = ['robot', 'dragon', 'goku', 'rider', 'pikachu', 'ironman', 'kaiju', 'naruto'];
   for (const sp of speciesList) {
     console.log(`Testing pet: ${sp}`);
     const btn = await page.$(`.pet-chip[data-species="${sp}"]`);
@@ -57,10 +57,14 @@ async function run() {
     await specialBtn.click();
     await page.waitForTimeout(500);
 
-    if (sp === 'goku') {
-      await page.screenshot({ path: path.resolve(__dirname, '../docs/live_goku.png') });
-    } else if (sp === 'pikachu') {
-      await page.screenshot({ path: path.resolve(__dirname, '../docs/live_pikachu.png') });
+    if (process.env.SAVE_SCREENSHOTS) {
+      if (sp === 'naruto') {
+        await page.screenshot({ path: path.resolve(__dirname, '../docs/live_naruto_blast.png') });
+      } else if (sp === 'goku') {
+        await page.screenshot({ path: path.resolve(__dirname, '../docs/live_goku.png') });
+      } else if (sp === 'pikachu') {
+        await page.screenshot({ path: path.resolve(__dirname, '../docs/live_pikachu.png') });
+      }
     }
 
     // Trigger Boss bug
@@ -78,8 +82,10 @@ async function run() {
     }
   }
 
-  await page.screenshot({ path: path.resolve(__dirname, '../docs/live_preview.png') });
-  console.log('Screenshot saved to docs/live_preview.png');
+  if (process.env.SAVE_SCREENSHOTS) {
+    await page.screenshot({ path: path.resolve(__dirname, '../docs/live_preview.png') });
+    console.log('Screenshot saved to docs/live_preview.png');
+  }
 
   await browser.close();
   if (errors.length > 0) {

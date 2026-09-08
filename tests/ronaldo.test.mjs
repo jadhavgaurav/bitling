@@ -140,3 +140,97 @@ test('desktop Ronaldo renders every sprite pose without errors, switches species
     await browser.close();
   }
 });
+
+test('free soccer ball physics, interactive kicking, bug striking, and theatrical goal push celebration', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'bitling-ronaldo-ball-'));
+  const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
+  try {
+    const generated = join(directory, 'pet.html');
+    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    const html = (await readFile(generated, 'utf8')).replace(
+      '  // ---------------------------------------------------------------- boot',
+      `window.__ronaldoTest = { pet, state, draw, drawRonaldo, ronaldoBall, ronaldoGoal, scoreRonaldoGoal, updateRonaldoBall, bugs, groundY, W };
+  // ---------------------------------------------------------------- boot`
+    );
+
+    const page = await browser.newPage({ viewport: { width: 320, height: 360 }, deviceScaleFactor: 2 });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+
+    await page.addInitScript(() => {
+      window.requestAnimationFrame = () => 0;
+      window.__hostMessages = [];
+      window.webkit = { messageHandlers: { pet: { postMessage: message => window.__hostMessages.push(message) } } };
+      window.__petSavedState = JSON.stringify({ species: 'ronaldo', hatched: true, sound: false, born: Date.now(), lastSeen: Date.now() });
+    });
+
+    await page.route('**/*', route => route.request().url() === 'http://bitling.test/'
+      ? route.fulfill({ contentType: 'text/html', body: html }) : route.abort());
+
+    await page.goto('http://bitling.test/');
+
+    const result = await page.evaluate(() => {
+      const api = window.__ronaldoTest;
+      const b = api.ronaldoBall;
+      if (!b) return { ok: false, error: 'ronaldoBall not found' };
+      if (!b.active) return { ok: false, error: 'ronaldoBall should be active' };
+      if (b.radius !== 13) return { ok: false, error: `Expected radius 13, got ${b.radius}` };
+
+      // Test free ball movement and gravity
+      b.x = 100;
+      b.y = 50;
+      b.vx = 80;
+      b.vy = 0;
+      api.updateRonaldoBall(0.05);
+      if (b.x <= 100 || b.y <= 50) return { ok: false, error: 'Ball did not update with velocity and gravity' };
+
+      // Test bug killing strike
+      const bug = { id: 999, x: 180, y: api.groundY - 10, alive: true, hp: 1, maxHp: 1 };
+      api.bugs.push(bug);
+      b.x = 120;
+      b.y = api.groundY - b.radius;
+      b.vx = 400;
+      b.vy = 0;
+      b.state = 'strike';
+      b.strikeStyle = 'knuckleball';
+      b.strikeTimer = 0;
+      b.targetBug = bug;
+
+      // Update simulation step: ball hits the bug
+      api.updateRonaldoBall(0.15);
+      const bugKilled = !bug.alive;
+      const ballRebounded = b.state === 'idle' && b.vy < 0; // popped up with backspin
+
+      // Test goal push celebration
+      api.scoreRonaldoGoal("TEST GOAL!");
+      const goalActive = api.ronaldoGoal.active;
+      const goalShooting = b.state === 'goal_shot';
+
+      // Advance goal simulation to score into net
+      for (let step = 0; step < 20; step++) {
+        api.updateRonaldoBall(0.05);
+      }
+      const netHit = b.state === 'in_net' || api.ronaldoGoal.netBulge > 0;
+
+      return {
+        ok: bugKilled && ballRebounded && goalActive && goalShooting && netHit,
+        bugKilled,
+        ballRebounded,
+        goalActive,
+        goalShooting,
+        netHit
+      };
+    });
+
+    assert.equal(errors.length, 0, `Page errors: ${errors.join(', ')}`);
+    assert.ok(result.ok, `Soccer ball simulation failure: ${JSON.stringify(result)}`);
+    assert.ok(result.bugKilled, 'Striking ball killed the bug');
+    assert.ok(result.ballRebounded, 'Ball rebounded off the bug with pop-up trajectory');
+    assert.ok(result.goalActive, 'Goal event activated');
+    assert.ok(result.goalShooting, 'Ball shot towards goal net');
+    assert.ok(result.netHit, 'Ball bulged the net upon goal');
+  } finally {
+    await browser.close();
+  }
+});
+

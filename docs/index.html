@@ -420,14 +420,17 @@
   function applyElapsed(s, ms) {
     if (!s.hatched || ms <= 0) return;
     const h = Math.min(ms, 12 * HOUR) / HOUR;
+    // Needs drift while you are away, but they stop at a floor: come back in the morning to
+    // a pet that is hungry and pleased to see you, not one that has been miserable all night.
+    const drift = (v, rate, floor) => Math.max(Math.min(v, floor), v - rate * h);
     if (s.asleep) {
       s.energy = clamp(s.energy + 30 * h);
-      s.full = clamp(s.full - 4 * h);
-      s.joy = clamp(s.joy - 2 * h);
+      s.full = drift(s.full, 4, 40);
+      s.joy = drift(s.joy, 2, 55);
     } else {
-      s.full = clamp(s.full - 8 * h);
-      s.energy = clamp(s.energy - 5 * h);
-      s.joy = clamp(s.joy - 6 * h);
+      s.full = drift(s.full, 8, 32);
+      s.energy = drift(s.energy, 5, 45);
+      s.joy = drift(s.joy, 6, 50);
     }
   }
   function stageOf(s) {
@@ -1041,6 +1044,9 @@
     tapAt(e.offsetX, e.offsetY);
   });
   canvas.addEventListener('pointerdown', (e) => {
+    // Only the primary button drags the pet. A right or middle click used to start a press
+    // that never got a matching release, leaving the pet stuck to the cursor.
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
     audio.ensure();
     lastPointerDown = performance.now();
     const x = e.offsetX, y = e.offsetY;
@@ -1078,6 +1084,12 @@
   };
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('lostpointercapture', endPointer);
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (pet.held) release();
+    pet.pressing = false;
+  });
   canvas.addEventListener('pointerleave', () => { pointer.over = false; });
   canvas.addEventListener('keydown', (e) => {
     if (e.key !== ' ' && e.key !== 'Enter') return;
@@ -1127,6 +1139,9 @@
     }
 
     const r = petR();
+    // Safety net: if the pointer stops reporting while the pet is held (a lost capture, a
+    // context menu, a window switch), let go rather than hanging in mid air for ever.
+    if (pet.held && performance.now() - pointer.pt > 1500) release();
     if (pet.held) {
       const tx = pointer.x - pet.holdOff.x, ty = pointer.y - pet.holdOff.y;
       const k = Math.min(1, dt * 18);
@@ -1592,8 +1607,8 @@
       const h = Math.max(1, eh * (1 - lids * 0.8));
       roundRect(x - ew / 2 + px, ey - h / 2 + py, ew, h, ew * 0.25);
       ctx.fill();
-      if (f.mood < 38 && !f.asleep) {
-        ctx.beginPath(); ctx.moveTo(x + sgn * ew * 0.6, ey - h * 0.75); ctx.lineTo(x - sgn * ew * 0.4, ey - h * 1.1); ctx.stroke();
+      if (f.mood < 28 && !f.asleep) {
+        ctx.beginPath(); ctx.moveTo(x + sgn * ew * 0.6, ey - h * 0.85); ctx.lineTo(x - sgn * ew * 0.35, ey - h * 1.05); ctx.stroke();
       }
     }
     const my = ey + r * 0.38;
@@ -2452,6 +2467,7 @@
   // ---------------------------------------------------------------- boot
   updateHud();
   if (state.hatched) {
+    if (awayMs > 30 * 60000) { state.joy = clamp(state.joy + 12); state.care += 1; saveState(); }
     setTimeout(() => say(awayMs > 30 * 60000 ? `you were gone ${awayText(awayMs)}!` : line('hello'), 3000), 700);
   } else {
     setTimeout(() => say(line('egg')), 900);

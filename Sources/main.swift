@@ -36,6 +36,7 @@ final class PetWindow: NSWindow {
     var onDragStart: (() -> Void)?
     var onDrag: ((CGFloat, CGFloat) -> Void)?
     var onDragEnd: ((CGFloat, CGFloat) -> Void)?
+    var onRightClick: (() -> Void)?
 
     private var pressed = false
     private var dragging = false
@@ -83,6 +84,12 @@ final class PetWindow: NSWindow {
             dragging = false
             super.sendEvent(event)
             if wasDragging { onDragEnd?(stale ? 0 : velocity.x, stale ? 0 : velocity.y) }
+        case .rightMouseDown:
+            // Never forward these to the web view: a right click there began a press that got
+            // no matching release, and the pet stayed stuck to the cursor.
+            onRightClick?()
+        case .rightMouseUp, .rightMouseDragged, .otherMouseDown, .otherMouseUp, .otherMouseDragged:
+            break
         default:
             super.sendEvent(event)
         }
@@ -276,6 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         window.onDragStart = { [weak self] in self?.dragStarted() }
         window.onDrag = { [weak self] vx, vy in self?.dragMoved(vx, vy) }
         window.onDragEnd = { [weak self] vx, vy in self?.dragEnded(vx, vy) }
+        window.onRightClick = { [weak self] in self?.showPetMenu() }
 
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let visible = screen.visibleFrame
@@ -511,6 +519,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc private func playAction() { js("petNative.action('play')") }
     @objc private func sleepAction() { js("petNative.action('sleep')") }
     @objc private func soundAction() { js("petNative.action('sound')") }
+
+    /// Right clicking the pet opens the same menu as the menu bar item.
+    private func showPetMenu() {
+        NSApp.activate(ignoringOtherApps: true)
+        let attached = statusItem.menu
+        statusItem.menu = nil
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        statusItem.menu = attached
+    }
 
     @objc private func toggleShown() {
         if window.isVisible { window.orderOut(nil) } else { window.orderFrontRegardless() }

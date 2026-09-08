@@ -227,8 +227,8 @@ def build(source: Path, target: Path) -> None:
     )
     s = patch(
         s,
-        "  updateHud();\n  if (state.hatched) {\n    setTimeout(() => say(awayMs",
-        "  updateHud();\n  pushState(true);\n  native({ type: 'ready' });\n  if (state.hatched) {\n    setTimeout(() => say(awayMs",
+        "  updateHud();\n  if (state.hatched) {\n",
+        "  updateHud();\n  pushState(true);\n  native({ type: 'ready' });\n  if (state.hatched) {\n",
     )
 
     doc = (

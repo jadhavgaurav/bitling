@@ -683,8 +683,11 @@
     accent: '#7fd4ea',
     radius: [46, 32, 38, 44],
     reach: () => 4.05,                  // the tallest back plate
-    half: (r) => r * 2.85,               // nose to tail tip, whichever way it faces
+    // Nose to tail tip, plus however far the spin throws those extremes sideways while it
+    // tumbles. Without the second term the head and tail clipped the window edge mid fall.
+    half: (r) => r * (2.85 + Math.min(1.7, Math.abs(Math.sin(pet.spin || 0)) * 3.4)),
     draw: () => drawKaiju(),
+    trail: 'flamejet',                  // it takes off by breathing at the ground
     attack: {
       style: 'blaze',
       charge: 0.55,
@@ -1411,8 +1414,14 @@
       if (pet.mode === 'fly') {
         pet.flyT += dt;
         pet.thrust = lerp(pet.thrust, pet.landing ? 0.6 : 1, Math.min(1, dt * 4));
-        if (species().trail === 'thruster' && !reduceMotion && Math.random() < 0.5) {
-          spawn('flame', pet.x, pet.y - r * 0.1, 1, { spread: r * 0.12, vx: 20, vy: 120, g: 0, size: 6, dur: 0.35, hue: rand(20, 45) });
+        const trail = species().trail;
+        if (trail && !reduceMotion && Math.random() < 0.5) {
+          if (trail === 'flamejet') {
+            const o = species().attack.origin(r)[0];
+            spawn('flame', o.x, o.y + r * 0.6, 1, { spread: r * 0.3, vx: 40, vy: 190, g: 0, size: 9, dur: 0.45, hue: rand(8, 45) });
+          } else if (trail === 'thruster') {
+            spawn('flame', pet.x, pet.y - r * 0.1, 1, { spread: r * 0.12, vx: 20, vy: 120, g: 0, size: 6, dur: 0.35, hue: rand(20, 45) });
+          }
         }
         if (!pet.landing && pet.hoverUntil > 0 && pet.t > pet.hoverUntil) comeDown();
       } else {
@@ -2557,6 +2566,7 @@
     const firing = pet.zap > 0;
     stageBody({ bob: 0.012, bobRate: 2.1 }, (r, t) => {
       ctx.scale(pet.facing, 1);
+      if (pet.walking && !pet.thrown) ctx.translate(0, -Math.abs(Math.sin(pet.stride)) * 2.2);
 
       const back = '#1b2429', body = '#6e7d84', shade = '#4b585e', lit = '#8b989d';
       const belly = '#8d8d63', bellyEdge = '#5f6041';
@@ -2564,11 +2574,83 @@
       const claw = '#3a3630', maw = '#5d1f27', tongue = '#a2495a';
       const panel = 'rgba(20,28,32,0.30)';        // the interior line work
 
-      const stride = pet.walking ? Math.sin(pet.stride) : 0;
+      const walking = pet.walking && !pet.thrown;
+      const phase = pet.stride;
       const held = pet.held || pet.carried;
+      const stride = walking ? Math.sin(phase) : 0;
+      // Two hind legs in antiphase, each swinging forward and lifting off the ground as it
+      // goes, with the body rising on the push. Without this it slid along silently.
+      function hindLeg(ph, far) {
+        const swing = walking ? Math.sin(ph) : 0;
+        const lift = walking ? Math.max(0, Math.sin(ph)) : 0;
+        const kick = held ? Math.sin(t * 10 + (far ? 1.2 : 0)) * 0.3 : 0;
+        const hipX = far ? -r * 0.5 : -r * 0.44;
+        const hipY = -r * (far ? 1.9 : 2.02) - kick * r * 0.12;
+        const kneeX = hipX + r * (0.16 + swing * 0.22);
+        const kneeY = -r * (1.02 + lift * 0.1) + kick * r * 0.3;
+        const ankX = hipX + r * (0.42 + swing * 0.56);
+        const ankY = -r * (0.26 + lift * 0.34) + kick * r * 0.62;
+
+        ctx.fillStyle = far ? shade : body;
+        ctx.strokeStyle = far ? shade : back;
+        ctx.lineWidth = far ? 0 : lw;
+        ctx.beginPath();
+        ctx.moveTo(hipX - r * 0.34, hipY + r * 0.1);
+        ctx.bezierCurveTo(hipX - r * 0.5, hipY + r * 0.8, kneeX - r * 0.34, kneeY - r * 0.3, kneeX - r * 0.2, kneeY);
+        ctx.bezierCurveTo(kneeX + r * 0.14, kneeY + r * 0.1, kneeX + r * 0.34, kneeY - r * 0.5, hipX + r * 0.4, hipY - r * 0.06);
+        ctx.closePath(); ctx.fill();
+        if (!far) {
+          ctx.beginPath();
+          ctx.moveTo(hipX - r * 0.34, hipY + r * 0.1);
+          ctx.bezierCurveTo(hipX - r * 0.5, hipY + r * 0.8, kneeX - r * 0.34, kneeY - r * 0.3, kneeX - r * 0.2, kneeY);
+          ctx.stroke();
+          ctx.fillStyle = lit;
+          ctx.beginPath(); ctx.ellipse(hipX + r * 0.12, hipY + r * 0.62, r * 0.2, r * 0.42, 0.1, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = panel; ctx.lineWidth = Math.max(1, r * 0.032);
+          for (let i = 0; i < 3; i++) {
+            const y = hipY + r * (0.3 + i * 0.34);
+            ctx.beginPath(); ctx.moveTo(hipX - r * 0.32, y); ctx.quadraticCurveTo(hipX + r * 0.06, y + r * 0.12, hipX + r * 0.34, y); ctx.stroke();
+          }
+        }
+        ctx.fillStyle = far ? shade : body;
+        ctx.strokeStyle = far ? shade : back;
+        ctx.lineWidth = far ? 0 : lw;
+        ctx.beginPath();
+        ctx.moveTo(kneeX - r * 0.19, kneeY);
+        ctx.lineTo(ankX - r * 0.16, ankY);
+        ctx.lineTo(ankX + r * 0.16, ankY);
+        ctx.lineTo(kneeX + r * 0.21, kneeY);
+        ctx.closePath(); ctx.fill();
+        if (!far) ctx.stroke();
+        ctx.fillStyle = far ? shade : body;
+        ctx.beginPath();
+        ctx.moveTo(ankX - r * 0.34, ankY - r * 0.14);
+        ctx.lineTo(ankX + r * 0.24, ankY - r * 0.12);
+        ctx.quadraticCurveTo(ankX + r * 0.56, ankY - r * 0.04, ankX + r * 0.54, ankY + r * 0.17);
+        ctx.lineTo(ankX - r * 0.3, ankY + r * 0.18);
+        ctx.quadraticCurveTo(ankX - r * 0.46, ankY + r * 0.04, ankX - r * 0.34, ankY - r * 0.14);
+        ctx.closePath(); ctx.fill();
+        if (!far) {
+          ctx.stroke();
+          ctx.strokeStyle = panel; ctx.lineWidth = Math.max(1, r * 0.032);
+          for (let i = 0; i < 2; i++) {
+            const tx = ankX + r * (0.0 + i * 0.22);
+            ctx.beginPath(); ctx.moveTo(tx, ankY - r * 0.05); ctx.lineTo(tx + r * 0.04, ankY + r * 0.16); ctx.stroke();
+          }
+        }
+        ctx.fillStyle = far ? '#2b2a26' : claw;
+        for (let i = 0; i < 3; i++) {
+          const cx = ankX + r * (0.3 + i * 0.09), cy = ankY + r * (0.17 - i * 0.09);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.2, cy - r * 0.07); ctx.lineTo(cx + r * 0.02, cy - r * 0.13);
+          ctx.closePath(); ctx.fill();
+        }
+      }
       const breathe = Math.sin(t * 1.8) * 0.02;
       const hot = charging || firing;
-      const jaw = firing ? 1 : charging ? 0.45 : pet.chew > 0 ? 0.4 + 0.4 * Math.sin(t * 20) : asleep ? 0.02 : 0.14;
+      const jetting = pet.mode === 'fly' && !asleep && !held;
+      const jaw = firing ? 1 : jetting ? 0.8 : charging ? 0.45
+        : pet.chew > 0 ? 0.4 + 0.4 * Math.sin(t * 20) : asleep ? 0.02 : 0.14;
       const lw = Math.max(1.6, r * 0.062);
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
@@ -2633,10 +2715,7 @@
       }
 
       // ---------------------------------------------------------- far limbs
-      ctx.fillStyle = shade;
-      ctx.beginPath(); ctx.ellipse(-r * (0.66 - stride * 0.06), -r * 1.06, r * 0.44, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.roundRect(-r * (0.7 - stride * 0.12), -r * 0.66, r * 0.34, r * 0.64, r * 0.13); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-r * (0.56 - stride * 0.16), -r * 0.08, r * 0.44, r * 0.15, 0, 0, Math.PI * 2); ctx.fill();
+      hindLeg(phase + Math.PI, true);
       ctx.strokeStyle = shade; ctx.lineWidth = r * 0.15;
       ctx.beginPath(); ctx.moveTo(r * 0.62, -r * 2.62); ctx.lineTo(r * 0.94, -r * 2.4); ctx.lineTo(r * 1.14, -r * 2.34); ctx.stroke();
       ctx.fillStyle = shade;
@@ -2734,7 +2813,7 @@
       // segment rings down the tail
       ctx.strokeStyle = panel;
       ctx.lineWidth = Math.max(1, r * 0.032);
-      for (let i = 2; i < tailPts.length - 1; i++) {
+      for (let i = 3; i < tailPts.length - 1; i += 2) {
         const [tx, ty] = tailPts[i];
         const [nx3, ny3] = tailPts[i + 1];
         const dx2 = nx3 - tx, dy2 = ny3 - ty, l2 = Math.hypot(dx2, dy2) || 1;
@@ -2781,80 +2860,53 @@
       ctx.closePath(); ctx.fill();
 
       // ---------------------------------------------------------- near leg
-      const kick = held ? Math.sin(t * 10) * 0.3 : 0;
-      const hipY = -r * (2.02 + kick * 0.12), toeLift = kick * 0.6;
-      // The haunch is the same green as the body and is only outlined along the edge that
-      // actually leaves the silhouette, so it reads as muscle rather than a pasted egg.
-      ctx.fillStyle = body;
-      ctx.beginPath();
-      ctx.moveTo(-r * (0.5 - stride * 0.06), hipY);
-      ctx.bezierCurveTo(-r * 0.92, -r * 1.46, -r * 0.78, -r * (0.6 - toeLift * 0.8), -r * (0.26 - stride * 0.16), -r * (0.42 - toeLift));
-      ctx.bezierCurveTo(r * 0.2, -r * (0.34 - toeLift), r * 0.44, -r * (0.86 - kick * 0.2), r * 0.36, -r * (1.4 + kick * 0.1));
-      ctx.bezierCurveTo(r * 0.3, -r * 1.8, r * 0.04, -r * 2.08, -r * (0.5 - stride * 0.06), hipY);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = lit;                                       // a soft highlight up the thigh
-      ctx.beginPath();
-      ctx.ellipse(-r * (0.2 - stride * 0.08), -r * 1.24, r * 0.24, r * 0.5, 0.12, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = panel;                                   // muscle panelling
-      ctx.lineWidth = Math.max(1, r * 0.032);
-      for (let i = 0; i < 3; i++) {
-        const y = -r * (1.6 - i * 0.34);
-        ctx.beginPath();
-        ctx.moveTo(-r * (0.5 - stride * 0.06), y);
-        ctx.quadraticCurveTo(-r * 0.1, y + r * 0.14, r * (0.3 - i * 0.04), y - r * 0.02);
-        ctx.stroke();
-      }
-      ctx.strokeStyle = back; ctx.lineWidth = lw;
-      ctx.beginPath();                                           // outer contour only
-      ctx.moveTo(-r * (0.5 - stride * 0.06), hipY);
-      ctx.bezierCurveTo(-r * 0.92, -r * 1.46, -r * 0.78, -r * (0.6 - toeLift * 0.8), -r * (0.26 - stride * 0.16), -r * (0.42 - toeLift));
-      ctx.bezierCurveTo(r * 0.2, -r * (0.34 - toeLift), r * 0.44, -r * (0.86 - kick * 0.2), r * 0.36, -r * (1.4 + kick * 0.1));
-      ctx.stroke();
-      const fx = r * (0.08 + stride * 0.2), fy = -r * (0.14 - kick * 0.6);
-      ctx.fillStyle = body; ctx.strokeStyle = back; ctx.lineWidth = lw;
-      ctx.beginPath();
-      ctx.moveTo(fx - r * 0.42, fy - r * 0.2);
-      ctx.lineTo(fx + r * 0.3, fy - r * 0.18);
-      ctx.quadraticCurveTo(fx + r * 0.62, fy - r * 0.1, fx + r * 0.6, fy + r * 0.13);
-      ctx.lineTo(fx - r * 0.36, fy + r * 0.14);
-      ctx.quadraticCurveTo(fx - r * 0.52, fy, fx - r * 0.42, fy - r * 0.2);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = shade; ctx.lineWidth = Math.max(1, r * 0.035);
-      for (let i = 0; i < 2; i++) {
-        const tx = fx + r * (0.06 + i * 0.22);
-        ctx.beginPath(); ctx.moveTo(tx, fy - r * 0.1); ctx.lineTo(tx + r * 0.04, fy + r * 0.12); ctx.stroke();
-      }
-      ctx.fillStyle = claw;
-      for (let i = 0; i < 3; i++) {
-        const cx = fx + r * (0.36 + i * 0.09), cy = fy + r * (0.13 - i * 0.09);
-        ctx.beginPath();
-        ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.2, cy - r * 0.07); ctx.lineTo(cx + r * 0.02, cy - r * 0.13);
-        ctx.closePath(); ctx.fill();
+      hindLeg(phase, false);
+
+      if (jetting) {
+        // Godzilla flew exactly once, in Godzilla vs. Hedorah, by aiming his breath at the
+        // ground and riding it. That is a behaviour rather than a design, so Rumble gets it.
+        const mx = r * 2.55, my = -r * 3.06;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.translate(mx, my);
+        ctx.rotate(1.15);                              // down, and a little behind
+        const jet = r * (2.6 + Math.sin(t * 18) * 0.18);
+        for (const [w, col] of [[1, 'hsla(8, 100%, 50%, 0.34)'], [0.6, 'hsla(28, 100%, 58%, 0.5)'],
+                                [0.28, 'hsla(48, 100%, 82%, 0.8)']]) {
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(jet * 0.45, -r * 0.52 * w, jet, -r * 0.34 * w);
+          ctx.lineTo(jet, r * 0.34 * w);
+          ctx.quadraticCurveTo(jet * 0.45, r * 0.52 * w, 0, 0);
+          ctx.fill();
+        }
+        ctx.restore();
       }
 
       // ---------------------------------------------------------- near arm
       const up = held ? 1 : hot ? 0.5 : 0;
       ctx.fillStyle = body; ctx.strokeStyle = back; ctx.lineWidth = lw;
-      const sx = r * 0.9, sy = -r * 2.5;
-      const ax = sx + r * (0.36 + up * 0.05), ay = sy + r * (0.3 - up * 0.5);
-      const wx = ax + r * (0.34 + up * 0.18), wy = ay + r * (0.2 - up * 0.42);
+      const swingArm = walking ? Math.sin(phase + Math.PI) * 0.12 : 0;
+      const sx = r * 0.92, sy = -r * 2.52;
+      const ax = sx + r * (0.46 + up * 0.06 + swingArm), ay = sy + r * (0.36 - up * 0.6);
+      const wx = ax + r * (0.44 + up * 0.22 + swingArm), wy = ay + r * (0.24 - up * 0.5);
       ctx.beginPath();
-      ctx.moveTo(sx, sy - r * 0.2);
-      ctx.quadraticCurveTo(ax + r * 0.04, ay - r * 0.15, wx, wy - r * 0.085);
-      ctx.lineTo(wx, wy + r * 0.085);
-      ctx.quadraticCurveTo(ax - r * 0.04, ay + r * 0.16, sx, sy + r * 0.22);
+      ctx.moveTo(sx, sy - r * 0.26);
+      ctx.quadraticCurveTo(ax + r * 0.06, ay - r * 0.2, wx, wy - r * 0.12);
+      ctx.lineTo(wx, wy + r * 0.12);
+      ctx.quadraticCurveTo(ax - r * 0.06, ay + r * 0.22, sx, sy + r * 0.28);
       ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = shade;                       // an elbow crease so it reads as a limb
-      ctx.beginPath(); ctx.ellipse(ax, ay, r * 0.05, r * 0.09, 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(ax, ay, r * 0.07, r * 0.12, 0.4, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = claw;
       ctx.fillStyle = claw;
       for (let i = 0; i < 3; i++) {
         const a = -0.5 + i * 0.4 - up * 0.8;
         ctx.beginPath();
         ctx.moveTo(wx, wy);
-        ctx.lineTo(wx + Math.cos(a) * r * 0.3, wy + Math.sin(a) * r * 0.3);
-        ctx.lineTo(wx + Math.cos(a + 0.24) * r * 0.22, wy + Math.sin(a + 0.24) * r * 0.22);
+        ctx.lineTo(wx + Math.cos(a) * r * 0.38, wy + Math.sin(a) * r * 0.38);
+        ctx.lineTo(wx + Math.cos(a + 0.26) * r * 0.28, wy + Math.sin(a + 0.26) * r * 0.28);
         ctx.closePath(); ctx.fill();
       }
     });

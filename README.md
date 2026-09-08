@@ -85,6 +85,9 @@ and with it how it moves, what it says and how it deals with a bug.
 | **Nimbo**, a fighter on a cloud | Floats, sitting cross legged | Charges a two handed energy blast |
 | **Rumble**, a kaiju | Walks, in profile | Stomps what it reaches, burns the rest |
 
+Rumble takes off the way Godzilla did in *Godzilla vs. Hedorah* (1971), the one film where
+he flies: it points its jaw at the ground and rides its own breath.
+
 Bugs are not only about tests. They crawl out of a failing test suite, a failing GitHub
 Actions run, a failed deploy, a `revert` commit, a `fix` commit, and a run of three tool
 errors inside half a minute. Whatever breaks, something scuttles across your screen and

@@ -4,7 +4,9 @@
 
 **A desktop pet for macOS that lives on your dev activity.**
 
-<img src="docs/media/demo.gif" width="620" alt="Bitling reacting: it beams with heart eyes when patted, catches a commit, then its screen turns red with ERR as beetles crawl in and it fires twin laser beams from its eyes to destroy them">
+<img src="docs/media/rumble.gif" width="560" alt="Rumble, the kaiju pet, walking across the screen with its dorsal plates glowing, hunting a beetle and destroying it with atomic breath, then taking off by firing that breath at the ground">
+
+<sub>Rumble, one of four pets. It walks your screen, hunts the bugs your failing tests let loose, and takes off by breathing at the ground.</sub>
 
 ### ▶ [Play with it in your browser](https://jadhavgaurav.github.io/bitling/)
 
@@ -83,10 +85,19 @@ and with it how it moves, what it says and how it deals with a bug.
 | **Bitling**, a little machine | Walks along the bottom of your screen | Eye lasers |
 | **Ember**, a hatchling dragon | Floats, and stays where you let go of it | Breathes fire |
 | **Nimbo**, a fighter on a cloud | Floats, sitting cross legged | Charges a two handed energy blast |
-| **Rumble**, a kaiju | Walks, in profile | Stomps what it reaches, burns the rest |
+| **Goku**, a Saiyan warrior | Floats freely on the Flying Nimbus (Kintoun) | Ki blast energy balls for small bugs; Kamehameha for bosses |
+| **Pikachu**, an Electric Mouse Pokémon | Four-legged scamper, cute scruff-drag with dangling paws | Crackling Electro Ball for small bugs; 100,000-Volt Thunderbolt from the sky for bosses |
+| **Rumble**, a kaiju | Heavy planted steps, a broad upright body and a curled tail | Stomps nearby bugs; fires cyan atomic breath |
 
 Rumble takes off the way Godzilla did in *Godzilla vs. Hedorah* (1971), the one film where
 he flies: it points its jaw at the ground and rides its own breath.
+
+Goku flies on his golden Flying Nimbus with his Power Pole and Turtle School Gi,
+firing rapid Ki energy balls at small pests and charging the full Kamehameha wave against boss bugs.
+
+Pikachu speaks real synthesized voice lines ("Pika-pika!", "Pikachu!", "Pika-CHUUU!"),
+sparks its rosy cheeks, flings crackling yellow Electro Balls at small pests, and summons
+100,000-Volt sky Thunderbolts with ground shockwaves against boss bugs.
 
 Bugs are not only about tests. They crawl out of a failing test suite, a failing GitHub
 Actions run, a failed deploy, a `revert` commit, a `fix` commit, and a run of three tool
@@ -97,13 +108,17 @@ A **walker** stands on the bottom edge of the screen, wanders, and opens a parac
 throw it. A **floater** never touches the ground: it hangs in mid air, drifts somewhere new
 now and then, and when you drag it and let go it stays exactly where you left it.
 
-From a shell: `bitling pet dragon`.
+From a shell: `bitling pet pikachu`, `bitling pet goku`, or `bitling pet dragon`.
 
 Adding one is a drawing and a voice, not a fork. A species declares its look, its
 proportions, how it gets around, the phrases it replaces, and how it attacks; the needs,
 growth, events and speech bubbles are shared. See `SPECIES` in `web/bitling.html`.
 
 ## Meet Bitling
+
+<p align="center">
+<img src="docs/media/demo.gif" width="560" alt="Bitling the robot: it beams with heart eyes when patted, catches a commit, then its screen turns red with ERR as beetles crawl in and it fires twin laser beams from its eyes to destroy them">
+</p>
 
 <table>
 <tr>
@@ -336,6 +351,19 @@ That derives the pet page, compiles a universal binary, draws the icon, ad-hoc s
 bundle, installs `/Applications/Bitling.app`, and links the `bitling` command. Use
 `INSTALL=0 ./build.sh` to build without installing, or `NATIVE=1` to skip the second
 architecture while developing.
+
+To check changes on macOS, use Node.js 22.13+ and Google Chrome:
+
+```bash
+npm ci
+npm run lint
+npm test
+npm run build              # host architecture, without installing
+```
+
+The tests cover foot contact, desktop animation bounds and bridge actions, and render the
+native atomic breath to check its color. Set `BITLING_BROWSER_CHANNEL=chromium` to use a
+Playwright Chromium installation instead of Chrome.
 
 ```bash
 ./release.sh              # build/Bitling-<version>.dmg

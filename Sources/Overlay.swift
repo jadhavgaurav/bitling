@@ -103,8 +103,13 @@ final class OverlayView: NSView {
     }
 
     private func drawBeam(_ ctx: CGContext, _ b: Beam) {
+        if b.style == "thunderbolt" { drawThunderbolt(ctx, b); return }
+        if b.style == "electroball" { drawElectroBall(ctx, b); return }
+        if b.style == "kamehameha" { drawKamehameha(ctx, b); return }
+        if b.style == "kiball" || b.style == "energyball" { drawEnergyBall(ctx, b); return }
         if b.style == "flame" { drawFlame(ctx, b, spread: 1); return }
         if b.style == "blaze" { drawFlame(ctx, b, spread: 1.9); return }
+        if b.style == "atomic" { drawAtomicBreath(ctx, b); return }
         if b.style == "blast" { drawBlast(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
@@ -119,6 +124,313 @@ final class OverlayView: NSView {
         let flash = 13 * (1.25 - k)
         ctx.setFillColor(NSColor(calibratedRed: 1, green: 0.72, blue: 0.35, alpha: 0.85 * k).cgColor)
         ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
+        ctx.restoreGState()
+    }
+
+    /// Godzilla's narrow ionized stream, shared in color and silhouette with its Canvas muzzle.
+    private func drawAtomicBreath(_ ctx: CGContext, _ beam: Beam) {
+        let strength = max(0, min(1, beam.life / 0.2))
+        let dx = beam.to.x - beam.from.x, dy = beam.to.y - beam.from.y
+        let length = hypot(dx, dy)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.translateBy(x: beam.from.x, y: beam.from.y)
+        ctx.rotate(by: atan2(dy, dx))
+        let layers: [(CGFloat, NSColor)] = [
+            (12, NSColor(calibratedRed: 0.09, green: 0.29, blue: 1, alpha: 0.25 * strength)),
+            (8, NSColor(calibratedRed: 0, green: 0.92, blue: 1, alpha: 0.65 * strength)),
+            (3.5, NSColor(calibratedRed: 0.84, green: 1, blue: 1, alpha: 0.95 * strength)),
+        ]
+        for (width, color) in layers {
+            ctx.setFillColor(color.cgColor)
+            ctx.setShadow(offset: .zero, blur: width, color: color.cgColor)
+            ctx.beginPath()
+            ctx.move(to: CGPoint(x: 0, y: -width * 0.32))
+            for index in 1...12 {
+                let ripple = 1 + sin(CGFloat(index) * 2.3 - strength * 4.8) * 0.22
+                ctx.addLine(to: CGPoint(x: length * CGFloat(index) / 12, y: -width * ripple))
+            }
+            for index in stride(from: 12, through: 1, by: -1) {
+                let ripple = 1 + sin(CGFloat(index) * 2.3 + strength * 4.8) * 0.22
+                ctx.addLine(to: CGPoint(x: length * CGFloat(index) / 12, y: width * ripple))
+            }
+            ctx.addLine(to: CGPoint(x: 0, y: width * 0.32))
+            ctx.closePath()
+            ctx.fillPath()
+        }
+        ctx.restoreGState()
+    }
+
+    /// DBZ Kamehameha wave: massive azure ki aura, surging cyan beam with electric ripples,
+    /// intense white-hot core, giant muzzle bloom at the palms, and an explosive spherical impact burst.
+    private func drawKamehameha(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.25))
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let len = max(1, hypot(dx, dy))
+        let angle = atan2(dy, dx)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.translateBy(x: b.from.x, y: b.from.y)
+        ctx.rotate(by: angle)
+
+        // Outer fluctuating blue ki aura
+        let w = 28 * (0.75 + k * 0.5)
+        ctx.setFillColor(NSColor(calibratedRed: 0.2, green: 0.65, blue: 1.0, alpha: 0.45 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -w, width: len, height: w * 2))
+
+        // Vibrant cyan plasma layer with subtle ripple effect
+        let wMid = w * 0.62
+        ctx.setFillColor(NSColor(calibratedRed: 0.45, green: 0.95, blue: 1.0, alpha: 0.8 * k).cgColor)
+        ctx.beginPath()
+        ctx.move(to: CGPoint(x: 0, y: -wMid))
+        let steps = 14
+        for i in 1...steps {
+            let x = len * CGFloat(i) / CGFloat(steps)
+            let rip = 1.0 + sin(CGFloat(i) * 2.8 + (1 - k) * 12) * 0.15
+            ctx.addLine(to: CGPoint(x: x, y: -wMid * rip))
+        }
+        for i in stride(from: steps, through: 1, by: -1) {
+            let x = len * CGFloat(i) / CGFloat(steps)
+            let rip = 1.0 + sin(CGFloat(i) * 2.8 - (1 - k) * 12) * 0.15
+            ctx.addLine(to: CGPoint(x: x, y: wMid * rip))
+        }
+        ctx.addLine(to: CGPoint(x: 0, y: wMid))
+        ctx.closePath()
+        ctx.fillPath()
+
+        // Brilliant pure white laser-hot core
+        let wCore = w * 0.26
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -wCore, width: len, height: wCore * 2))
+
+        // Muzzle bloom at Goku's cupped palms
+        let bloom = w * 2.4
+        ctx.setFillColor(NSColor(calibratedRed: 0.55, green: 0.9, blue: 1.0, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -bloom, y: -bloom, width: bloom * 2, height: bloom * 2))
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -bloom * 0.45, y: -bloom * 0.45, width: bloom * 0.9, height: bloom * 0.9))
+
+        // Electric shock rings along the beam
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.8, green: 1.0, blue: 1.0, alpha: 0.7 * k).cgColor)
+        ctx.setLineWidth(2.5)
+        for i in 1...4 {
+            let rx = len * (CGFloat(i) / 4.5)
+            let rw = w * 0.9 * (1.1 - k * 0.2)
+            ctx.strokeEllipse(in: CGRect(x: rx - rw * 0.35, y: -rw, width: rw * 0.7, height: rw * 2))
+        }
+
+        ctx.restoreGState()
+
+        // Devastating impact burst at target
+        let flash = 36 * (1.35 - k)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.setFillColor(NSColor(calibratedRed: 0.4, green: 0.88, blue: 1.0, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash * 0.5, y: b.to.y - flash * 0.5, width: flash, height: flash))
+        ctx.restoreGState()
+    }
+
+    /// DBZ Ki Blast / Energy Ball: a fast, searing sphere of condensed ki flying across the screen,
+    /// trailed by golden/cyan plasma flames and exploding on impact into bright ki sparks.
+    private func drawEnergyBall(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        let prog = 1.0 - k // 0 to 1 as life drops
+        let currX = b.from.x + (b.to.x - b.from.x) * prog
+        let currY = b.from.y + (b.to.y - b.from.y) * prog
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let angle = atan2(dy, dx)
+
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+
+        // Trailing ki streak behind the projectile
+        let tailLen: CGFloat = 32
+        let tx = currX - cos(angle) * tailLen
+        let ty = currY - sin(angle) * tailLen
+        ctx.setLineCap(.round)
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.82, blue: 0.2, alpha: 0.6 * k).cgColor)
+        ctx.setLineWidth(14)
+        ctx.move(to: CGPoint(x: tx, y: ty)); ctx.addLine(to: CGPoint(x: currX, y: currY)); ctx.strokePath()
+
+        ctx.setStrokeColor(NSColor(white: 1.0, alpha: 0.9 * k).cgColor)
+        ctx.setLineWidth(6)
+        ctx.move(to: CGPoint(x: tx * 0.5 + currX * 0.5, y: ty * 0.5 + currY * 0.5)); ctx.addLine(to: CGPoint(x: currX, y: currY)); ctx.strokePath()
+
+        // Glowing outer ki orb
+        let r: CGFloat = 16
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.85, blue: 0.25, alpha: 0.75 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: currX - r, y: currY - r, width: r * 2, height: r * 2))
+
+        // Electric cyan/gold halo ring
+        let rAura = r * 1.5
+        ctx.setFillColor(NSColor(calibratedRed: 0.35, green: 0.9, blue: 1.0, alpha: 0.45 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: currX - rAura, y: currY - rAura, width: rAura * 2, height: rAura * 2))
+
+        // Incandescent white core
+        let rCore: CGFloat = 8
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: currX - rCore, y: currY - rCore, width: rCore * 2, height: rCore * 2))
+
+        // Impact explosion at the beetle
+        if prog > 0.45 {
+            let burstK = (prog - 0.45) / 0.55
+            let burstR = 24 * burstK
+            ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.88, blue: 0.3, alpha: 0.9 * (1.0 - burstK)).cgColor)
+            ctx.fillEllipse(in: CGRect(x: b.to.x - burstR, y: b.to.y - burstR, width: burstR * 2, height: burstR * 2))
+            ctx.setFillColor(NSColor(white: 1.0, alpha: 0.95 * (1.0 - burstK)).cgColor)
+            ctx.fillEllipse(in: CGRect(x: b.to.x - burstR * 0.5, y: b.to.y - burstR * 0.5, width: burstR, height: burstR))
+        }
+
+        ctx.restoreGState()
+    }
+
+    /// Pikachu's 100,000-Volt Thunderbolt: a multi-layered jagged lightning bolt crashing
+    /// down from the sky directly onto the boss bug, triggering ground shockwaves and dancing electric arcs.
+    private func drawThunderbolt(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.25))
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+
+        let target = b.to
+        let skyY: CGFloat = max(target.y + 700, 1000)
+        let totalH = skyY - target.y
+        let segs = 8
+
+        // Deterministic pseudo-random jitter based on coordinates and life
+        func jitter(_ idx: Int) -> CGFloat {
+            let s = sin(Double(idx) * 4.3 + Double(b.life) * 40.0)
+            return CGFloat(s) * 35.0
+        }
+
+        var points: [CGPoint] = []
+        points.append(CGPoint(x: target.x + jitter(0) * 0.4, y: skyY))
+        for i in 1..<segs {
+            let frac = CGFloat(i) / CGFloat(segs)
+            let py = skyY - totalH * frac
+            let px = target.x + jitter(i) * (1.0 - frac * 0.5)
+            points.append(CGPoint(x: px, y: py))
+        }
+        points.append(target)
+
+        // 1. Broad outer golden-electric aura
+        ctx.setLineCap(.round)
+        ctx.setLineJoin(.round)
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.85, blue: 0.1, alpha: 0.65 * k).cgColor)
+        ctx.setLineWidth(24 * k)
+        ctx.beginPath()
+        ctx.move(to: points[0])
+        for pt in points.dropFirst() { ctx.addLine(to: pt) }
+        ctx.strokePath()
+
+        // 2. High-voltage electric yellow sheath
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.95, blue: 0.35, alpha: 0.88 * k).cgColor)
+        ctx.setLineWidth(11 * k)
+        ctx.beginPath()
+        ctx.move(to: points[0])
+        for pt in points.dropFirst() { ctx.addLine(to: pt) }
+        ctx.strokePath()
+
+        // 3. Blinding white-hot core
+        ctx.setStrokeColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.setLineWidth(3.8 * k)
+        ctx.beginPath()
+        ctx.move(to: points[0])
+        for pt in points.dropFirst() { ctx.addLine(to: pt) }
+        ctx.strokePath()
+
+        // Secondary fork lightning
+        if segs >= 5 {
+            let forkStart = points[segs / 2]
+            ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.92, blue: 0.4, alpha: 0.75 * k).cgColor)
+            ctx.setLineWidth(4.0 * k)
+            ctx.beginPath()
+            ctx.move(to: forkStart)
+            ctx.addLine(to: CGPoint(x: forkStart.x + 42, y: forkStart.y - 30))
+            ctx.addLine(to: CGPoint(x: forkStart.x + 65, y: forkStart.y - 50))
+            ctx.strokePath()
+        }
+
+        // Ground shockwave impact ring
+        let impactR = 48.0 * (1.4 - k * 0.4)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.9, blue: 0.2, alpha: 0.7 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: target.x - impactR, y: target.y - impactR * 0.45, width: impactR * 2, height: impactR * 0.9))
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.9 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: target.x - impactR * 0.45, y: target.y - impactR * 0.22, width: impactR * 0.9, height: impactR * 0.44))
+
+        // Dancing electric ground arcs
+        ctx.setStrokeColor(NSColor(white: 1.0, alpha: 0.85 * k).cgColor)
+        ctx.setLineWidth(2.0)
+        for a in 0..<6 {
+            let ang = (Double(a) / 6.0) * .pi * 2
+            let dist = impactR * (0.8 + 0.3 * sin(Double(a) * 2.1 + Double(b.life) * 25.0))
+            ctx.beginPath()
+            ctx.move(to: target)
+            ctx.addLine(to: CGPoint(x: target.x + CGFloat(cos(ang)) * dist, y: target.y + CGFloat(sin(ang)) * dist * 0.4))
+            ctx.strokePath()
+        }
+
+        ctx.restoreGState()
+    }
+
+    /// Pikachu's crackling Electro Ball: high-speed electric plasma sphere with trailing sparks.
+    private func drawElectroBall(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        let prog = 1.0 - k
+        let currX = b.from.x + (b.to.x - b.from.x) * prog
+        let currY = b.from.y + (b.to.y - b.from.y) * prog
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let angle = atan2(dy, dx)
+
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+
+        // Fast electric plasma trail
+        let tailLen: CGFloat = 28
+        let tx = currX - cos(angle) * tailLen
+        let ty = currY - sin(angle) * tailLen
+        ctx.setLineCap(.round)
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.9, blue: 0.2, alpha: 0.7 * k).cgColor)
+        ctx.setLineWidth(10 * k)
+        ctx.move(to: CGPoint(x: tx, y: ty)); ctx.addLine(to: CGPoint(x: currX, y: currY)); ctx.strokePath()
+
+        ctx.setStrokeColor(NSColor(white: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.setLineWidth(3.5 * k)
+        ctx.move(to: CGPoint(x: tx * 0.4 + currX * 0.6, y: ty * 0.4 + currY * 0.6)); ctx.addLine(to: CGPoint(x: currX, y: currY)); ctx.strokePath()
+
+        // Concentrated electric orb
+        let r: CGFloat = 14
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.92, blue: 0.1, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: currX - r, y: currY - r, width: r * 2, height: r * 2))
+
+        // Intense white core
+        let rCore: CGFloat = 6.5
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: currX - rCore, y: currY - rCore, width: rCore * 2, height: rCore * 2))
+
+        // Crackling electric arcs around ball
+        ctx.setStrokeColor(NSColor(white: 1.0, alpha: 0.9 * k).cgColor)
+        ctx.setLineWidth(1.6)
+        for i in 0..<4 {
+            let spAng = (Double(i) / 4.0) * .pi * 2 + Double(b.life) * 30.0
+            let dist = r * 1.45
+            ctx.beginPath()
+            ctx.move(to: CGPoint(x: currX, y: currY))
+            ctx.addLine(to: CGPoint(x: currX + CGFloat(cos(spAng)) * dist, y: currY + CGFloat(sin(spAng)) * dist))
+            ctx.strokePath()
+        }
+
+        // Impact spark explosion at the bug
+        if prog > 0.4 {
+            let burstK = (prog - 0.4) / 0.6
+            let burstR = 26 * burstK
+            ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.9, blue: 0.25, alpha: 0.9 * (1.0 - burstK)).cgColor)
+            ctx.fillEllipse(in: CGRect(x: b.to.x - burstR, y: b.to.y - burstR, width: burstR * 2, height: burstR * 2))
+            ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * (1.0 - burstK)).cgColor)
+            ctx.fillEllipse(in: CGRect(x: b.to.x - burstR * 0.45, y: b.to.y - burstR * 0.45, width: burstR * 0.9, height: burstR * 0.9))
+        }
+
         ctx.restoreGState()
     }
 

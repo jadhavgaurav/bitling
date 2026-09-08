@@ -48,6 +48,9 @@ iconutil -c icns build/Bitling.iconset -o "$APP/Contents/Resources/Bitling.icns"
 
 cp Resources/pet.html "$APP/Contents/Resources/pet.html"
 cp web/panel.html "$APP/Contents/Resources/panel.html"
+if [[ -d Resources/pets ]]; then
+  cp -R Resources/pets "$APP/Contents/Resources/pets"
+fi
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/bitling "$APP/Contents/Resources/bitling"
 chmod +x "$APP/Contents/Resources/bitling"

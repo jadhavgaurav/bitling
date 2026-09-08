@@ -8,6 +8,7 @@
 #   bitling say <text>                    make the pet say something
 #   bitling panel                         open the control room window
 #   bitling pet <id>                      switch species, e.g. robot, dragon
+#   bitling size <n>                      resize the pet, 0.8 to 1.6
 #   bitling claude                        Claude Code hook adapter (reads hook JSON on stdin)
 #   bitling git <hook> [args]             global git hook adapter (installed for you by the menu)
 #
@@ -16,7 +17,7 @@
 set -u
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 encode() {
@@ -85,6 +86,10 @@ case "$command_name" in
   pet)
     [ $# -gt 0 ] || { usage; exit 2; }
     send pet "id=$1"
+    ;;
+  size)
+    [ $# -gt 0 ] || { usage; exit 2; }
+    send size "v=$1"
     ;;
   git)
     # Global git hook adapter: `bitling git <hook-name> [hook args]` inside a repository.

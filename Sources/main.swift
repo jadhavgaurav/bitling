@@ -14,7 +14,15 @@ let stateDefaultsKey = "petState"
 let windowXDefaultsKey = "petWindowX"
 let dockIconDefaultsKey = "showInDock"
 // Tall enough for the full robot plus a deployed parachute, wide enough for its arms.
-let petWindowSize = NSSize(width: 300, height: 340)
+let petBaseSize = NSSize(width: 300, height: 340)
+let petSizeDefaultsKey = "petSize"
+/// How large the creature is, as a multiple of the stock window. Everything that measures
+/// the pet reads this, so growing it moves the floor, the clamps and the flight targets too.
+var petSizeScale = CGFloat(UserDefaults.standard.object(forKey: petSizeDefaultsKey) as? Double ?? 1)
+var petWindowSize: NSSize {
+    NSSize(width: (petBaseSize.width * petSizeScale).rounded(),
+           height: (petBaseSize.height * petSizeScale).rounded())
+}
 
 func jsString(_ value: String) -> String {
     // JSON-encode a single string so it can be embedded as a JS literal.
@@ -268,6 +276,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.forEach { query[$0.name] = $0.value ?? "" }
             if kind == "pet" {
                 if let id = query["id"], !id.isEmpty { js("petNative.setSpecies(\(jsString(id)))") }
+                continue
+            }
+            if kind == "size" {
+                if let v = Double(query["v"] ?? "") { applyPetSize(CGFloat(v)) }
                 continue
             }
             let event = GitEvent(
@@ -524,7 +536,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 CGPoint(x: window.frame.minX + CGFloat(eye["x"] as? Double ?? 0),
                         y: window.frame.maxY - CGFloat(eye["y"] as? Double ?? 0))
             }
-            overlay.fire(at: id, fromEyes: eyes, style: snapshot.attack)
+            let attackStyle = (body["style"] as? String) ?? snapshot.attack
+            overlay.fire(at: id, fromEyes: eyes, style: attackStyle)
         case "rocketScreen":
             guard swarmEnabled else { return }
             overlay.launchRocket(label: body["label"] as? String ?? "",
@@ -653,6 +666,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "gitHooks": GitHooks.installed(),
                 "swarm": swarmEnabled,
                 "petVisible": window.isVisible,
+                "size": Double(petSizeScale),
                 "dock": dockIconEnabled,
                 "version": version,
             ],
@@ -672,6 +686,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "claudeHooks": toggleClaudeHooks()
         case "swarm": toggleSwarm()
         case "hide": toggleShown()
+        case _ where action.hasPrefix("size:"):
+            applyPetSize(CGFloat(Double(action.dropFirst(5)) ?? 1))
         case "rename": renameAction()
         case "sound": soundAction()
         case "login": toggleLogin()
@@ -869,6 +885,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     /// Where the creature's feet are in screen coordinates. A floater hangs in the
     /// middle of its window rather than standing on the bottom edge of it.
+    /// Resize the creature in place: keep it centred on where it was and, if it was
+    /// standing on the floor, keep it standing on the floor.
+    private func applyPetSize(_ scale: CGFloat) {
+        let wanted = max(0.7, min(2.0, scale))
+        guard abs(wanted - petSizeScale) > 0.01 else { return }
+        petSizeScale = wanted
+        UserDefaults.standard.set(Double(wanted), forKey: petSizeDefaultsKey)
+        let visible = screenForWindow().visibleFrame
+        var frame = window.frame
+        let centreX = frame.midX
+        let onFloor = abs(frame.minY - visible.minY) < 2
+        frame.size = petWindowSize
+        frame.origin.x = clampX(centreX - petWindowSize.width / 2, in: visible)
+        frame.origin.y = onFloor ? visible.minY : min(frame.origin.y, visible.maxY - frame.height)
+        window.setFrame(frame, display: true)
+        hoverBase = frame.origin
+        saveWindowX()
+    }
+
     private func petFloorY() -> CGFloat {
         floating ? window.frame.minY + petWindowSize.height * 0.46 : window.frame.minY + 34
     }
@@ -1055,8 +1090,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 frame.origin.x += dx / dist * speed * dt
                 frame.origin.y += dy / dist * speed * dt
                 window.setFrameOrigin(frame.origin)
+                // Tell the page which way it is travelling so it can pitch into the flight
+                // and aim its thrust backwards. Screen coordinates: y grows downward.
+                if tickCount % 6 == 0 {
+                    js("petNative.flightVec(\(String(format: "%.2f", dx / dist)), \(String(format: "%.2f", -dy / dist)))")
+                }
             }
         case .hovering:
+            if tickCount % 12 == 0 { js("petNative.flightVec(0, 0)") }
             hoverT += dt
             frame.origin = NSPoint(x: hoverBase.x + sin(hoverT * 0.9) * 8, y: hoverBase.y + sin(hoverT * 2.1) * 5)
             window.setFrameOrigin(frame.origin)
@@ -1108,7 +1149,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 }
                 window.setFrameOrigin(frame.origin)
             } else if walkRemaining > 0 {
-                let step = min(walkRemaining, 70 * dt)
+                let speed: CGFloat = snapshot.species == "kaiju" ? 32 : 70
+                let step = min(walkRemaining, speed * dt)
                 frame.origin.x += step * walkDirection
                 walkRemaining -= step
                 if frame.minX < visible.minX || frame.maxX > visible.maxX {

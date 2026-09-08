@@ -88,54 +88,6 @@ def main():
       // Aerodynamic pitch into flight direction
       ctx.rotate(pet.gokuPitch);
 
-      // -------------------------------------------------------- Golden Flying Nimbus Slipstream & Cloud Puffs
-      if (isFlying) {{
-        const speedRatio = clamp((pet.gokuSpeed || 0) / 240, isCarried ? 0.5 : 0.4, 1.3);
-        const trailLen = r * (1.6 + speedRatio * 1.5);
-
-        ctx.save();
-        // Golden speed streamer aligned directly behind the Nimbus cloud tail (-X is behind Goku)
-        const grad = ctx.createLinearGradient(-r * 0.8, -r * 0.15, -r * 0.8 - trailLen, -r * 0.15);
-        grad.addColorStop(0, 'rgba(254, 215, 50, 0.9)');
-        grad.addColorStop(0.45, 'rgba(255, 235, 70, 0.5)');
-        grad.addColorStop(1, 'rgba(254, 215, 50, 0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.75, -r * 0.45);
-        ctx.bezierCurveTo(-r * 1.3, -r * 0.35, -r * 0.8 - trailLen * 0.7, -r * 0.22, -r * 0.8 - trailLen, -r * 0.15);
-        ctx.bezierCurveTo(-r * 0.8 - trailLen * 0.7, -r * 0.08, -r * 1.3, +r * 0.05, -r * 0.75, +r * 0.15);
-        ctx.closePath();
-        ctx.fill();
-
-        // Trailing magical Nimbus cloud puffs that drift and dissipate horizontally in Goku's wake
-        for (let i = 0; i < 4; i++) {{
-          const phase = (t * 3.8 + i * 0.8) % 1;
-          const puffDist = r * 0.8 + phase * trailLen;
-          const puffY = -r * 0.15 + (i % 2 === 0 ? r * 0.1 : -r * 0.1);
-          const puffR = r * (0.09 + (1 - phase) * 0.09);
-          const alpha = (1 - phase) * 0.75 * Math.min(1, speedRatio);
-
-          ctx.fillStyle = `rgba(255, 240, 100, ${{alpha}})`;
-          ctx.beginPath();
-          ctx.arc(-puffDist, puffY, puffR, 0, Math.PI * 2);
-          ctx.fill();
-        }}
-
-        // Crisp anime speed streaks when moving fast
-        if (speedRatio > 0.7) {{
-          ctx.strokeStyle = `rgba(255, 255, 255, ${{(speedRatio - 0.7) * 0.8}})`;
-          ctx.lineWidth = Math.max(1, r * 0.035);
-          for (let s = 0; s < 3; s++) {{
-            const stDist = r * (0.9 + s * 0.5);
-            const stY = -r * 0.3 + s * r * 0.15;
-            ctx.beginPath();
-            ctx.moveTo(-stDist, stY);
-            ctx.lineTo(-stDist - r * 0.45 * speedRatio, stY);
-            ctx.stroke();
-          }}
-        }}
-        ctx.restore();
-      }}
 
       // -------------------------------------------------------- Kamehameha Aura (Charging/Firing)
       if ((charging || firing) && isKame) {{

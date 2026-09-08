@@ -497,7 +497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let direction = (body["dir"] as? Double ?? 1) < 0 ? CGFloat(-1) : CGFloat(1)
             startWalk(direction: direction)
         case "fly":
-            guard !dragging, !airborne, flight == .none else { return }
+            guard !dragging, !airborne, (flight == .none || flight == .hovering) else { return }
             let fx = CGFloat(body["x"] as? Double ?? 0.5), fy = CGFloat(body["y"] as? Double ?? 0.5)
             let visible = screenForWindow().visibleFrame
             flyTarget = NSPoint(
@@ -1088,6 +1088,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 hoverBase = frame.origin
                 hoverT = 0
                 js("petNative.flight('hover')")
+                saveWindowX()
             } else {
                 let speed = min(380, 70 + dist * 2.2)
                 frame.origin.x += dx / dist * speed * dt

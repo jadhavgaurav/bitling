@@ -111,6 +111,8 @@ final class OverlayView: NSView {
         if b.style == "blaze" { drawFlame(ctx, b, spread: 1.9); return }
         if b.style == "atomic" { drawAtomicBreath(ctx, b); return }
         if b.style == "blast" { drawBlast(ctx, b); return }
+        if b.style == "unibeam" { drawUnibeam(ctx, b); return }
+        if b.style == "repulsor" { drawRepulsor(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -229,6 +231,108 @@ final class OverlayView: NSView {
         ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
         ctx.setFillColor(NSColor(white: 1.0, alpha: 0.95 * k).cgColor)
         ctx.fillEllipse(in: CGRect(x: b.to.x - flash * 0.5, y: b.to.y - flash * 0.5, width: flash, height: flash))
+        ctx.restoreGState()
+    }
+
+    /// Iron Man Chest Arc Reactor Unibeam: massive blinding cyan photon beam with white-hot core,
+    /// concentric pulse rings, Arc Reactor muzzle bloom, and huge target impact shockwave.
+    private func drawUnibeam(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.30))
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let len = max(1, hypot(dx, dy))
+        let angle = atan2(dy, dx)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.translateBy(x: b.from.x, y: b.from.y)
+        ctx.rotate(by: angle)
+
+        // Outer fluctuating cyan plasma beam
+        let w = 26 * (0.8 + k * 0.5)
+        ctx.setFillColor(NSColor(calibratedRed: 0.0, green: 0.85, blue: 1.0, alpha: 0.55 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -w, width: len, height: w * 2))
+
+        // Intense core white photon laser
+        let wCore = w * 0.35
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -wCore, width: len, height: wCore * 2))
+
+        // Arc Reactor muzzle bloom at chest
+        let bloom = w * 2.2
+        ctx.setFillColor(NSColor(calibratedRed: 0.0, green: 0.94, blue: 1.0, alpha: 0.9 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -bloom, y: -bloom, width: bloom * 2, height: bloom * 2))
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -bloom * 0.45, y: -bloom * 0.45, width: bloom * 0.9, height: bloom * 0.9))
+
+        // Concentric high-tech pulse rings traveling along beam
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.7, green: 0.96, blue: 1.0, alpha: 0.85 * k).cgColor)
+        ctx.setLineWidth(2.4)
+        for i in 1...4 {
+            let rx = len * (CGFloat(i) / 4.5)
+            let rw = w * 0.85 * (1.1 - k * 0.2)
+            ctx.strokeEllipse(in: CGRect(x: rx - rw * 0.35, y: -rw, width: rw * 0.7, height: rw * 2))
+        }
+
+        ctx.restoreGState()
+
+        // Devastating spherical impact burst at target
+        let flash = 34 * (1.35 - k)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.setFillColor(NSColor(calibratedRed: 0.0, green: 0.9, blue: 1.0, alpha: 0.88 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash * 0.5, y: b.to.y - flash * 0.5, width: flash, height: flash))
+        ctx.restoreGState()
+    }
+
+    /// Iron Man Palm Repulsor Blast: focused high-velocity cyan particle ray,
+    /// traveling plasma ring, palm muzzle flare, and electric impact spark burst.
+    private func drawRepulsor(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let len = max(1, hypot(dx, dy))
+        let angle = atan2(dy, dx)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.translateBy(x: b.from.x, y: b.from.y)
+        ctx.rotate(by: angle)
+
+        // Focused cyan repulsor ray
+        ctx.setLineCap(.round)
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.0, green: 0.92, blue: 1.0, alpha: 0.92 * k).cgColor)
+        ctx.setLineWidth(9 * k)
+        ctx.move(to: .zero); ctx.addLine(to: CGPoint(x: len, y: 0)); ctx.strokePath()
+
+        // Pure white core ray
+        ctx.setStrokeColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.setLineWidth(3 * k)
+        ctx.move(to: .zero); ctx.addLine(to: CGPoint(x: len, y: 0)); ctx.strokePath()
+
+        // Palm muzzle flare
+        let flare: CGFloat = 16 * k
+        ctx.setFillColor(NSColor(calibratedRed: 0.0, green: 0.94, blue: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -flare, y: -flare, width: flare * 2, height: flare * 2))
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -flare * 0.45, y: -flare * 0.45, width: flare * 0.9, height: flare * 0.9))
+
+        // Traveling plasma ring
+        let prog = CGFloat(1.0 - k)
+        let ringX = len * (0.3 + 0.7 * prog)
+        let ringR: CGFloat = 12 * (0.8 + 0.4 * k)
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.6, green: 0.96, blue: 1.0, alpha: 0.9 * k).cgColor)
+        ctx.setLineWidth(2.0)
+        ctx.strokeEllipse(in: CGRect(x: ringX - ringR * 0.4, y: -ringR, width: ringR * 0.8, height: ringR * 2))
+
+        ctx.restoreGState()
+
+        // Electric impact spark burst at target
+        let flash = 20 * (1.25 - k)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.setFillColor(NSColor(calibratedRed: 0.0, green: 0.9, blue: 1.0, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash * 0.45, y: b.to.y - flash * 0.45, width: flash * 0.9, height: flash * 0.9))
         ctx.restoreGState()
     }
 
@@ -780,8 +884,9 @@ final class Overlay {
     func fire(at id: Int, fromEyes eyes: [CGPoint], style: String = "beam") -> Bool {
         guard let index = view.beetles.firstIndex(where: { $0.id == id && $0.alive }) else { return false }
         let target = CGPoint(x: view.beetles[index].x, y: view.beetles[index].y + view.beetles[index].size)
+        let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam") ? 0.35 : 0.2
         for eye in eyes {
-            view.beams.append(Beam(from: screenPoint(eye), to: target, life: 0.2, style: style))
+            view.beams.append(Beam(from: screenPoint(eye), to: target, life: beamLife, style: style))
         }
         view.beetles[index].hp -= 1
         var died = false

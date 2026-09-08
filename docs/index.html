@@ -1022,7 +1022,7 @@
     blurb: 'Kid Goku flying on the Flying Nimbus. Fires rapid Ki Blasts at small bugs and unleashes the full Kamehameha on boss bugs.',
     accent: '#ff5722',
     radius: [46, 44, 52, 60],
-    reach: () => 2.42,                  // hair tips, measured: bubble cleared by 12px
+    reach: () => 3.19,                  // hair tips, measured: bubble cleared by 12px
     half: (r) => r * 1.65,              // Flying Nimbus and monkey tail
     draw: () => drawGoku(),
     attack: {
@@ -1505,7 +1505,7 @@
     blurb: 'The global football icon and unstoppable goalscorer. Dribbles with lightning footwork, snipes bugs by kicking his soccer ball, and unleashes the iconic mid-air SIUUU strike on boss bugs!',
     accent: '#00e676',
     radius: [44, 40, 48, 56],
-    reach: () => 2.5,
+    reach: () => 2.94,
     half: (r) => r * 1.55,
     draw: () => drawRonaldo(),
     trail: null,
@@ -2403,10 +2403,25 @@
         } else if (rocket.active) {
           pet.lookT.x = clamp((rocket.x - pet.x) / (r * 3), -1, 1);
           pet.lookT.y = clamp((rocket.y - (pet.y - r)) / (r * 3), -1, 1);
+        } else if (pet.zapAim || pet.zapCharge > 0) {
+          const live = pet.zapAim && (pet.zapAim.host ? hostBugs.find((b) => b.id === pet.zapAim.id) : pet.zapAim.bug);
+          if (live) {
+            const bx = live.x, by = pet.zapAim.host ? live.y : (groundY - 9 * scale);
+            pet.lookT.x = clamp((bx - pet.x) / (r * 3), -1, 1);
+            pet.lookT.y = clamp((by - (pet.y - r)) / (r * 3), -1, 1);
+          }
+        } else if (swarmOn() && hostBugs.length) {
+          let best = hostBugs[0], bestD = Infinity;
+          for (const b of hostBugs) {
+            const d = Math.hypot(b.x - pet.x, b.y - (pet.y - r));
+            if (d < bestD) { bestD = d; best = b; }
+          }
+          pet.lookT.x = clamp((best.x - pet.x) / (r * 3), -1, 1);
+          pet.lookT.y = clamp((best.y - (pet.y - r)) / (r * 3), -1, 1);
         } else if (bugs.length) {
           const b = bugs.find((k) => k.alive) || bugs[0];
           pet.lookT.x = clamp((b.x - pet.x) / (r * 3), -1, 1);
-          pet.lookT.y = 0.8;
+          pet.lookT.y = clamp(((groundY - 9 * scale) - (pet.y - r)) / (r * 3), -1, 1);
         } else if (pointer.over && pet.t - pointer.lastT < 3) {
           pet.lookT.x = clamp((pointer.x - pet.x) / (r * 3), -1, 1);
           pet.lookT.y = clamp((pointer.y - (pet.y - r)) / (r * 3), -1, 1);
@@ -2469,7 +2484,11 @@
       if (!stillThere) { pet.zapCharge = 0; pet.zapAim = null; }
       else {
         const live = aim.host ? hostBugs.find((b) => b.id === aim.id) : aim.bug;
-        pet.facing = Math.sign(live.x - pet.x) || pet.facing;
+        const bugX = live ? live.x : (pet.x + pet.facing * 140);
+        const bugY = live ? (aim.host ? live.y : (groundY - 9 * scale)) : (groundY - 9 * scale);
+        if (Math.abs(bugX - pet.x) > 2) pet.facing = bugX < pet.x ? -1 : 1;
+        pet.zapX = bugX;
+        pet.zapY = bugY;
         pet.zapCharge -= dt;
         if (pet.zapCharge <= 0) {
           pet.zapCharge = 0;
@@ -2480,17 +2499,17 @@
           if (state.species === 'ronaldo') {
             pet.zapLocal = false;
             // Ronaldo strikes the free soccer ball with power and style!
-            const targetX = live ? live.x : (pet.x + pet.facing * 140);
-            const targetY = groundY - 12;
+            const targetX = bugX;
+            const targetY = bugY;
             ronaldoBall.x = pet.x + pet.facing * 20;
             ronaldoBall.y = groundY - ronaldoBall.radius;
             const bdx = targetX - ronaldoBall.x;
             const bdy = targetY - ronaldoBall.y;
             const dist = Math.max(1, Math.hypot(bdx, bdy));
             const isSiuuu = (shotStyle === 'siuuu' || pet.zapBoss);
-            const kickSpd = isSiuuu ? 820 : 660;
+            const kickSpd = isSiuuu ? 840 : 700;
             ronaldoBall.vx = (bdx / dist) * kickSpd;
-            ronaldoBall.vy = (bdy / dist) * kickSpd - 40;
+            ronaldoBall.vy = (bdy / dist) * kickSpd;
             ronaldoBall.state = 'strike';
             ronaldoBall.targetX = targetX;
             ronaldoBall.targetY = targetY;
@@ -2514,8 +2533,6 @@
             native({ type: 'zap', id: aim.id, eyes, style: shotStyle });
           } else {
             pet.zapLocal = true;
-            pet.zapX = live.x;
-            pet.zapY = groundY - 9 * scale;
             squashBug(live, false, true);
           }
           if (shotStyle === 'kamehameha') {
@@ -2551,7 +2568,12 @@
             }
           }
           const sparkHue = state.species === 'pikachu' ? 52 : state.species === 'kaiju' ? 185 : state.species === 'goku' ? (shotStyle === 'kamehameha' ? 195 : 45) : state.species === 'ironman' ? (shotStyle === 'unibeam' ? 190 : 180) : state.species === 'naruto' ? (shotStyle === 'rasenshuriken' ? 185 : 35) : state.species === 'ronaldo' ? (shotStyle === 'siuuu' ? 48 : 142) : 8;
-          for (const e of eyes) spawn('spark', e.x, e.y, 3, { spread: 4, vx: 60, vy: -35, size: 7, hue: sparkHue, dur: 0.38 });
+          const aimDx = pet.zapX - pet.x;
+          const aimDy = pet.zapY - (pet.y - r * 1.3);
+          const aimDist = Math.max(1, Math.hypot(aimDx, aimDy));
+          const spVx = (aimDx / aimDist) * 70;
+          const spVy = (aimDy / aimDist) * 70;
+          for (const e of eyes) spawn('spark', e.x, e.y, 3, { spread: 4, vx: spVx, vy: spVy, size: 7, hue: sparkHue, dur: 0.38 });
           pet.zapAim = null;
         }
       }
@@ -2561,13 +2583,13 @@
         // Only beetles the host marks huntable: a test-backed one stays until its test passes.
         for (const b of hostBugs) {
           if (!b.huntable) continue;
-          const d = Math.abs(b.x - pet.x);
+          const d = Math.hypot(b.x - pet.x, b.y - (pet.y - petR() * 1.5));
           if (d < near) { near = d; aim = { host: true, id: b.id }; }
         }
       } else {
         for (const b of bugs) {
           if (!b.alive) continue;
-          const d = Math.abs(b.x - pet.x);
+          const d = Math.hypot(b.x - pet.x, (groundY - 9 * scale) - (pet.y - petR() * 1.5));
           if (d > r * 0.62 && d < near) { near = d; aim = { host: false, bug: b }; }
         }
       }
@@ -2818,7 +2840,9 @@
       if (b.strikeAim && b.strikeAim.host) {
         // Host desktop bug
         const targetX = Number.isFinite(b.targetX) ? b.targetX : (pet.facing === 1 ? W - 10 : 10);
-        if ((b.vx > 0 && b.x >= targetX - hitRadius) || (b.vx < 0 && b.x <= targetX + hitRadius) || b.strikeTimer > 1.2) {
+        const targetY = Number.isFinite(b.targetY) ? b.targetY : (groundY - 12);
+        const dTarget = Math.hypot(b.x - targetX, b.y - targetY);
+        if (dTarget < hitRadius * 2 || b.strikeTimer > 1.2) {
           hit = true;
           native({ type: 'zap', id: b.strikeAim.id, eyes: [{ x: b.x, y: b.y }], style: b.strikeStyle || 'knuckleball' });
         }
@@ -3708,7 +3732,11 @@
     pet.gokuSpeed = (pet.gokuSpeed || 0) * 0.84 + rawSpeed * 0.16;
 
     // Immediately face the drag / flight direction (positive vx is right, negative vx is left)
-    if (isCarried && Math.abs(vx) > 12) {
+    if (charging || firing) {
+      if (pet.zapX !== undefined && Math.abs(pet.zapX - pet.x) > 2) {
+        pet.facing = pet.zapX < pet.x ? -1 : 1;
+      }
+    } else if (isCarried && Math.abs(vx) > 12) {
       pet.facing = vx < 0 ? -1 : 1;
     } else if (isDesktopFlying && Math.abs(pet.flyVX) > 0.15) {
       pet.facing = pet.flyVX < 0 ? -1 : 1;
@@ -3720,12 +3748,22 @@
     // Aerodynamic banking / pitch in local coordinates (+X is Goku's forward direction)
     // Forward motion dips nose aerodynamically into the wind; climbing lifts nose up; diving dips nose down
     const forwardV = vx * f;
-    const targetPitch = isCarried
-      ? clamp((forwardV / 700) + (vy / 950), -0.26, 0.26)
-      : (isDesktopFlying || (pet.mode === 'fly' && Math.abs(forwardV) > 20)
-        ? clamp((forwardV / 800) + (vy / 1000), -0.22, 0.22)
-        : (pet.walking ? 0.05 : 0));
-    pet.gokuPitch = (pet.gokuPitch || 0) * 0.82 + targetPitch * 0.18;
+    let targetPitch = 0;
+    if (charging || firing) {
+      const r = petR();
+      const targetX = pet.zapX !== undefined ? pet.zapX : (pet.x + f * 120);
+      const targetY = pet.zapY !== undefined ? pet.zapY : (groundY - 9 * scale);
+      const dy = targetY - (pet.y - r * 1.3);
+      const dx = Math.max(24, Math.abs(targetX - pet.x));
+      targetPitch = clamp((dy / dx) * 0.75, -0.45, 0.45);
+    } else if (isCarried) {
+      targetPitch = clamp((forwardV / 700) + (vy / 950), -0.26, 0.26);
+    } else if (isDesktopFlying || (pet.mode === 'fly' && Math.abs(forwardV) > 20)) {
+      targetPitch = clamp((forwardV / 800) + (vy / 1000), -0.22, 0.22);
+    } else if (pet.walking) {
+      targetPitch = 0.05;
+    }
+    pet.gokuPitch = (pet.gokuPitch || 0) * 0.78 + targetPitch * 0.22;
 
     // Zero-flicker flying stance: while carried or in flight, Goku is heroically surfing on Flying Nimbus!
     const isFlying = isCarried || pet.walking || pet.gokuSpeed > 30 || isDesktopFlying || (pet.mode === 'fly' && Math.hypot(vx, vy) > 30);
@@ -4717,14 +4755,21 @@
         ctx.scale(1 / sx, 1 / sy);
       }
 
-      // Face current direction
-      ctx.scale(f, 1);
-
-      // Running tilt or kick swing
       if (sprite === ronaldoImgRun) {
+        // ronaldoImgRun naturally faces LEFT in the sprite image.
+        // Moving right (f === 1): scale(-1, 1) flips it so he faces and runs RIGHT.
+        // Moving left (f === -1): scale(1, 1) keeps it facing and running LEFT.
+        ctx.scale(-f, 1);
         ctx.rotate(0.06 * Math.sin(t * 16));
-      } else if (isAttackingBoss) {
-        ctx.rotate(0.12 * Math.sin(t * 22));
+      } else {
+        // In idle / celebration / charge, Ronaldo stands frontally.
+        // NEVER mirror the frontal character (which would invert the #7 jersey and Portugal crest)!
+        // Instead, add a subtle perspective lean/shift toward the facing direction.
+        ctx.translate(f * r * 0.04, 0);
+        ctx.rotate(f * 0.015);
+        if (isAttackingBoss) {
+          ctx.rotate(0.12 * Math.sin(t * 22));
+        }
       }
 
       // Golden free-kick charging aura

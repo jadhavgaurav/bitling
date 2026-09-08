@@ -695,7 +695,7 @@
   defineSpecies({
     id: 'kaiju', name: 'Rumble', kind: 'ground',
     blurb: 'Something very large that got into your dock. Stomps what it can reach and burns the rest.',
-    accent: '#f2c53d',
+    accent: '#7fd4ea',
     radius: [46, 32, 38, 44],
     reach: () => 4.05,                  // the tallest back plate
     half: (r) => r * 2.85,               // nose to tail tip, whichever way it faces
@@ -2573,10 +2573,11 @@
     stageBody({ bob: 0.012, bobRate: 2.1 }, (r, t) => {
       ctx.scale(pet.facing, 1);
 
-      const back = '#0f4726', body = '#2a8b4c', shade = '#1d6a39', lit = '#3da864';
-      const belly = '#cdd94a', bellyEdge = '#9aa92c';
-      const plate = '#f5c231', plateHot = '#ffae35', plateEdge = '#bf8214';
-      const claw = '#fdf9ec', maw = '#6f1a29', tongue = '#bd4055';
+      const back = '#1b2429', body = '#6e7d84', shade = '#4b585e', lit = '#8b989d';
+      const belly = '#8d8d63', bellyEdge = '#5f6041';
+      const plate = '#bfe9f4', plateHot = '#eafaff', plateEdge = '#3fa8c9';
+      const claw = '#3a3630', maw = '#5d1f27', tongue = '#a2495a';
+      const panel = 'rgba(20,28,32,0.30)';        // the interior line work
 
       const stride = pet.walking ? Math.sin(pet.stride) : 0;
       const held = pet.held || pet.carried;
@@ -2622,16 +2623,28 @@
           ctx.restore();
         }
         // a flame shaped plate, root wide, tip swept back along the spine
+        // A crystal, not a fin: a jagged wedge with a couple of steps down its trailing
+        // edge and a paler core, so it reads as something growing out of the hide.
+        const P = (a, b) => [(bx + px * size * a + ux * size * b) * r, (by + py * size * a + uy * size * b) * r];
         ctx.fillStyle = hot ? plateHot : plate;
         ctx.strokeStyle = plateEdge;
-        ctx.lineWidth = Math.max(1, r * 0.028);
+        ctx.lineWidth = Math.max(1, r * 0.03);
         ctx.beginPath();
-        ctx.moveTo((bx - ux * size * 0.62) * r, (by - uy * size * 0.62) * r);
-        ctx.quadraticCurveTo((bx + px * size * 0.66 - ux * size * 0.5) * r, (by + py * size * 0.66 - uy * size * 0.5) * r,
-                             (bx + px * size - ux * size * 0.72) * r, (by + py * size - uy * size * 0.72) * r);
-        ctx.quadraticCurveTo((bx + px * size * 0.5 + ux * size * 0.12) * r, (by + py * size * 0.5 + uy * size * 0.12) * r,
-                             (bx + ux * size * 0.62) * r, (by + uy * size * 0.62) * r);
+        let q = P(0, -0.6); ctx.moveTo(q[0], q[1]);
+        q = P(0.52, -0.62); ctx.lineTo(q[0], q[1]);
+        q = P(0.62, -0.3); ctx.lineTo(q[0], q[1]);
+        q = P(1.0, -0.5); ctx.lineTo(q[0], q[1]);                     // the point
+        q = P(0.6, 0.02); ctx.lineTo(q[0], q[1]);
+        q = P(0.66, 0.34); ctx.lineTo(q[0], q[1]);
+        q = P(0.2, 0.42); ctx.lineTo(q[0], q[1]);
+        q = P(0, 0.6); ctx.lineTo(q[0], q[1]);
         ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = hot ? '#ffffff' : '#eef9fd';                  // cold core
+        ctx.beginPath();
+        q = P(0.12, -0.28); ctx.moveTo(q[0], q[1]);
+        q = P(0.86, -0.42); ctx.lineTo(q[0], q[1]);
+        q = P(0.3, 0.16); ctx.lineTo(q[0], q[1]);
+        ctx.closePath(); ctx.fill();
       }
 
       // ---------------------------------------------------------- far limbs
@@ -2665,7 +2678,7 @@
       ctx.quadraticCurveTo(r * 1.14, r * 0.34, r * 0.92, r * 0.44);
       ctx.lineTo(0, r * 0.4);
       ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = claw;
+      ctx.fillStyle = '#efe7d4';
       for (let i = 0; i < 6; i++) {
         const x = r * (0.05 + i * 0.165), h = r * (i % 2 ? 0.1 : 0.18);
         ctx.beginPath(); ctx.moveTo(x, r * 0.13); ctx.lineTo(x + r * 0.1, r * 0.14); ctx.lineTo(x + r * 0.05, r * 0.13 - h); ctx.closePath(); ctx.fill();
@@ -2712,8 +2725,17 @@
       ctx.lineTo(r * 0.16, -r * 1.7);
       ctx.bezierCurveTo(r * 0.36, -r * 2.16, r * 0.62, -r * 2.5, r * 1.02, -r * 2.6);
       ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = panel;                                   // hide panels across the flank
+      ctx.lineWidth = Math.max(1, r * 0.032);
+      for (let i = 0; i < 5; i++) {
+        const y = -r * (1.5 + i * 0.42);
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.5, y);
+        ctx.quadraticCurveTo(-r * 0.1, y - r * 0.16, r * 0.3, y - r * 0.12);
+        ctx.stroke();
+      }
       ctx.strokeStyle = bellyEdge;
-      ctx.lineWidth = Math.max(1.2, r * 0.04);
+      ctx.lineWidth = Math.max(1.2, r * 0.045);
       for (let i = 0; i < 7; i++) {
         const u = i / 6;
         const x0 = r * 0.12 + u * r * 0.42, y0 = -r * (1.02 + u * 1.42);
@@ -2724,8 +2746,22 @@
       }
       ctx.restore();
 
+      // segment rings down the tail
+      ctx.strokeStyle = panel;
+      ctx.lineWidth = Math.max(1, r * 0.032);
+      for (let i = 2; i < tailPts.length - 1; i++) {
+        const [tx, ty] = tailPts[i];
+        const [nx3, ny3] = tailPts[i + 1];
+        const dx2 = nx3 - tx, dy2 = ny3 - ty, l2 = Math.hypot(dx2, dy2) || 1;
+        const w = (1 - i / tailPts.length) * r * 0.42 + r * 0.05;
+        ctx.beginPath();
+        ctx.moveTo(tx - (-dy2 / l2) * w, ty - (dx2 / l2) * w);
+        ctx.lineTo(tx + (-dy2 / l2) * w, ty + (dx2 / l2) * w);
+        ctx.stroke();
+      }
+
       // ---------------------------------------------------------- upper fangs
-      ctx.fillStyle = claw;
+      ctx.fillStyle = '#efe7d4';
       for (let i = 0; i < 6; i++) {
         const u = i / 5;
         const x = r * (1.36 + u * 1.02), y = -r * (2.96 + u * 0.02);
@@ -2742,13 +2778,13 @@
         ctx.strokeStyle = back; ctx.lineWidth = Math.max(1.5, r * 0.055);
         ctx.beginPath(); ctx.moveTo(ex0 - r * 0.14, ey0); ctx.lineTo(ex0 + r * 0.18, ey0 - r * 0.04); ctx.stroke();
       } else {
-        ctx.fillStyle = '#fdf4d6';
+        ctx.fillStyle = '#dff4fb';
         ctx.beginPath();
         ctx.moveTo(ex0 - r * 0.2, ey0 + r * 0.03);
         ctx.quadraticCurveTo(ex0, ey0 - r * 0.16, ex0 + r * 0.22, ey0 - r * 0.02);
         ctx.quadraticCurveTo(ex0, ey0 + r * 0.1, ex0 - r * 0.2, ey0 + r * 0.03);
         ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#101408';
+        ctx.fillStyle = '#12242c';
         ctx.beginPath(); ctx.ellipse(ex0 + r * 0.06, ey0 - r * 0.02, r * 0.04, r * 0.075, -0.15, 0, Math.PI * 2); ctx.fill();
       }
       ctx.fillStyle = back;
@@ -2775,6 +2811,15 @@
       ctx.beginPath();
       ctx.ellipse(-r * (0.2 - stride * 0.08), -r * 1.24, r * 0.24, r * 0.5, 0.12, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = panel;                                   // muscle panelling
+      ctx.lineWidth = Math.max(1, r * 0.032);
+      for (let i = 0; i < 3; i++) {
+        const y = -r * (1.6 - i * 0.34);
+        ctx.beginPath();
+        ctx.moveTo(-r * (0.5 - stride * 0.06), y);
+        ctx.quadraticCurveTo(-r * 0.1, y + r * 0.14, r * (0.3 - i * 0.04), y - r * 0.02);
+        ctx.stroke();
+      }
       ctx.strokeStyle = back; ctx.lineWidth = lw;
       ctx.beginPath();                                           // outer contour only
       ctx.moveTo(-r * (0.5 - stride * 0.06), hipY);

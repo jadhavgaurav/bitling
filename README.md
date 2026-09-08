@@ -84,6 +84,11 @@ and with it how it moves, what it says and how it deals with a bug.
 | **Ember**, a hatchling dragon | Floats, and stays where you let go of it | Breathes fire |
 | **Nimbo**, a fighter on a cloud | Floats, sitting cross legged | Charges a two handed energy blast |
 
+Bugs are not only about tests. They crawl out of a failing test suite, a failing GitHub
+Actions run, a failed deploy, a `revert` commit, a `fix` commit, and a run of three tool
+errors inside half a minute. Whatever breaks, something scuttles across your screen and
+your pet goes after it.
+
 A **walker** stands on the bottom edge of the screen, wanders, and opens a parachute if you
 throw it. A **floater** never touches the ground: it hangs in mid air, drifts somewhere new
 now and then, and when you drag it and let go it stays exactly where you left it.

@@ -503,13 +503,14 @@
     facing: 1, stride: 0, walking: false, knee: 0, tilt: 0, stomp: 0, turnT: 0, stretchT: 0, tapT: 0,
     spin: 0, spinV: 0, thrown: false,
     chuteOpen: false, chute: 0, chuteSway: 0, chuteCut: 0,
-    zap: 0, zapCharge: 0, zapCool: 0, zapAim: null, zapLocal: false, zapX: 0, zapY: 0,
+    zap: 0, zapCharge: 0, zapFull: 0.3, zapCool: 0, zapAim: null, zapLocal: false, zapX: 0, zapY: 0,
     screenText: '', screenTint: '', screenT: 0, shake: 0, deploying: false, deployProgress: 0,
   };
   const egg = { wobble: 0 };
   const snack = { active: false, x: 0, y: 0, vy: 0, kind: 'berry', rest: false };
   const bugs = [];
   const debug = { active: false, until: 0 };
+  let toolErrors = [];      // timestamps, so a run of failures can raise a bug
   const drop = { active: false, x: 0, y: 0, vy: 0, kind: 'commit', label: '', rest: false };
   const rocket = { active: false, x: 0, y: 0, vy: 0, t: 0, fade: 1 };
   let gitInfo = { dirty: 0, repo: '', branch: '', minutesSinceCommit: -1 };
@@ -571,6 +572,8 @@
     draw: () => drawDragon(),
     attack: {
       style: 'flame',
+      charge: 0.45,
+      origin: (r) => [{ x: Math.round(pet.x), y: Math.round(pet.y - r * 2.05) }],
       draw(r, k) {
         const ox = pet.x, oy = pet.y - r * 2.05;
         const ang = Math.atan2(pet.zapY - oy, pet.zapX - ox);
@@ -627,6 +630,9 @@
     draw: () => drawRider(),
     attack: {
       style: 'blast',
+      behind: true,
+      charge: 0.9,                      // a long wind up is the whole appeal
+      origin: (r) => [{ x: Math.round(pet.x + pet.facing * r * 0.62), y: Math.round(pet.y - r * 1.62) }],
       draw(r, k) {
         const ox = pet.x + pet.facing * r * 0.62, oy = pet.y - r * 1.62;
         const ang = Math.atan2(pet.zapY - oy, pet.zapX - ox);
@@ -908,6 +914,8 @@
   }
   function eyePoints() {
     const r = petR();
+    const shot = species().attack;
+    if (shot && shot.origin) return shot.origin(r);
     const y = pet.y - r * 2.28;
     const dx = pet.facing * r * 0.12;
     return [{ x: Math.round(pet.x + dx - r * 0.38), y: Math.round(y) },
@@ -1393,7 +1401,7 @@
   function updateBugs(dt) {
     const r = petR();
     const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried;
-    const canFire = canStomp && pet.grounded && pet.mode !== 'fly' && !pet.thrown;
+    const canFire = canStomp && !pet.thrown && (floats() || (pet.grounded && pet.mode !== 'fly'));
 
     for (let i = bugs.length - 1; i >= 0; i--) {
       const b = bugs[i];
@@ -1457,7 +1465,13 @@
           if (d > r * 0.62 && d < near) { near = d; aim = { host: false, bug: b }; }
         }
       }
-      if (aim) { pet.zapAim = aim; pet.zapCharge = 0.3; audio.charge(); }
+      if (aim) {
+        const shot = species().attack;
+        pet.zapAim = aim;
+        pet.zapCharge = (shot && shot.charge) || 0.3;
+        pet.zapFull = pet.zapCharge;
+        audio.charge();
+      }
     }
 
     if (!debug.active) return;
@@ -2247,6 +2261,33 @@
     const firing = pet.zap > 0;
     stageBody({ shadow: false, bob: 0.05, bobRate: 1.7, sway: 0.025 }, (r, t) => {
       const gi = '#3f4fc4', giDark = '#2c3a97', sash = '#ffcf5c';
+      const grow = charging ? clamp(1 - pet.zapCharge / (pet.zapFull || 0.9), 0, 1) : 0;
+
+      // The aura: a column of light that builds while it gathers the charge, drawn
+      // behind everything so the rider stays readable inside it.
+      if (charging || firing) {
+        const power = firing ? 1 : grow;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const glow = ctx.createRadialGradient(0, -r * 1.5, r * 0.1, 0, -r * 1.5, r * (1.5 + power * 0.9));
+        glow.addColorStop(0, `hsla(190, 100%, 80%, ${0.30 * power})`);
+        glow.addColorStop(0.55, `hsla(200, 100%, 66%, ${0.14 * power})`);
+        glow.addColorStop(1, 'hsla(200, 100%, 60%, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.ellipse(0, -r * 1.5, r * (1.5 + power * 0.9), r * (2.0 + power * 1.1), 0, 0, Math.PI * 2); ctx.fill();
+        // sparks rising through it
+        for (let i = 0; i < 7; i++) {
+          const ph = (t * 2.2 + i * 0.9) % 1;
+          const sx = Math.sin(i * 2.4 + t * 0.7) * r * (0.7 + power * 0.4);
+          ctx.globalAlpha = (1 - ph) * 0.8 * power;
+          ctx.fillStyle = '#cdf4ff';
+          ctx.beginPath();
+          ctx.roundRect(sx, -r * (0.7 + ph * 2.4), r * 0.045, r * 0.2, r * 0.03);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
       const shirt = '#e9edff', skin = '#f6d7b4', hair = '#181826';
       const lw = Math.max(1.3, r * 0.05);
       ctx.lineJoin = 'round';
@@ -2270,14 +2311,33 @@
       }
       ctx.restore();
 
-      // ---------------------------------------------------------- crossed legs
+      if (charging) ctx.rotate(-pet.facing * 0.05 * grow);
+      else if (firing) ctx.rotate(pet.facing * 0.06);
+
+      // ---------------------------------------------------------- legs
+      const dangling = pet.held || pet.carried || pet.thrown;
       ctx.fillStyle = gi;
       ctx.strokeStyle = giDark;
       ctx.lineWidth = lw;
-      ctx.beginPath(); ctx.ellipse(0, -r * 1.02, r * 0.6, r * 0.22, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = skin;
-      for (const sgn of [-1, 1]) {
-        ctx.beginPath(); ctx.ellipse(sgn * r * 0.42, -r * 1.0, r * 0.14, r * 0.11, 0, 0, Math.PI * 2); ctx.fill();
+      if (dangling) {
+        // picked up: the legs come uncrossed and swing
+        for (const sgn of [-1, 1]) {
+          const kick = Math.sin(t * 9 + (sgn > 0 ? 0 : 1.1)) * 0.3;
+          ctx.save();
+          ctx.translate(sgn * r * 0.2, -r * 1.06);
+          ctx.rotate(sgn * (0.12 + kick * 0.5));
+          ctx.beginPath(); ctx.roundRect(-r * 0.15, 0, r * 0.3, r * 0.62, r * 0.14); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = skin;
+          ctx.beginPath(); ctx.ellipse(0, r * 0.66, r * 0.14, r * 0.11, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = gi;
+          ctx.restore();
+        }
+      } else {
+        ctx.beginPath(); ctx.ellipse(0, -r * 1.02, r * 0.6, r * 0.22, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = skin;
+        for (const sgn of [-1, 1]) {
+          ctx.beginPath(); ctx.ellipse(sgn * r * 0.42, -r * 1.0, r * 0.14, r * 0.11, 0, 0, Math.PI * 2); ctx.fill();
+        }
       }
 
       // ---------------------------------------------------------- torso
@@ -2301,29 +2361,49 @@
       ctx.beginPath(); ctx.roundRect(-r * 0.44, -r * 1.24, r * 0.88, r * 0.16, r * 0.06); ctx.fill();
 
       // ---------------------------------------------------------- arms
-      ctx.strokeStyle = gi;
+      // Two segments with a real elbow, so every state gets a pose rather than a
+      // stick. Angles run from straight down, positive swinging away from the body.
       ctx.lineCap = 'round';
-      ctx.lineWidth = r * 0.19;
-      if (charging || firing) {
-        // both hands cupped to one side, holding the charge
-        const f = pet.facing;
-        for (const drop of [-0.06, 0.06]) {
-          ctx.beginPath();
-          ctx.moveTo(f * r * 0.12, -r * (1.62 + drop));
-          ctx.lineTo(f * r * 0.5, -r * (1.62 + drop));
-          ctx.stroke();
-        }
+      function arm(sgn, upper, fore) {
+        const sx = sgn * r * 0.34, sy = -r * 1.68;
+        const ua = r * 0.32, fa = r * 0.3;
+        const ex = sx + Math.sin(upper) * ua * sgn, ey = sy + Math.cos(upper) * ua;
+        const hx = ex + Math.sin(upper + fore) * fa * sgn, hy = ey + Math.cos(upper + fore) * fa;
+        ctx.strokeStyle = gi;
+        ctx.lineWidth = r * 0.165;
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke();
         ctx.fillStyle = skin;
-        ctx.beginPath(); ctx.arc(f * r * 0.56, -r * 1.62, r * 0.13, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx, hy, r * 0.115, 0, Math.PI * 2); ctx.fill();
+        return { x: hx, y: hy };
+      }
+
+      const f = pet.facing;
+      if (charging || firing) {
+        // Both hands brought together on one side to hold the charge, then pushed
+        // out flat when it goes. The far arm sits a little higher so both read.
+        const push = firing ? 1 : 0;
+        const near = [1.25 - push * 0.35, -0.62 + push * 0.5];
+        const far = [1.5 - push * 0.4, -0.95 + push * 0.75];
+        arm(f, far[0], far[1]);
+        arm(f, near[0], near[1]);
+      } else if (pet.held || pet.carried) {
+        // carried: arms up and flailing
+        const flail = Math.sin(t * 13);
+        arm(-1, 2.45 + flail * 0.22, -0.55 - flail * 0.3);
+        arm(1, 2.45 - flail * 0.22, -0.55 + flail * 0.3);
+      } else if (pet.chew > 0) {
+        arm(f, 1.75, 1.15);                       // a hand up to the mouth
+        arm(-f, 0.55, 0.45);
+      } else if (pet.wave > 0 || pet.happy > 0.4) {
+        arm(f, 2.5 + Math.sin(t * 9) * 0.28, -0.35);
+        arm(-f, 0.55, 0.45);
+      } else if (asleep) {
+        arm(-1, 0.24, 0.16);
+        arm(1, 0.24, 0.16);
       } else {
-        for (const sgn of [-1, 1]) {
-          ctx.beginPath();
-          ctx.moveTo(sgn * r * 0.36, -r * 1.66);
-          ctx.quadraticCurveTo(sgn * r * 0.56, -r * 1.36, sgn * r * 0.44, -r * 1.06);
-          ctx.stroke();
-          ctx.fillStyle = skin;
-          ctx.beginPath(); ctx.arc(sgn * r * 0.44, -r * 1.02, r * 0.12, 0, Math.PI * 2); ctx.fill();
-        }
+        const breathe = Math.sin(t * 1.9) * 0.05;
+        arm(-1, 0.58 + breathe, 0.44);
+        arm(1, 0.58 - breathe, 0.44);
       }
 
       // ---------------------------------------------------------- head
@@ -2383,7 +2463,7 @@
 
       // ---------------------------------------------------------- the gathering charge
       if (charging) {
-        const grow = clamp(1 - pet.zapCharge / 0.3, 0, 1);
+        const grow = clamp(1 - pet.zapCharge / (pet.zapFull || 0.3), 0, 1);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const cx = pet.facing * r * 0.62, cy = -r * 1.62;
@@ -2543,7 +2623,13 @@
   function draw() {
     drawBackground();
     if (!state.hatched) drawBox();
-    else { drawSnack(); drawDrop(); drawBugs(); drawPet(); drawLaser(); drawRocket(); }
+    else {
+      drawSnack(); drawDrop(); drawBugs();
+      const shot = species().attack;
+      // A wide beam goes behind the body, or it paints over the thing firing it.
+      if (shot && shot.behind) { drawLaser(); drawPet(); } else { drawPet(); drawLaser(); }
+      drawRocket();
+    }
     drawParticles();
     if (state.asleep) {
       ctx.fillStyle = 'rgba(10,14,40,0.42)';
@@ -2580,7 +2666,11 @@
         if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { said = line('commitFix'); releaseBugs(1, [shortMessage(msg).slice(0, 22)]); }
         else if (/\bwip\b/.test(lower)) said = line('commitWip');
         else if (/typo/.test(lower)) said = line('commitTypo');
-        else if (/^revert\b/i.test(msg.trim())) { said = line('commitRevert'); pet.surprise = 1.2; }
+        else if (/^revert\b/i.test(msg.trim())) {
+          said = line('commitRevert');
+          pet.surprise = 1.2;
+          releaseBugs(1, [shortMessage(msg).slice(0, 22)]);
+        }
         else if (msg.trim().length > 0 && msg.trim().length < 8) said = `"${msg.trim()}"? that's the message?`;
         const churn = (Number(ev.insertions) || 0) + (Number(ev.deletions) || 0);
         if (churn > 400) { said = `chonky commit! ${churn} lines`; pet.knee = 0.5; }
@@ -2690,6 +2780,7 @@
         state.joy = clamp(state.joy - 5);
         audio.error();
         spawn('dust', pet.x, pet.y - petR() * 2.6, 8, { spread: petR() * 0.6, vx: 30, vy: -40, g: -30, size: 16, dur: 1.6 });
+        releaseBugs(3, [target ? `${target} deploy` : 'deploy']);
         say(target ? `${target} deploy failed. rollback?` : line('deployFail'), 3400);
         break;
       }
@@ -2730,6 +2821,12 @@
         if (Math.random() < 0.35) {
           pet.screenTint = 'error'; pet.screenText = '!'; pet.screenT = 0.7; pet.shake = 0.25;
           say(line('oops'), 1800);
+        }
+        toolErrors = toolErrors.filter((at) => pet.t - at < 30);
+        toolErrors.push(pet.t);
+        if (toolErrors.length >= 3) {
+          toolErrors = [];
+          releaseBugs(1, ['tool errors']);
         }
         break;
       }

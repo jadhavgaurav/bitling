@@ -104,6 +104,7 @@ final class OverlayView: NSView {
 
     private func drawBeam(_ ctx: CGContext, _ b: Beam) {
         if b.style == "flame" { drawFlame(ctx, b); return }
+        if b.style == "blast" { drawBlast(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -116,6 +117,36 @@ final class OverlayView: NSView {
         ctx.move(to: b.from); ctx.addLine(to: b.to); ctx.strokePath()
         let flash = 13 * (1.25 - k)
         ctx.setFillColor(NSColor(calibratedRed: 1, green: 0.72, blue: 0.35, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
+        ctx.restoreGState()
+    }
+
+    /// A two handed energy beam: a wide soft bar with a hard white core, a bloom at the
+    /// hands and a burst where it lands.
+    private func drawBlast(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let len = max(1, hypot(dx, dy))
+        let angle = atan2(dy, dx)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.translateBy(x: b.from.x, y: b.from.y)
+        ctx.rotate(by: angle)
+        let width = 17 * (0.65 + k * 0.55)
+        ctx.setFillColor(NSColor(calibratedRed: 0.55, green: 0.92, blue: 1, alpha: 0.55 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -width, width: len, height: width * 2))
+        ctx.setFillColor(NSColor(calibratedRed: 0.85, green: 0.99, blue: 1, alpha: 0.75 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -width * 0.55, width: len, height: width * 1.1))
+        ctx.setFillColor(NSColor(white: 1, alpha: 0.95 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -width * 0.22, width: len, height: width * 0.44))
+        let bloom = width * 1.9
+        ctx.setFillColor(NSColor(calibratedRed: 0.7, green: 0.96, blue: 1, alpha: 0.7 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -bloom, y: -bloom, width: bloom * 2, height: bloom * 2))
+        ctx.restoreGState()
+        let flash = 20 * (1.3 - k)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.setFillColor(NSColor(calibratedRed: 0.85, green: 0.99, blue: 1, alpha: 0.9 * k).cgColor)
         ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
         ctx.restoreGState()
     }

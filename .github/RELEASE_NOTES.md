@@ -23,7 +23,9 @@ smiling face in the menu bar. If you would rather it stayed out of the way, turn
 - **git**, in every repository on the machine: commits drop a node it catches and eats,
   pushes launch a rocket, merges get confetti, rebases make it dizzy, `fix` commits
   spawn a bug it stomps. Reflog based, so there is nothing to configure.
-- **tests and deploys**: red screen with X eyes and a swarm of bugs when tests fail, a
+- **anything that breaks**: bugs crawl out of a failing test suite, a failing GitHub
+  Actions run, a failed deploy, a revert, a `fix` commit, or a run of tool errors. Your pet
+  hunts them down. Red screen with X eyes and a swarm of bugs when tests fail, a
   green OK when they pass, a progress bar while a deploy runs, a rocket when it lands.
   Reads GitHub Actions and Deployments through the `gh` CLI, local pytest caches, and
   anything you send with the bundled `bitling` command.

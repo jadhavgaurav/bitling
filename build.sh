@@ -51,6 +51,9 @@ cp web/panel.html "$APP/Contents/Resources/panel.html"
 if [[ -d Resources/pets ]]; then
   cp -R Resources/pets "$APP/Contents/Resources/pets"
 fi
+if [[ -d Resources/avatars ]]; then
+  cp -R Resources/avatars "$APP/Contents/Resources/avatars"
+fi
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/bitling "$APP/Contents/Resources/bitling"
 chmod +x "$APP/Contents/Resources/bitling"

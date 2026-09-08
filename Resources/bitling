@@ -6,6 +6,7 @@
 #   bitling event <kind> [key=value...]   raw event, e.g. `bitling event test-failed count=3 name=api`
 #                                         test names: tests=test_a,test_b (they crawl your screen)
 #   bitling say <text>                    make the pet say something
+#   bitling panel                         open the control room window
 #   bitling claude                        Claude Code hook adapter (reads hook JSON on stdin)
 #   bitling git <hook> [args]             global git hook adapter (installed for you by the menu)
 #
@@ -14,7 +15,7 @@
 set -u
 
 usage() {
-  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 encode() {
@@ -76,6 +77,9 @@ case "$command_name" in
   say)
     [ $# -gt 0 ] || { usage; exit 2; }
     send say "text=$*"
+    ;;
+  panel)
+    open "bitling://panel" 2>/dev/null || true
     ;;
   git)
     # Global git hook adapter: `bitling git <hook-name> [hook args]` inside a repository.

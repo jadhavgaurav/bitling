@@ -22,7 +22,7 @@ echo "-> deriving desktop page from $WEB_SOURCE"
 python3 Tools/make_pet_html.py "$WEB_SOURCE" Resources/pet.html
 python3 Tools/make_demo.py
 
-SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift Sources/Overlay.swift)
+SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift Sources/Overlay.swift Sources/ControlPanel.swift)
 compile() {  # compile <arch> <output>
   swiftc -O -swift-version 5 -target "$1-apple-macosx$MIN_MACOS" \
     -framework Cocoa -framework WebKit -framework ServiceManagement \
@@ -47,6 +47,7 @@ build/makeicon build/Bitling.iconset >/dev/null
 iconutil -c icns build/Bitling.iconset -o "$APP/Contents/Resources/Bitling.icns"
 
 cp Resources/pet.html "$APP/Contents/Resources/pet.html"
+cp web/panel.html "$APP/Contents/Resources/panel.html"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/bitling "$APP/Contents/Resources/bitling"
 chmod +x "$APP/Contents/Resources/bitling"

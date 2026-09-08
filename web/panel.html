@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bitling Control Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg:#14162a;
+    --bg-2:#1b1e38;
+    --panel:#20244180;
+    --edge:#33386a;
+    --ink:#e7e9ff;
+    --dim:#8f95c9;
+    --faint:#5d6398;
+    --cyan:#7ef5e6;
+    --amber:#ffb14e;
+    --red:#ff6b6b;
+    --green:#5ddba0;
+    --violet:#b28dff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --round:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;color:var(--ink);
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    background:
+      radial-gradient(120% 80% at 50% -10%, #2b2f5c 0%, transparent 60%),
+      radial-gradient(80% 60% at 110% 110%, #1d3b4a 0%, transparent 55%),
+      var(--bg);
+    overflow:hidden;-webkit-font-smoothing:antialiased;
+  }
+  /* the faint grid gives the room its instrument-panel feel */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;opacity:.35;
+    background-image:linear-gradient(var(--edge) 1px,transparent 1px),linear-gradient(90deg,var(--edge) 1px,transparent 1px);
+    background-size:34px 34px;
+    mask-image:radial-gradient(120% 90% at 50% 0%,#000 20%,transparent 75%);
+  }
+  #app{position:relative;height:100%;display:flex;flex-direction:column;gap:12px;padding:14px 14px 12px}
+  h1,h2,h3{margin:0;font-family:Fredoka,system-ui,sans-serif;font-weight:600}
+
+  /* ---------------------------------------------------------------- header */
+  .hero{display:flex;gap:13px;align-items:center;padding:12px 13px;border:1px solid var(--edge);border-radius:var(--round);
+    background:linear-gradient(180deg,#242a52aa,#1b1f3caa);backdrop-filter:blur(8px)}
+  #portrait{width:74px;height:74px;flex:0 0 auto;border-radius:12px;background:#11132400;display:block}
+  .who{flex:1;min-width:0}
+  .who h1{font-size:21px;line-height:1.05;letter-spacing:.2px}
+  .who .sub{color:var(--dim);font-size:11px;letter-spacing:.09em;text-transform:uppercase;margin-top:3px}
+  .status{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:3px 9px;border-radius:99px;
+    font-size:11px;font-weight:600;background:#7ef5e618;color:var(--cyan);border:1px solid #7ef5e63a}
+  .status i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+  .status.working{background:#ffb14e18;color:var(--amber);border-color:#ffb14e3a}
+  .status.error{background:#ff6b6b18;color:var(--red);border-color:#ff6b6b3a}
+  .status.asleep{background:#8f95c918;color:var(--dim);border-color:#8f95c93a}
+
+  /* ---------------------------------------------------------------- vitals */
+  .vitals{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .vital{display:flex;flex-direction:column;gap:4px}
+  .vital span{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+  .meter{height:7px;border-radius:99px;background:#0e1026;overflow:hidden;border:1px solid #2b2f57}
+  .meter i{display:block;height:100%;border-radius:99px;transition:width .5s ease,background .4s;
+    background:linear-gradient(90deg,#3ecf8e,#5ddba0);box-shadow:0 0 10px #5ddba055}
+  .meter.low i{background:linear-gradient(90deg,#e0912f,#ffb14e);box-shadow:0 0 10px #ffb14e55}
+  .meter.crit i{background:linear-gradient(90deg,#e04b4b,#ff6b6b);box-shadow:0 0 10px #ff6b6b66}
+
+  /* ---------------------------------------------------------------- actions */
+  .acts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  .acts button{all:unset;cursor:pointer;text-align:center;padding:9px 4px;border-radius:11px;border:1px solid var(--edge);
+    background:#1e2340cc;font-size:12px;font-weight:600;color:var(--ink);transition:.16s}
+  .acts button:hover{background:#2a3059;border-color:#4a5197;transform:translateY(-1px)}
+  .acts button:active{transform:translateY(0) scale(.97)}
+  .acts button:disabled{opacity:.38;cursor:default;transform:none}
+  .acts button b{display:block;font-size:15px;margin-bottom:1px;font-weight:400}
+  .acts button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+  /* ---------------------------------------------------------------- tiles */
+  .today{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .tile{padding:9px 10px;border-radius:12px;border:1px solid var(--edge);background:#1b1f3c99}
+  .tile b{display:block;font-family:var(--mono);font-size:19px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .tile span{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+  .tile.c b{color:var(--cyan)} .tile.p b{color:var(--amber)}
+  .tile.t b{color:var(--green)} .tile.k b{color:var(--violet)}
+
+  /* ---------------------------------------------------------------- stream */
+  .stream{flex:1;min-height:110px;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:var(--round);
+    background:#161933b3;overflow:hidden}
+  .stream header{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid var(--edge);
+    background:#1b1f3c99}
+  .stream header h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  #spark{width:104px;height:20px;display:block;opacity:.95}
+  .log{flex:1;overflow-y:auto;padding:6px 4px 8px;font-family:var(--mono);font-size:11.5px;scrollbar-width:thin}
+  .log::-webkit-scrollbar{width:9px}
+  .log::-webkit-scrollbar-thumb{background:#2d3260;border-radius:9px;border:3px solid transparent;background-clip:content-box}
+  .row{display:grid;grid-template-columns:50px 15px 1fr;gap:7px;align-items:baseline;padding:3px 9px;border-radius:7px}
+  .row:hover{background:#ffffff08}
+  .row time{color:var(--faint);font-size:10.5px;font-variant-numeric:tabular-nums}
+  .row .g{text-align:center;font-size:11px}
+  .row p{margin:0;color:var(--ink);overflow-wrap:anywhere}
+  .row p em{font-style:normal;color:var(--faint)}
+  .row.commit .g{color:var(--cyan)} .row.push .g,.row.deploy .g{color:var(--amber)}
+  .row.merge .g{color:var(--violet)} .row.fail .g{color:var(--red)}
+  .row.pass .g{color:var(--green)} .row.claude .g{color:#ff9d5c}
+  .empty{padding:26px 14px;text-align:center;color:var(--faint);font-family:system-ui;font-size:12px}
+
+  /* ---------------------------------------------------------------- feet */
+  .feet{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:99px;border:1px solid var(--edge);
+    background:#1b1f3c99;font-size:11px;color:var(--dim);cursor:pointer;transition:.16s;user-select:none}
+  .chip:hover{border-color:#4a5197;color:var(--ink)}
+  .chip i{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:0 0 auto}
+  .chip.on{color:var(--ink);border-color:#7ef5e64d;background:#7ef5e610}
+  .chip.on i{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .chip.static{cursor:default}
+  .chip.static:hover{border-color:var(--edge);color:var(--dim)}
+  .chip.static.on:hover{color:var(--ink);border-color:#7ef5e64d}
+  .chip:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .meta{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--faint);font-size:10.5px}
+  .meta span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .meta span:last-child{white-space:nowrap;flex:0 0 auto}
+  .meta a{color:var(--dim);text-decoration:none;border-bottom:1px dotted var(--faint)}
+  .meta a:hover{color:var(--cyan);border-color:var(--cyan)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <section class="hero">
+    <canvas id="portrait" width="148" height="148" aria-label="Your Bitling"></canvas>
+    <div class="who">
+      <h1 id="petName">Bitling</h1>
+      <div class="sub" id="petSub">waking up…</div>
+      <div class="status" id="petStatus"><i></i><span>idle</span></div>
+    </div>
+  </section>
+
+  <section class="vitals">
+    <div class="vital"><span>Tummy</span><div class="meter" id="mFull"><i style="width:0"></i></div></div>
+    <div class="vital"><span>Energy</span><div class="meter" id="mEnergy"><i style="width:0"></i></div></div>
+    <div class="vital"><span>Joy</span><div class="meter" id="mJoy"><i style="width:0"></i></div></div>
+  </section>
+
+  <nav class="acts" aria-label="Care">
+    <button data-act="pat"><b>✋</b>Pat</button>
+    <button data-act="feed" id="bFeed"><b>🔋</b>Feed</button>
+    <button data-act="play" id="bPlay"><b>🐞</b>Debug</button>
+    <button data-act="sleep" id="bSleep"><b>🌙</b>Sleep</button>
+  </nav>
+
+  <section class="today">
+    <div class="tile c"><b id="tCommits">0</b><span>Commits</span></div>
+    <div class="tile p"><b id="tPushes">0</b><span>Pushes</span></div>
+    <div class="tile k"><b id="tPrompts">0</b><span>Prompts</span></div>
+    <div class="tile t"><b id="tTools">0</b><span>Tools</span></div>
+  </section>
+
+  <section class="stream">
+    <header>
+      <h3>Activity</h3>
+      <canvas id="spark" width="208" height="40" aria-label="Activity over the last twelve hours"></canvas>
+    </header>
+    <div class="log" id="log"><div class="empty">Nothing yet today. Go and commit something.</div></div>
+  </section>
+
+  <nav class="feet" aria-label="Watching">
+    <button class="chip" id="cRepos" data-act="rescan" title="Rescan for repositories"><i></i><span>0 repos</span></button>
+    <div class="chip static" id="cCi"><i></i><span>CI</span></div>
+    <button class="chip" id="cClaude" data-act="claudeHooks"><i></i><span>Claude</span></button>
+    <button class="chip" id="cGitHooks" data-act="gitHooks"><i></i><span>Git hooks</span></button>
+    <button class="chip" id="cSwarm" data-act="swarm"><i></i><span>Desktop swarm</span></button>
+  </nav>
+
+  <div class="meta">
+    <span id="lifetime">Bitling</span>
+    <span><a href="#" data-act="hide" id="lnkHide">hide pet</a> · <a href="#" data-act="rename">rename</a> · <a href="#" data-act="repo">github</a> · <a href="#" data-act="quit">quit</a></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const HOST = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.panel;
+  const send = (type, value) => { try { HOST && HOST.postMessage({ type, value }); } catch (_) {} };
+
+  let data = { pet: {}, today: {}, lifetime: {}, watch: {}, events: [] };
+
+  // ---------------------------------------------------------------- portrait
+  const pc = $('#portrait').getContext('2d');
+  let blink = 0, nextBlink = 2, t = 0;
+  function accent() {
+    const p = data.pet || {};
+    if (p.screen === 'error') return '#ff6b6b';
+    if (p.screen === 'deploy') return '#ffb14e';
+    if (p.working) return '#ff9d5c';
+    if (p.asleep) return '#6f76ad';
+    if ((p.full ?? 100) < 30) return '#ffb14e';
+    return '#7ef5e6';
+  }
+  function drawPortrait(dt) {
+    const p = data.pet || {};
+    const w = 148, h = 148, u = 16;
+    t += dt;
+    if (blink > 0) blink -= dt * 4;
+    else if ((nextBlink -= dt) <= 0) { blink = 1; nextBlink = 2.4 + Math.random() * 3.5; }
+    const asleep = !!p.asleep;
+    const mood = 0.4 * (p.joy ?? 60) + 0.35 * (p.full ?? 60) + 0.25 * (p.energy ?? 60);
+    const glow = accent();
+    const bob = Math.sin(t * 1.8) * 1.6;
+
+    pc.clearRect(0, 0, w, h);
+    pc.save();
+    pc.translate(w / 2, h / 2 + 10 + bob);
+
+    if (!p.hatched) {
+      // Before it is unboxed there is no robot to show, only the box it arrived in.
+      pc.rotate(Math.sin(t * 2.2) * 0.045);
+      const b = u * 1.5;
+      pc.fillStyle = '#c8a06a'; pc.strokeStyle = '#8a6a42'; pc.lineWidth = 2;
+      pc.beginPath(); pc.roundRect(-b, -b * 0.85, b * 2, b * 1.7, 6); pc.fill(); pc.stroke();
+      pc.fillStyle = '#b08b58';
+      pc.beginPath(); pc.roundRect(-b, -b * 0.85, b * 2, b * 0.5, 6); pc.fill();
+      pc.strokeStyle = '#8a6a42'; pc.lineWidth = 2.6;
+      pc.beginPath(); pc.moveTo(0, -b * 0.85); pc.lineTo(0, b * 0.85); pc.stroke();
+      pc.fillStyle = '#5b4525'; pc.font = '600 15px Fredoka, system-ui, sans-serif';
+      pc.textAlign = 'center'; pc.textBaseline = 'middle';
+      pc.fillText('?', b * 0.52, b * 0.28);
+      pc.restore();
+      return;
+    }
+
+    // antenna
+    pc.strokeStyle = '#6f76ad'; pc.lineWidth = 2.4; pc.lineCap = 'round';
+    pc.beginPath(); pc.moveTo(0, -u * 2.5); pc.lineTo(0, -u * 3.3); pc.stroke();
+    pc.save(); pc.shadowColor = glow; pc.shadowBlur = 12; pc.fillStyle = glow;
+    pc.beginPath(); pc.arc(0, -u * 3.5, 4.4, 0, Math.PI * 2); pc.fill(); pc.restore();
+
+    // neck, body and feet
+    pc.fillStyle = '#9aa0cc';
+    pc.beginPath(); pc.roundRect(-u * 0.3, u * 0.18, u * 0.6, u * 0.5, 3); pc.fill();
+    pc.fillStyle = '#8f95c9';
+    for (const s of [-1, 1]) { pc.beginPath(); pc.roundRect(s * u * 0.72 - u * 0.34, u * 2.1, u * 0.68, u * 0.34, 4); pc.fill(); }
+    pc.fillStyle = '#cdd0ea'; pc.strokeStyle = '#5b5f96'; pc.lineWidth = 2;
+    pc.beginPath(); pc.roundRect(-u * 1.15, u * 0.5, u * 2.3, u * 1.7, 7); pc.fill(); pc.stroke();
+    // arms
+    pc.strokeStyle = '#5b5f96'; pc.lineWidth = 5;
+    pc.beginPath(); pc.moveTo(-u * 1.2, u * 0.95); pc.lineTo(-u * 1.75, u * 1.35);
+    pc.moveTo(u * 1.2, u * 0.95); pc.lineTo(u * 1.75, u * 1.35); pc.stroke();
+    // head
+    pc.fillStyle = '#dcdff4'; pc.strokeStyle = '#5b5f96'; pc.lineWidth = 2;
+    pc.beginPath(); pc.roundRect(-u * 1.6, -u * 2.4, u * 3.2, u * 2.7, 11); pc.fill(); pc.stroke();
+    // screen
+    pc.fillStyle = '#141733';
+    pc.beginPath(); pc.roundRect(-u * 1.3, -u * 2.1, u * 2.6, u * 2.1, 8); pc.fill();
+
+    // face
+    pc.save();
+    pc.shadowColor = glow; pc.shadowBlur = 9; pc.fillStyle = glow; pc.strokeStyle = glow;
+    pc.lineWidth = 2.4; pc.lineCap = 'round';
+    const ey = -u * 1.25, ex = u * 0.55, ew = 8, eh = asleep ? 2 : 10 * (1 - Math.max(0, Math.min(1, blink)) * 0.85);
+    for (const s of [-1, 1]) {
+      if (asleep) { pc.beginPath(); pc.moveTo(s * ex - 5, ey); pc.lineTo(s * ex + 5, ey); pc.stroke(); }
+      else { pc.beginPath(); pc.roundRect(s * ex - ew / 2, ey - eh / 2, ew, Math.max(1.6, eh), 2.6); pc.fill(); }
+    }
+    if (p.working && !asleep) {
+      for (let i = -1; i <= 1; i++) {
+        const ph = Math.sin(t * 6 - i * 1.1);
+        pc.globalAlpha = 0.45 + 0.55 * (ph * 0.5 + 0.5);
+        pc.beginPath(); pc.arc(i * 8, -u * 0.55, 2, 0, Math.PI * 2); pc.fill();
+      }
+      pc.globalAlpha = 1;
+    } else {
+      const curve = asleep ? 1 : (mood - 50) / 50 * 6;
+      pc.beginPath(); pc.moveTo(-7, -u * 0.55); pc.quadraticCurveTo(0, -u * 0.55 + curve, 7, -u * 0.55); pc.stroke();
+    }
+    pc.restore();
+    // chest light
+    pc.fillStyle = glow;
+    pc.beginPath(); pc.arc(0, u * 1.3, 2.6, 0, Math.PI * 2); pc.fill();
+    pc.restore();
+  }
+
+  // ---------------------------------------------------------------- sparkline
+  function drawSpark() {
+    const c = $('#spark'), g = c.getContext('2d');
+    const W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    const now = Date.now(), buckets = new Array(12).fill(0);
+    for (const e of data.events || []) {
+      const age = (now - e.t) / 3600000;
+      if (age >= 0 && age < 12) buckets[11 - Math.floor(age)]++;
+    }
+    const peak = Math.max(1, ...buckets);
+    const bw = W / buckets.length;
+    buckets.forEach((v, i) => {
+      const bh = Math.max(v > 0 ? 3 : 1.5, (v / peak) * (H - 6));
+      g.fillStyle = v > 0 ? 'rgba(126,245,230,0.85)' : 'rgba(93,99,152,0.35)';
+      g.beginPath(); g.roundRect(i * bw + 1.5, H - bh, bw - 3, bh, 2); g.fill();
+    });
+  }
+
+  // ---------------------------------------------------------------- stream
+  const GLYPH = {
+    commit: ['●', 'commit'], amend: ['●', 'commit'], 'cherry-pick': ['●', 'commit'],
+    push: ['▲', 'push'], merge: ['⑂', 'merge'], checkout: ['⑂', 'merge'],
+    rebase: ['↻', 'merge'], 'rebase-done': ['↻', 'merge'], pull: ['▼', 'merge'],
+    stash: ['⌂', 'merge'], reset: ['⊘', 'fail'],
+    'test-failed': ['✕', 'fail'], 'test-passed': ['✓', 'pass'],
+    'deploy-started': ['⇡', 'deploy'], 'deploy-finished': ['✓', 'pass'], 'deploy-failed': ['✕', 'fail'],
+    'claude-prompt': ['✻', 'claude'], 'claude-done': ['✻', 'claude'], 'claude-notify': ['!', 'claude'],
+    'claude-session-start': ['✻', 'claude'], 'claude-session-end': ['✻', 'claude'],
+    bug: ['🐞', 'fail'], say: ['·', 'commit'],
+  };
+  const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let logKey = null;
+  function renderLog() {
+    const log = $('#log');
+    const items = (data.events || []).slice().reverse();
+    const key = `${items.length}:${items[0] ? items[0].t : 0}`;
+    if (key === logKey) return;
+    logKey = key;
+    if (!items.length) {
+      log.innerHTML = '<div class="empty">Nothing yet. Go and commit something.</div>';
+      return;
+    }
+    log.innerHTML = items.map((e) => {
+      const [g, cls] = GLYPH[e.kind] || ['·', 'commit'];
+      const where = e.repo ? `<em> ${esc(e.repo)}</em>` : '';
+      return `<div class="row ${cls}"><time>${clock(e.t)}</time><div class="g">${g}</div>` +
+             `<p>${esc(e.title)}${where}</p></div>`;
+    }).join('');
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---------------------------------------------------------------- paint
+  function meter(el, v) {
+    const n = Math.max(0, Math.min(100, Number(v) || 0));
+    el.firstElementChild.style.width = n + '%';
+    el.classList.toggle('low', n < 40 && n >= 20);
+    el.classList.toggle('crit', n < 20);
+  }
+  function chip(el, on, text, title) {
+    el.classList.toggle('on', !!on);
+    el.lastElementChild.textContent = text;
+    if (title) el.title = title;
+  }
+  function render() {
+    const p = data.pet || {}, d = data.today || {}, w = data.watch || {};
+    $('#petName').textContent = p.hatched ? (p.name || 'Bitling') : 'A mysterious box';
+    $('#petSub').textContent = p.hatched ? `${p.stage || ''} · ${p.age || ''}` : 'tap it three times to unbox';
+    const st = $('#petStatus');
+    const label = !p.hatched ? 'boxed' : p.asleep ? 'asleep' : p.screen === 'error' ? 'something is red'
+      : p.working ? 'Claude is working' : (p.full ?? 100) < 30 ? 'hungry' : 'idle';
+    st.className = 'status' + (p.asleep ? ' asleep' : p.screen === 'error' ? ' error' : p.working ? ' working' : '');
+    st.lastElementChild.textContent = label;
+    meter($('#mFull'), p.full); meter($('#mEnergy'), p.energy); meter($('#mJoy'), p.joy);
+    $('#bFeed').disabled = !p.hatched || p.asleep;
+    $('#bPlay').disabled = !p.hatched || p.asleep;
+    $('#bSleep').disabled = !p.hatched;
+    $('#bSleep').lastChild.textContent = p.asleep ? 'Wake' : 'Sleep';
+    $('#tCommits').textContent = d.commits ?? 0;
+    $('#tPushes').textContent = d.pushes ?? 0;
+    $('#tPrompts').textContent = d.prompts ?? 0;
+    $('#tTools').textContent = d.tools ?? 0;
+    chip($('#cRepos'), (w.repos || 0) > 0, `${w.repos || 0} repos`, 'Click to rescan for git repositories');
+    chip($('#cCi'), !!w.ciOn, w.ci || 'CI off', w.ciDetail || '');
+    chip($('#cClaude'), !!w.claudeHooks, w.claudeHooks ? 'Claude hooks on' : 'Claude: transcripts',
+      'Click to connect or disconnect the Claude Code hooks');
+    chip($('#cGitHooks'), !!w.gitHooks, w.gitHooks ? 'Git hooks on' : 'Git hooks off',
+      'Click to connect or disconnect the global git hooks');
+    chip($('#cSwarm'), !!w.swarm, w.swarm ? 'Swarm on screen' : 'Swarm in window',
+      'Let beetles loose across the whole screen, or keep them in the pet window');
+    const life = data.lifetime || {};
+    $('#lifetime').textContent =
+      `${life.commits ?? 0} caught · ${life.pushes ?? 0} pushed · ${life.bugs ?? 0} zapped · v${w.version || '?'}`;
+    $('#lnkHide').textContent = w.petVisible === false ? 'show pet' : 'hide pet';
+    renderLog();
+    drawSpark();
+  }
+
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    e.preventDefault();
+    const act = el.dataset.act;
+    if (act && act !== 'none') send('action', act);
+  });
+
+  window.panel = { update(next) { data = next || data; render(); } };
+
+  let last = performance.now();
+  (function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!document.hidden) drawPortrait(dt);
+    requestAnimationFrame(frame);
+  })(last);
+
+  render();
+  send('ready');
+})();
+</script>
+</body>
+</html>

@@ -28,6 +28,12 @@ Bitling has no Dock icon. Look for the smiling face in the menu bar.
 - **Claude Code sessions**: typing dots while it works, chatter about what it is doing,
   a wave when Claude needs your permission, sparkles when it finishes.
 
+**The control room**
+
+Right click the pet and pick **Control room** (or run `bitling panel`) for a small window with
+a live portrait, its vitals, today's commits, pushes and Claude turns, a running activity
+stream with a twelve-hour sparkline, and switches for the hooks and the screen-wide swarm.
+
 **Care**
 
 Tap the box three times to unbox it. Click to pat, drag to carry, throw it and it

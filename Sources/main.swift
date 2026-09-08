@@ -111,6 +111,8 @@ struct PetSnapshot {
     var commits = 0
     var pushes = 0
     var bugs = 0
+    var working = false
+    var screen = ""
 
     init() {}
 
@@ -128,6 +130,8 @@ struct PetSnapshot {
         commits = message["commits"] as? Int ?? 0
         pushes = message["pushes"] as? Int ?? 0
         bugs = message["bugs"] as? Int ?? 0
+        working = message["working"] as? Bool ?? false
+        screen = message["screen"] as? String ?? ""
     }
 }
 
@@ -144,6 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let ci = CIWatcher()
     private let claude = ClaudeWatcher()
     private let overlay = Overlay()
+    private let panel = ControlPanel()
+    private let activity = ActivityLog()
     private var swarmEnabled = UserDefaults.standard.object(forKey: "swarmOnDesktop") as? Bool ?? true
     private var lastSwarmCount = -1
     private var recentEvents: [String: Date] = [:]
@@ -169,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var dragEventCount = 0
 
     // Menu items whose titles or states change
+    private let controlItem = NSMenuItem(title: "Control room…", action: #selector(openPanel), keyEquivalent: "k")
     private let headerItem = NSMenuItem(title: "Bitling", action: nil, keyEquivalent: "")
     private let stageItem = NSMenuItem(title: "Egg", action: nil, keyEquivalent: "")
     private let tummyItem = NSMenuItem(title: "Tummy", action: nil, keyEquivalent: "")
@@ -218,6 +225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             guard let self else { return }
             self.js("petNative.killed(\(beetle.boss ? "true" : "false"))")
         }
+        panel.stateProvider = { [weak self] in self?.panelPayload() ?? [:] }
+        panel.onAction = { [weak self] action in self?.handlePanelAction(action) }
         timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(timer!, forMode: .common)
         NotificationCenter.default.addObserver(
@@ -233,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             guard url.scheme?.lowercased() == "bitling", let kind = url.host?.lowercased() else { continue }
+            if kind == "panel" { panel.show(); continue }
             var query: [String: String] = [:]
             URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.forEach { query[$0.name] = $0.value ?? "" }
             let event = GitEvent(
@@ -310,6 +320,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.addItem(tummyItem)
         menu.addItem(energyItem)
         menu.addItem(joyItem)
+        menu.addItem(.separator())
+        controlItem.target = self
+        menu.addItem(controlItem)
         menu.addItem(.separator())
         for item in [patItem, feedItem, playItem, sleepItem] { item.target = self; menu.addItem(item) }
         menu.addItem(.separator())
@@ -514,6 +527,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
     }
 
+    // MARK: Control room
+
+    @objc private func openPanel() { panel.show() }
+
+    private func panelPayload() -> [String: Any] {
+        let ghConnected = ci.ghStatus.hasPrefix("GitHub Actions")
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        return [
+            "pet": [
+                "name": snapshot.name, "stage": snapshot.stage, "age": snapshot.age,
+                "full": snapshot.full, "energy": snapshot.energy, "joy": snapshot.joy,
+                "asleep": snapshot.asleep, "hatched": snapshot.hatched,
+                "working": snapshot.working, "screen": snapshot.screen,
+            ],
+            "today": [
+                "commits": git.commitsToday, "pushes": git.pushesToday,
+                "prompts": claude.promptsToday, "tools": claude.toolsToday,
+            ],
+            "lifetime": ["commits": snapshot.commits, "pushes": snapshot.pushes, "bugs": snapshot.bugs],
+            "watch": [
+                "repos": git.repositoryCount,
+                "ci": ghConnected ? "GitHub Actions" : "CI needs gh",
+                "ciOn": ghConnected,
+                "ciDetail": "\(ci.ghStatus). Last: \(ci.lastSummary)",
+                "claudeHooks": ClaudeHooks.installed(),
+                "gitHooks": GitHooks.installed(),
+                "swarm": swarmEnabled,
+                "petVisible": window.isVisible,
+                "version": version,
+            ],
+            "events": activity.entries.map(\.asDictionary),
+        ]
+    }
+
+    private func handlePanelAction(_ action: String) {
+        switch action {
+        case "pat": patAction()
+        case "feed": feedAction()
+        case "play": playAction()
+        case "sleep": sleepAction()
+        case "rescan": rescanRepos()
+        case "gitHooks": toggleGitHooks()
+        case "claudeHooks": toggleClaudeHooks()
+        case "swarm": toggleSwarm()
+        case "hide": toggleShown()
+        case "rename": renameAction()
+        case "repo": NSWorkspace.shared.open(URL(string: "https://github.com/jadhavgaurav/bitling")!)
+        case "quit": NSApp.terminate(nil)
+        default: return
+        }
+        panel.refresh()
+    }
+
     @objc private func patAction() { js("petNative.action('pat')") }
     @objc private func feedAction() { js("petNative.action('feed')") }
     @objc private func playAction() { js("petNative.action('play')") }
@@ -563,7 +629,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         alert.addButton(withTitle: "Start over")
         if alert.runModal() == .alertSecondButtonReturn {
             UserDefaults.standard.removeObject(forKey: stateDefaultsKey)
+            activity.clear()
             js("petNative.reset()")
+            panel.refresh()
         }
     }
 
@@ -592,6 +660,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             if let last = recentEvents[key], now.timeIntervalSince(last) < 3 { return }
             recentEvents[key] = now
         }
+        activity.record(event)
+        panel.refresh()
         guard let data = try? JSONSerialization.data(withJSONObject: event.asDictionary),
               let json = String(data: data, encoding: .utf8) else { return }
         js("petNative.gitEvent(\(json))")
@@ -803,6 +873,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     private func tick() {
         tickCount += 1
+        if tickCount % 30 == 0 { panel.refresh() }
         guard !dragging else { return }
         let dt: CGFloat = 1.0 / 60.0
         let visible = screenForWindow().visibleFrame

@@ -139,6 +139,7 @@ def build(source: Path, target: Path) -> None:
         "      full: Math.round(state.full), energy: Math.round(state.energy), joy: Math.round(state.joy),\n"
         "      asleep: state.asleep, hatched: state.hatched, sound: state.sound, age: state.hatched ? ageText(state) : '',\n"
         "      commits: state.commits, pushes: state.pushes, bugs: state.bugs,\n"
+        "      working: pet.working, screen: pet.screenT > 0 ? pet.screenTint : '',\n"
         "    };\n"
         "    const key = JSON.stringify(snap);\n"
         "    if (!force && key === lastPushed) return;\n"

@@ -188,6 +188,7 @@ bitling run pytest -q
 bitling deploy production ./deploy.sh   # start, then finished or failed
 bitling event test-failed count=3 name=api tests=test_alpha,test_beta,test_gamma
 bitling say "lunch?"
+bitling panel                           # open the control room
 ```
 
 The command talks to the app over a `bitling://` URL, so it works from any shell, Makefile,
@@ -243,10 +244,45 @@ It grows through three stages with age and care: **Bootling**, then **Bitling**,
 **Overclocked Bitling** with two antennas and a halo. Its needs drift while the app is closed,
 capped at twelve hours. It never dies. It only sulks.
 
-Everything lives in the menu bar: the three meters, Pat, Feed, Debug bugs, Sleep, Hide,
+The menu bar holds the full set: the three meters, Pat, Feed, Debug bugs, Sleep, Hide,
 Bring pet to this screen, Rename, Sound, Start over, Open at login, and a Dev activity
 submenu with what is being watched, today's counts, and "Pretend…" items to see any reaction
 on demand.
+
+---
+
+## The control room
+
+Right click the pet (or use the menu bar) and pick **Control room**, or run `bitling panel`.
+It opens a small window that answers "what has this thing actually seen today?".
+
+- A live portrait of your pet, blinking, dozing or flashing orange while Claude works,
+  next to its name, stage, age and three vitals.
+- Pat, Feed, Debug and Sleep as buttons instead of menu items.
+- Today's tally: commits, pushes, Claude prompts and tool calls.
+- A running activity stream: every commit subject, push, merge, failing suite, deploy and
+  Claude turn, with a twelve-hour sparkline above it. It survives a restart, and "Start
+  over" wipes it along with the pet.
+- Chips along the bottom for what is connected: how many repositories are being watched,
+  whether GitHub Actions is reachable, and switches for the Claude Code hooks, the global
+  git hooks and the screen-wide bug swarm.
+
+Nothing in it phones home. Every number comes from the same watchers the pet reacts to.
+
+## What connects to where
+
+Worth being explicit, because a pet that reads your git history should be easy to reason
+about:
+
+- **git needs no account.** Bitling reads `.git/logs` on your own disk. No token, no OAuth,
+  no network call, no GitHub. It works offline and on repositories that were never pushed
+  anywhere. This is the whole git feature.
+- **GitHub Actions and Deployments** are the one part that talks to GitHub, and they borrow
+  the `gh` CLI's existing login rather than asking for a token of their own. No `gh`, no
+  login, or a repo whose origin is not github.com: that one feature stays off and the
+  control room says so. Everything else keeps working.
+- **Claude Code** is read from the transcript files Claude Code already writes locally, plus
+  optional hooks in your own `~/.claude/settings.json`.
 
 ---
 
@@ -288,6 +324,8 @@ Sources/main.swift          window, drag and physics, menu bar, bridge, bitling:
 Sources/GitWatcher.swift    repository discovery and reflog tailing
 Sources/CIWatcher.swift     gh runs and deployments, pytest caches
 Sources/ClaudeWatcher.swift Claude Code transcript tailing
+Sources/ControlPanel.swift  the control room window and the activity log
+web/panel.html              the control room UI
 web/bitling.html            the creature: drawing, animation, personality
 Tools/make_pet_html.py      derives the desktop page from the web page
 build.sh, release.sh        build, sign, package, publish

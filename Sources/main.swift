@@ -114,6 +114,9 @@ struct PetSnapshot {
     var bugs = 0
     var working = false
     var screen = ""
+    var species = "robot"
+    var locomotion = "ground"
+    var attack = "beam"
 
     init() {}
 
@@ -133,6 +136,9 @@ struct PetSnapshot {
         bugs = message["bugs"] as? Int ?? 0
         working = message["working"] as? Bool ?? false
         screen = message["screen"] as? String ?? ""
+        species = message["species"] as? String ?? "robot"
+        locomotion = message["locomotion"] as? String ?? "ground"
+        attack = message["attack"] as? String ?? "beam"
     }
 }
 
@@ -174,6 +180,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var chuteOpen = false
     private var chuteSway: CGFloat = 0
     private var lastMouse = NSPoint(x: -1, y: -1)
+    /// A floating species has no use for gravity: it hangs where you leave it.
+    private var floating = false
+    /// The roster the page publishes on boot, shown by the control room's picker.
+    private var speciesCatalogue: [[String: Any]] = []
     /// The page probes its own canvas and says whether the cursor is over the drawn creature.
     /// Everywhere else the window has to let the click through to whatever is behind it.
     private var lastHoverReport = Date.distantPast
@@ -256,6 +266,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             if kind == "panel" { panel.show(); continue }
             var query: [String: String] = [:]
             URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.forEach { query[$0.name] = $0.value ?? "" }
+            if kind == "pet" {
+                if let id = query["id"], !id.isEmpty { js("petNative.setSpecies(\(jsString(id)))") }
+                continue
+            }
             let event = GitEvent(
                 kind: kind, repo: query["repo"] ?? "", branch: query["branch"] ?? "",
                 message: query["message"] ?? query["text"] ?? "", hash: query["hash"] ?? "",
@@ -461,7 +475,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "save":
             if let json = body["json"] as? String { UserDefaults.standard.set(json, forKey: stateDefaultsKey) }
         case "state":
-            if let snap = PetSnapshot(message: body) { snapshot = snap }
+            if let snap = PetSnapshot(message: body) {
+                snapshot = snap
+                applyLocomotion(snap.locomotion == "float")
+            }
         case "walk":
             let direction = (body["dir"] as? Double ?? 1) < 0 ? CGFloat(-1) : CGFloat(1)
             startWalk(direction: direction)
@@ -507,7 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 CGPoint(x: window.frame.minX + CGFloat(eye["x"] as? Double ?? 0),
                         y: window.frame.maxY - CGFloat(eye["y"] as? Double ?? 0))
             }
-            overlay.fire(at: id, fromEyes: eyes)
+            overlay.fire(at: id, fromEyes: eyes, style: snapshot.attack)
         case "rocketScreen":
             guard swarmEnabled else { return }
             overlay.launchRocket(label: body["label"] as? String ?? "",
@@ -521,6 +538,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "hover":
             lastHoverReport = Date()
             setClickThrough(!(body["on"] as? Bool ?? true))
+        case "species":
+            if let list = body["list"] as? [[String: Any]] {
+                speciesCatalogue = list
+                panel.refresh()
+            }
         case "ready":
             pageReady = true
             js("petNative.swarmMode(\(swarmEnabled ? "true" : "false"))")
@@ -612,7 +634,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "full": snapshot.full, "energy": snapshot.energy, "joy": snapshot.joy,
                 "asleep": snapshot.asleep, "hatched": snapshot.hatched,
                 "working": snapshot.working, "screen": snapshot.screen,
-                "sound": snapshot.sound,
+                "sound": snapshot.sound, "species": snapshot.species,
             ],
             "today": [
                 "commits": git.commitsToday, "pushes": git.pushesToday,
@@ -634,6 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "dock": dockIconEnabled,
                 "version": version,
             ],
+            "species": speciesCatalogue,
             "events": activity.entries.map(\.asDictionary),
         ]
     }
@@ -658,7 +681,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "dock": setDockIcon(!dockIconEnabled)
         case "repo": NSWorkspace.shared.open(URL(string: "https://github.com/jadhavgaurav/bitling")!)
         case "quit": NSApp.terminate(nil)
-        default: return
+        default:
+            // "pet:<id>" from the picker.
+            guard action.hasPrefix("pet:") else { return }
+            js("petNative.setSpecies(\(jsString(String(action.dropFirst(4)))))")
         }
         panel.refresh()
     }
@@ -841,7 +867,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if window.ignoresMouseEvents != value { window.ignoresMouseEvents = value }
     }
 
-    private func petFloorY() -> CGFloat { window.frame.minY + 34 }
+    /// Where the creature's feet are in screen coordinates. A floater hangs in the
+    /// middle of its window rather than standing on the bottom edge of it.
+    private func petFloorY() -> CGFloat {
+        floating ? window.frame.minY + petWindowSize.height * 0.46 : window.frame.minY + 34
+    }
+
+    /// Switching between a walker and a floater has to move the creature: one belongs on
+    /// the floor, the other in the air.
+    private func applyLocomotion(_ isFloat: Bool) {
+        guard isFloat != floating else { return }
+        floating = isFloat
+        guard !dragging else { return }
+        if isFloat {
+            airborne = false
+            chuteOpen = false
+            velocityX = 0
+            velocityY = 0
+            walkRemaining = 0
+            if walkDirection != 0 { walkDirection = 0; js("petNative.walking(0)") }
+            let visible = screenForWindow().visibleFrame
+            flyTarget = NSPoint(
+                x: clampX(window.frame.origin.x, in: visible),
+                y: visible.minY + visible.height * 0.42
+            )
+            flight = .flying
+            js("petNative.flight('takeoff')")
+        } else if flight != .none {
+            flight = .landing
+            js("petNative.flight('landing')")
+        }
+    }
 
     @objc private func toggleSwarm() {
         swarmEnabled.toggle()
@@ -925,6 +981,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         defer { lastHoverReport = Date() }
         dragging = false
         js("petNative.release()")
+        if floating {
+            // Dropped a floater: it simply stays in the air where you left it.
+            flight = .hovering
+            hoverBase = window.frame.origin
+            hoverT = 0
+            airborne = false
+            velocityX = 0
+            velocityY = 0
+            js("petNative.flight('hover')")
+            return
+        }
         let onFloor = abs(window.frame.minY - screenForWindow().visibleFrame.minY) < 2
         if wasFlying && hypot(vx, vy) < 260 && !onFloor {
             // Let go gently mid-air while it was flying: it hovers where it was left.
@@ -941,6 +1008,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     private func startWalk(direction: CGFloat) {
+        guard !floating else { return }
         guard !dragging, !airborne, flight == .none, walkRemaining <= 0, window.isVisible else { return }
         let visible = screenForWindow().visibleFrame
         let distance = CGFloat.random(in: 80...200)

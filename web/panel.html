@@ -27,7 +27,8 @@
     -webkit-font-smoothing:antialiased;overflow:hidden;
     font-variant-numeric:tabular-nums;
   }
-  button{all:unset;display:block;cursor:default;font:inherit;color:inherit}
+  /* all:unset also resets box-sizing, so restore it or padded buttons overflow */
+  button{all:unset;box-sizing:border-box;display:block;cursor:default;font:inherit;color:inherit}
   button:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
 
   #app{height:100%;display:flex;flex-direction:column}
@@ -130,6 +131,22 @@
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row.tall{height:42px;align-items:center}
 
+  /* ------------------------------------------------------------------ roster */
+  .roster{display:grid;gap:8px;padding:0 16px}
+  .pick{display:grid;grid-template-columns:34px 1fr auto;gap:12px;align-items:center;
+    padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#12141a;
+    width:100%;text-align:left;transition:border-color .14s,background .14s}
+  .pick:hover{background:#171922;border-color:rgba(255,255,255,.16)}
+  .pick[aria-current="true"]{border-color:rgba(126,231,215,.42);background:#111c1c}
+  .pick .orb{width:34px;height:34px;border-radius:50%;position:relative}
+  .pick .orb::after{content:"";position:absolute;inset:9px;border-radius:50%;background:#0d0e12}
+  .pick h4{margin:0;font-size:13px;font-weight:600}
+  .pick .kind{margin-top:2px;font-size:10.5px;color:var(--faint)}
+  .pick .kind b{font-weight:400;color:var(--dim)}
+  .pick .pickState{font-size:10.5px;color:var(--faint);white-space:nowrap}
+  .pick[aria-current="true"] .pickState{color:var(--accent)}
+  .note{margin:14px 16px 16px;font-size:11px;line-height:1.6;color:var(--faint)}
+
   .sw{width:26px;height:15px;border-radius:8px;background:rgba(255,255,255,.11);position:relative;flex:0 0 auto;transition:background .18s}
   .sw::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
     background:#9aa0ae;transition:transform .18s,background .18s}
@@ -160,6 +177,7 @@
   <header class="bar">
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="activity" aria-selected="true">Activity</button>
+      <button role="tab" data-tab="pets" aria-selected="false">Pets</button>
       <button role="tab" data-tab="setup" aria-selected="false">Setup</button>
     </nav>
   </header>
@@ -204,6 +222,14 @@
       <button data-act="play" id="bPlay">Debug</button>
       <button data-act="sleep" id="bSleep">Sleep</button>
     </nav>
+  </section>
+
+  <!-- ==================================================================== pets -->
+  <section class="pane scroll" id="panePets" hidden>
+    <div class="rule">Choose a pet</div>
+    <div class="roster" id="roster"></div>
+    <p class="note">Your pet keeps its name, its age and everything it has caught. Only the
+      body changes, and with it how it moves, what it says and how it deals with a bug.</p>
   </section>
 
   <!-- =================================================================== setup -->
@@ -527,6 +553,26 @@
   }
   const sw = (id, on) => $(id).classList.toggle('on', !!on);
 
+  let rosterKey = null;
+  function renderRoster() {
+    const list = data.species || [], current = (data.pet || {}).species;
+    const key = list.map((x) => x.id).join(',') + '|' + current;
+    if (key === rosterKey) return;
+    rosterKey = key;
+    const el = $('#roster');
+    if (!list.length) { el.innerHTML = '<p class="note">Loading the roster…</p>'; return; }
+    el.innerHTML = list.map((sp) => {
+      const on = sp.id === current;
+      const moves = sp.kind === 'float'
+        ? 'Floats. Stays wherever you let go of it.'
+        : 'Walks along the bottom of your screen.';
+      return `<button class="pick" data-act="pet:${esc(sp.id)}" aria-current="${on}">` +
+        `<span class="orb" style="background:${esc(sp.accent || '#7ee7d7')}"></span>` +
+        `<span><h4>${esc(sp.name)}</h4><span class="kind">${esc(sp.blurb || '')}<b> ${moves}</b></span></span>` +
+        `<span class="pickState">${on ? 'current' : 'choose'}</span></button>`;
+    }).join('');
+  }
+
   function render() {
     const p = data.pet || {}, d = data.today || {}, w = data.watch || {}, life = data.lifetime || {};
 
@@ -570,6 +616,7 @@
     $('#tally').textContent =
       `v${w.version || '?'}  ·  ${life.commits ?? 0} caught  ·  ${life.pushes ?? 0} pushed  ·  ${life.bugs ?? 0} zapped`;
 
+    renderRoster();
     renderLog();
     drawTimeline();
   }
@@ -578,10 +625,11 @@
   document.addEventListener('click', (e) => {
     const tab = e.target.closest('[data-tab]');
     if (tab) {
+      const panes = { activity: '#paneActivity', pets: '#panePets', setup: '#paneSetup' };
       for (const b of document.querySelectorAll('[data-tab]')) {
         const on = b === tab;
         b.setAttribute('aria-selected', on ? 'true' : 'false');
-        $(b.dataset.tab === 'activity' ? '#paneActivity' : '#paneSetup').hidden = !on;
+        $(panes[b.dataset.tab]).hidden = !on;
       }
       if (tab.dataset.tab === 'activity') drawTimeline();
       return;

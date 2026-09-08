@@ -7,6 +7,7 @@
 #                                         test names: tests=test_a,test_b (they crawl your screen)
 #   bitling say <text>                    make the pet say something
 #   bitling panel                         open the control room window
+#   bitling pet <id>                      switch species, e.g. robot, dragon
 #   bitling claude                        Claude Code hook adapter (reads hook JSON on stdin)
 #   bitling git <hook> [args]             global git hook adapter (installed for you by the menu)
 #
@@ -15,7 +16,7 @@
 set -u
 
 usage() {
-  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 encode() {
@@ -80,6 +81,10 @@ case "$command_name" in
     ;;
   panel)
     open "bitling://panel" 2>/dev/null || true
+    ;;
+  pet)
+    [ $# -gt 0 ] || { usage; exit 2; }
+    send pet "id=$1"
     ;;
   git)
     # Global git hook adapter: `bitling git <hook-name> [hook args]` inside a repository.

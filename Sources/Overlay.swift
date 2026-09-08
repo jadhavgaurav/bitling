@@ -35,6 +35,7 @@ private struct Beam {
     var from: CGPoint
     var to: CGPoint
     var life: CGFloat
+    var style: String = "beam"      // how the current species kills a bug
 }
 
 private struct Scorch {
@@ -102,6 +103,7 @@ final class OverlayView: NSView {
     }
 
     private func drawBeam(_ ctx: CGContext, _ b: Beam) {
+        if b.style == "flame" { drawFlame(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -114,6 +116,41 @@ final class OverlayView: NSView {
         ctx.move(to: b.from); ctx.addLine(to: b.to); ctx.strokePath()
         let flash = 13 * (1.25 - k)
         ctx.setFillColor(NSColor(calibratedRed: 1, green: 0.72, blue: 0.35, alpha: 0.85 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
+        ctx.restoreGState()
+    }
+
+    /// A breath of fire: a widening cone rather than a straight line, three layers
+    /// from a dull red edge to a white core.
+    private func drawFlame(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let len = max(1, hypot(dx, dy))
+        let nx = -dy / len, ny = dx / len
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        let layers: [(CGFloat, NSColor)] = [
+            (30, NSColor(calibratedRed: 1, green: 0.30, blue: 0.04, alpha: 0.40 * k)),
+            (18, NSColor(calibratedRed: 1, green: 0.60, blue: 0.14, alpha: 0.58 * k)),
+            (8, NSColor(calibratedRed: 1, green: 0.95, blue: 0.76, alpha: 0.92 * k)),
+        ]
+        for (width, colour) in layers {
+            let spread = width * (1.3 - k * 0.5)
+            let midX = b.from.x + dx * 0.45, midY = b.from.y + dy * 0.45
+            ctx.setFillColor(colour.cgColor)
+            ctx.beginPath()
+            ctx.move(to: b.from)
+            ctx.addQuadCurve(
+                to: CGPoint(x: b.to.x + nx * spread * 0.5, y: b.to.y + ny * spread * 0.5),
+                control: CGPoint(x: midX + nx * spread, y: midY + ny * spread)
+            )
+            ctx.addLine(to: CGPoint(x: b.to.x - nx * spread * 0.5, y: b.to.y - ny * spread * 0.5))
+            ctx.addQuadCurve(to: b.from, control: CGPoint(x: midX - nx * spread, y: midY - ny * spread))
+            ctx.closePath()
+            ctx.fillPath()
+        }
+        let flash = 15 * (1.25 - k)
+        ctx.setFillColor(NSColor(calibratedRed: 1, green: 0.78, blue: 0.42, alpha: 0.9 * k).cgColor)
         ctx.fillEllipse(in: CGRect(x: b.to.x - flash, y: b.to.y - flash, width: flash * 2, height: flash * 2))
         ctx.restoreGState()
     }
@@ -396,11 +433,11 @@ final class Overlay {
 
     /// Fire from the pet's eyes (screen coordinates) at a beetle. True when it died.
     @discardableResult
-    func fire(at id: Int, fromEyes eyes: [CGPoint]) -> Bool {
+    func fire(at id: Int, fromEyes eyes: [CGPoint], style: String = "beam") -> Bool {
         guard let index = view.beetles.firstIndex(where: { $0.id == id && $0.alive }) else { return false }
         let target = CGPoint(x: view.beetles[index].x, y: view.beetles[index].y + view.beetles[index].size)
         for eye in eyes {
-            view.beams.append(Beam(from: screenPoint(eye), to: target, life: 0.2))
+            view.beams.append(Beam(from: screenPoint(eye), to: target, life: 0.2, style: style))
         }
         view.beetles[index].hp -= 1
         var died = false

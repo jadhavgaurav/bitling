@@ -360,7 +360,8 @@
   const phraseBags = new Map();
   const phraseLast = new Map();
   function line(key) {
-    const all = LINES[key] || [];
+    // A species may replace any line of the shared script with its own.
+    const all = (species().voice && species().voice[key]) || LINES[key] || [];
     if (all.length < 2) return all[0] || '';
     let bag = phraseBags.get(key);
     if (!bag || !bag.length) {
@@ -399,7 +400,7 @@
   // ---------------------------------------------------------------- state
   function freshState() {
     return {
-      v: 1, name: '', hatched: false, taps: 0, born: now(), lastSeen: now(),
+      v: 1, name: '', species: 'robot', hatched: false, taps: 0, born: now(), lastSeen: now(),
       full: 70, energy: 80, joy: 70, care: 0, sound: true, asleep: false,
       meals: 0, games: 0, pets: 0, stageSeen: 0,
       commits: 0, pushes: 0, bugs: 0, lastCommitAt: 0, prompts: 0,
@@ -541,17 +542,98 @@
 
   const stars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random() * 0.6, s: rand(0.6, 1.8), p: rand(0, 6) }));
 
-  const petR = () => [46, 46, 58, 68][stageOf(state)] * scale;
+  // ------------------------------------------------------------------ species
+  // A species owns its look, its proportions, how it gets around, how it talks and
+  // how it deals with a bug. Everything else, the needs and growth and events and
+  // speech bubbles, is shared, so a new pet is a drawing and a voice, not a fork.
+  //
+  //   kind    'ground' stands on the dock and walks; 'float' hangs in mid air and
+  //           stays wherever you let go of it.
+  //   radius  body radius per growth stage, in the same units for every species.
+  //   reach   how far the drawing reaches above its feet, in radii, so the speech
+  //           bubble clears the tallest thing on its head.
+  //   half    how far it reaches sideways, so it never clips the window edge.
+  const SPECIES = {};
+  const speciesOrder = [];
+  function defineSpecies(def) { SPECIES[def.id] = def; speciesOrder.push(def.id); return def; }
+  const species = () => SPECIES[state.species] || SPECIES.robot;
+  const floats = () => species().kind === 'float';
+
+  const petR = () => species().radius[stageOf(state)] * scale;
+
+  defineSpecies({
+    id: 'robot', name: 'Bitling', kind: 'ground',
+    blurb: 'A little machine. Stands on your dock, reads your reflog, lasers bugs with its eyes.',
+    accent: '#7ee7d7',
+    radius: [46, 46, 58, 68],
+    reach: (st) => (st >= 3 ? 3.9 : 3.68),
+    // The arms reach furthest: shoulder, full swing, hand and stroke. An open
+    // parafoil swings wider still, because it sways about the feet.
+    half: (r) => (pet.chute > 0.02 ? Math.max(r * 1.62, r * 2.15) : r * 1.62),
+    draw: () => drawRobot(),
+    attack: null,                       // the eye beam is the house default
+    voice: {},
+  });
+
+  defineSpecies({
+    id: 'dragon', name: 'Ember', kind: 'float',
+    blurb: 'A hatchling that never learned to land. Hangs wherever you leave it and burns bugs.',
+    accent: '#ff9a3c',
+    radius: [46, 42, 50, 58],
+    reach: () => 3.85,                  // horn tips
+    half: (r) => r * 1.98,              // wing tips at full flap
+    draw: () => drawDragon(),
+    attack: {
+      style: 'flame',
+      draw(r, k) {
+        const ox = pet.x, oy = pet.y - r * 2.05;
+        const ang = Math.atan2(pet.zapY - oy, pet.zapX - ox);
+        const len = Math.hypot(pet.zapX - ox, pet.zapY - oy);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.translate(ox, oy);
+        ctx.rotate(ang);
+        const spread = r * 0.4 * (1.25 - k * 0.45);
+        const layers = [[1, `hsla(14, 100%, 52%, ${0.45 * k})`],
+                        [0.62, `hsla(34, 100%, 60%, ${0.7 * k})`],
+                        [0.26, `hsla(52, 100%, 88%, ${0.95 * k})`]];
+        for (const [w, col] of layers) {
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(len * 0.45, -spread * w, len, -spread * w * 0.5);
+          ctx.lineTo(len, spread * w * 0.5);
+          ctx.quadraticCurveTo(len * 0.45, spread * w, 0, 0);
+          ctx.fill();
+        }
+        ctx.fillStyle = `hsla(30, 100%, 74%, ${0.85 * k})`;
+        ctx.beginPath(); ctx.arc(len, 0, r * 0.3 * (1.5 - k), 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      },
+    },
+    voice: {
+      hello: ['rawr', 'a small rawr', 'I am extremely fierce', 'hello, tiny human'],
+      happy: ['toasty', 'good fire today', 'wings feel great', 'I could burn something'],
+      hungry: ['I could eat a knight', 'fuel, please', 'my fire is running low', 'feed the furnace'],
+      sleepy: ['banking the fire', 'dragons nap for centuries', 'just resting my wings'],
+      bored: ['nothing to burn', 'no bugs, no glory', 'hovering, waiting, hovering'],
+      petted: ['scratch behind the horn', 'mind the scales', 'purr, but with smoke'],
+      eat: ['crunch', 'more coal', 'delicious', 'straight to the furnace'],
+      zapped: ['extra crispy', 'well done', 'toasted', 'ashes', 'that one is charcoal now'],
+      play: ['hunting', 'I smell bugs', 'wings out', 'to the hunt'],
+      working: ['smouldering…', 'building heat', 'the forge is lit', 'stoking'],
+      done: ['fire out', 'that is cooked', 'done and toasted'],
+      testFail: ['everything is on fire', 'red, and not the good red', 'the suite is ash'],
+      testPass: ['all green, no smoke', 'clean burn', 'nothing left to burn'],
+      shipped: ['off it flies', 'launched on a thermal', 'up and away'],
+      held: ['put me down, I can fly', 'wings, human', 'I hover for a living'],
+      night: ['the sky is mine', 'stars and embers', 'good hovering weather'],
+    },
+  });
+
   // How far the drawing actually reaches sideways from pet.x: the head and its ear caps
   // are wider than the body, and an open parafoil is wider still.
-  function petHalfWidth() {
-    const r = petR();
-    // The arms reach furthest: shoulder (0.78) + full swing (0.55) + hand (0.16) + stroke.
-    const arms = r * 1.62;
-    // The canopy is wide and sits high, so the sway rotation about the feet swings it
-    // much further sideways than its own half span.
-    return pet.chute > 0.02 ? Math.max(arms, r * 2.15) : arms;
-  }
+  function petHalfWidth() { return species().half(petR(), stageOf(state)); }
   const eggR = () => 46 * scale;
 
   function resize() {
@@ -942,6 +1024,11 @@
   }
   function comeDown() {
     if (pet.mode !== 'fly' || pet.landing) return;
+    // A floater has nothing to come down to: it drifts somewhere else instead.
+    if (floats()) {
+      if (DESKTOP) native({ type: 'fly', x: rand(0.08, 0.92), y: rand(0.12, 0.78) });
+      return;
+    }
     pet.landing = true;
     if (DESKTOP) native({ type: 'land' });
     else { const r = petR(); pet.fx = clamp(pet.x + rand(-60, 60), r, W - r); pet.fy = groundY; }
@@ -1409,7 +1496,8 @@
     else if (r < 0.7) { say(line(sky.night > 0.6 ? 'night' : 'happy')); }
     else if (r < 0.8 && state.joy < 50) { pet.tapT = 1.4; }
     else if (!reduceMotion) {
-      if (DESKTOP) native({ type: 'walk', dir: Math.random() < 0.5 ? -1 : 1 });
+      if (floats()) native({ type: 'fly', x: rand(0.1, 0.9), y: rand(0.15, 0.8) });
+      else if (DESKTOP) native({ type: 'walk', dir: Math.random() < 0.5 ? -1 : 1 });
       else pet.ax = clamp(W / 2 + rand(-W * 0.3, W * 0.3), petHalfWidth(), W - petHalfWidth());
     }
   }
@@ -1446,7 +1534,7 @@
       // than guessed: the box is squat, the robot's antenna carries it to 3.61r, and the
       // grown stage's halo to 3.86r. The old 3.15 was tuned for a creature with no antenna,
       // so the bubble's tail hung inside the pet's head.
-      const reach = state.hatched ? (stageOf(state) >= 3 ? 3.9 : 3.68) : 1.95;
+      const reach = state.hatched ? species().reach(stageOf(state)) : 1.95;
       const lift = r * (reach + (pet.chute > 0.05 ? 1.7 : 0)) + (pet.mode === 'fly' ? 8 : 0) + 14;
       const top = (state.hatched ? pet.y : groundY) - lift;
       // Clamp by the bubble's own measured box so long or wrapped lines cannot run off
@@ -1648,7 +1736,33 @@
     }
   }
 
-  function drawPet() {
+  function drawPet() { species().draw(); }
+
+  // Shared staging for a body: the ground shadow, the position, the lean and the
+  // squash. A species draws itself at the origin, facing right, in units of r.
+  function stageBody(opts, fn) {
+    const r = petR(), t = pet.t;
+    const flying = pet.mode === 'fly';
+    const lift = flying ? (DESKTOP ? 160 : groundY - pet.y) : Math.max(0, groundY - pet.y);
+    if (opts.shadow !== false) drawShadow(pet.x, r, lift);
+    ctx.save();
+    ctx.translate(
+      pet.x + (pet.shake > 0 ? Math.sin(t * 70) * r * 0.08 : 0),
+      pet.y + Math.sin(t * (opts.bobRate || 1.9)) * r * (opts.bob || 0)
+    );
+    let lean = 0;
+    if (pet.thrown) lean = pet.spin;
+    else if (pet.walking) lean = pet.facing * 0.04;
+    else lean = Math.sin(t * 0.9) * (opts.sway || 0);
+    ctx.rotate(lean);
+    ctx.scale((1 - pet.sq * 0.85) * (1 - pet.stretch * 0.6), (1 + pet.sq) * (1 + pet.stretch));
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    fn(r, t);
+    ctx.restore();
+  }
+
+  function drawRobot() {
     const st = stageOf(state);
     const r = petR();
     const t = pet.t;
@@ -1925,6 +2039,160 @@
     ctx.restore();
   }
 
+
+  // ---------------------------------------------------------------- Ember, the dragon
+  // Drawn facing the viewer, feet at the origin, everything in radii so it grows
+  // with the stage like every other species.
+  function drawDragon() {
+    const asleep = state.asleep;
+    const flying = pet.mode === 'fly' || pet.thrown;
+    const charging = pet.zapCharge > 0 && !asleep;
+    stageBody({ shadow: false, bob: 0.055, bobRate: 2.4, sway: 0.03 }, (r, t) => {
+      const flap = Math.sin(t * (flying ? 10 : asleep ? 1.6 : 4.6));
+      const skin = '#41c48c', shade = '#249169', edge = '#166b4c';
+      const belly = '#ffe3ad', horn = '#f4e6c8';
+      const lw = Math.max(1.4, r * 0.055);
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = edge;
+
+      // tail, curling away behind the body
+      ctx.save();
+      ctx.strokeStyle = shade;
+      ctx.lineWidth = r * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.55);
+      ctx.quadraticCurveTo(r * 1.1, -r * 0.45 + flap * r * 0.12, r * 1.42, -r * 1.05 + flap * r * 0.2);
+      ctx.stroke();
+      ctx.fillStyle = shade;
+      ctx.beginPath();
+      const tx = r * 1.5, ty = -r * 1.16 + flap * r * 0.22;
+      ctx.moveTo(tx - r * 0.1, ty + r * 0.16);
+      ctx.lineTo(tx + r * 0.34, ty - r * 0.02);
+      ctx.lineTo(tx - r * 0.06, ty - r * 0.28);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      // wings, one behind each shoulder
+      for (const sgn of [-1, 1]) {
+        ctx.save();
+        ctx.translate(sgn * r * 0.5, -r * 1.5);
+        ctx.rotate(sgn * (0.35 + flap * 0.42));
+        ctx.fillStyle = shade;
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = lw * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(sgn * r * 0.9, -r * 0.95, sgn * r * 1.45, -r * 0.5);
+        // three scalloped membrane cells on the trailing edge
+        ctx.quadraticCurveTo(sgn * r * 1.15, -r * 0.32, sgn * r * 1.0, -r * 0.02);
+        ctx.quadraticCurveTo(sgn * r * 0.82, -r * 0.26, sgn * r * 0.66, -r * 0.02);
+        ctx.quadraticCurveTo(sgn * r * 0.5, -r * 0.24, sgn * r * 0.34, -r * 0.04);
+        ctx.quadraticCurveTo(sgn * r * 0.16, -r * 0.1, 0, 0);
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+
+      // dangling legs
+      ctx.strokeStyle = shade;
+      ctx.lineWidth = r * 0.22;
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(sgn * r * 0.34, -r * 0.62);
+        ctx.lineTo(sgn * r * 0.4, -r * 0.12 + Math.sin(t * 2.2 + sgn) * r * 0.03);
+        ctx.stroke();
+      }
+
+      // body
+      ctx.fillStyle = skin;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.ellipse(0, -r * 1.2, r * 0.82, r * 1.02, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = belly;
+      ctx.beginPath(); ctx.ellipse(0, -r * 1.05, r * 0.46, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+      ctx.lineWidth = Math.max(1, r * 0.03);
+      for (let i = 0; i < 3; i++) {
+        const y = -r * (0.62 + i * 0.34);
+        ctx.beginPath(); ctx.moveTo(-r * 0.36, y); ctx.lineTo(r * 0.36, y); ctx.stroke();
+      }
+
+      // little arms
+      ctx.strokeStyle = shade;
+      ctx.lineWidth = r * 0.17;
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(sgn * r * 0.66, -r * 1.34);
+        ctx.lineTo(sgn * r * (charging ? 0.92 : 0.86), -r * (charging ? 1.72 : 1.1));
+        ctx.stroke();
+      }
+
+      // horns, swept back
+      ctx.strokeStyle = horn;
+      ctx.lineWidth = r * 0.15;
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(sgn * r * 0.44, -r * 2.86);
+        ctx.quadraticCurveTo(sgn * r * 0.78, -r * 3.3, sgn * r * 0.66, -r * 3.62);
+        ctx.stroke();
+      }
+
+      // head
+      ctx.fillStyle = skin;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.ellipse(0, -r * 2.4, r * 0.86, r * 0.78, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      // snout
+      ctx.fillStyle = skin;
+      ctx.beginPath(); ctx.ellipse(0, -r * 2.06, r * 0.5, r * 0.34, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath(); ctx.ellipse(sgn * r * 0.17, -r * 2.14, r * 0.05, r * 0.04, 0, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // eyes
+      const blink = pet.glance > 0 ? 0 : 1;
+      for (const sgn of [-1, 1]) {
+        ctx.fillStyle = '#12241d';
+        if (asleep || !blink) {
+          ctx.strokeStyle = '#12241d'; ctx.lineWidth = Math.max(1.4, r * 0.05);
+          ctx.beginPath();
+          ctx.moveTo(sgn * r * 0.5 - r * 0.14, -r * 2.56);
+          ctx.lineTo(sgn * r * 0.5 + r * 0.14, -r * 2.56);
+          ctx.stroke();
+        } else {
+          ctx.beginPath(); ctx.ellipse(sgn * r * 0.36, -r * 2.58, r * 0.13, r * 0.17, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.beginPath(); ctx.arc(sgn * r * 0.32, -r * 2.64, r * 0.05, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+
+      // a mouth, and the glow it builds before it breathes
+      ctx.strokeStyle = '#12241d';
+      ctx.lineWidth = Math.max(1.2, r * 0.045);
+      ctx.beginPath();
+      if (charging || pet.zap > 0) {
+        ctx.ellipse(0, -r * 1.96, r * 0.2, r * 0.15, 0, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(30, 100%, ${60 + 25 * Math.sin(t * 18)}%, 0.95)`;
+        ctx.fill();
+      } else {
+        ctx.moveTo(-r * 0.18, -r * 1.98);
+        ctx.quadraticCurveTo(0, -r * (asleep ? 1.9 : 1.86), r * 0.18, -r * 1.98);
+      }
+      ctx.stroke();
+
+      if (charging) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `hsla(28, 100%, 65%, ${0.35 + 0.3 * Math.sin(t * 20)})`;
+        ctx.beginPath(); ctx.arc(0, -r * 1.96, r * 0.34, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    });
+  }
+
   function drawSnack() {
     if (!snack.active) return;
     const u = 9 * scale;
@@ -1961,6 +2229,12 @@
 
   function drawLaser() {
     if (pet.zap <= 0 || !pet.zapLocal) return;
+    const shot = species().attack;
+    if (shot && shot.draw) { shot.draw(petR(), clamp(pet.zap / 0.2, 0, 1)); return; }
+    drawEyeBeam();
+  }
+
+  function drawEyeBeam() {
     const r = petR();
     const k = clamp(pet.zap / 0.2, 0, 1);
     const oy = pet.y - r * 2.28;

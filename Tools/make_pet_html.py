@@ -43,7 +43,7 @@ def build(source: Path, target: Path) -> None:
         s,
         "    scale = clamp(Math.min(W, H) / 520, 0.7, 1.3);\n    if (W <= 0 || H <= 0) return;",
         "    scale = clamp(Math.min(W, H) / 520, 0.7, 1.3);\n"
-        "    if (DESKTOP) { groundY = Math.round(H - 34); scale = 0.8; }\n"
+        "    if (DESKTOP) { groundY = Math.round(floats() ? H * 0.54 : H - 34); scale = 0.8; }\n"
         "    hitDpr = dpr;\n"
         "    if (W <= 0 || H <= 0) return;",
     )
@@ -177,6 +177,8 @@ def build(source: Path, target: Path) -> None:
         "      asleep: state.asleep, hatched: state.hatched, sound: state.sound, age: state.hatched ? ageText(state) : '',\n"
         "      commits: state.commits, pushes: state.pushes, bugs: state.bugs,\n"
         "      working: pet.working, screen: pet.screenT > 0 ? pet.screenTint : '',\n"
+        "      species: state.species, locomotion: species().kind,\n"
+        "      attack: (species().attack && species().attack.style) || 'beam',\n"
         "    };\n"
         "    const key = JSON.stringify(snap);\n"
         "    if (!force && key === lastPushed) return;\n"
@@ -237,6 +239,15 @@ def build(source: Path, target: Path) -> None:
         "    },\n"
         "    reset() { doReset(); },\n"
         "    gitEvent(ev) { handleGitEvent(ev); pushState(true); },\n"
+        "    setSpecies(id) {\n"
+        "      if (!SPECIES[id] || state.species === id) return;\n"
+        "      state.species = id;\n"
+        "      saveState();\n"
+        "      resize();               // a walker stands on the floor, a floater hangs mid window\n"
+        "      bubble.hidden = true; bubbleUntil = 0;\n"
+        "      say(line('hello'), 2600);\n"
+        "      pushState(true);\n"
+        "    },\n"
         "    gitStatus(info) { handleGitStatus(info); },\n"
         "    swarmMode(on) { hostSwarm = !!on; if (!hostSwarm) hostBugs = []; },\n"
         "    swarm(list) { hostBugs = Array.isArray(list) ? list : []; },\n"
@@ -267,7 +278,12 @@ def build(source: Path, target: Path) -> None:
     s = patch(
         s,
         "  updateHud();\n  if (state.hatched) {\n",
-        "  updateHud();\n  pushState(true);\n  native({ type: 'ready' });\n  if (state.hatched) {\n",
+        "  updateHud();\n  pushState(true);\n"
+        "  native({ type: 'species', list: speciesOrder.map((id) => ({\n"
+        "    id, name: SPECIES[id].name, blurb: SPECIES[id].blurb,\n"
+        "    kind: SPECIES[id].kind, accent: SPECIES[id].accent,\n"
+        "  })) });\n"
+        "  native({ type: 'ready' });\n  if (state.hatched) {\n",
     )
 
     doc = (

@@ -115,6 +115,8 @@ final class OverlayView: NSView {
         if b.style == "repulsor" { drawRepulsor(ctx, b); return }
         if b.style == "rasenshuriken" { drawRasenshuriken(ctx, b); return }
         if b.style == "shuriken" { drawShuriken(ctx, b); return }
+        if b.style == "knuckleball" { drawKnuckleball(ctx, b); return }
+        if b.style == "siuuu" { drawSiuuu(ctx, b); return }
         let k = max(0, min(1, b.life / 0.2))
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -437,6 +439,128 @@ final class OverlayView: NSView {
         let spark: CGFloat = 14 * (1.2 - k)
         ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.85, blue: 0.2, alpha: 0.85 * k).cgColor)
         ctx.fillEllipse(in: CGRect(x: -spark, y: -spark, width: spark * 2, height: spark * 2))
+
+        ctx.restoreGState()
+    }
+
+    /// CR7's Knuckleball: high-speed curving soccer ball with aerodynamic flame trail and goal-corner spark explosion
+    private func drawKnuckleball(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.2))
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+
+        // Trajectory with slight aerodynamic curve
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let midX = (b.from.x + b.to.x) * 0.5 - dy * 0.12 * sin(b.life * 30)
+        let midY = (b.from.y + b.to.y) * 0.5 + dx * 0.12 * sin(b.life * 30)
+
+        // Outer green/gold turf trail
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.0, green: 0.9, blue: 0.45, alpha: 0.65 * k).cgColor)
+        ctx.setLineWidth(4.0 * k)
+        ctx.beginPath()
+        ctx.move(to: b.from)
+        ctx.addQuadCurve(to: b.to, control: CGPoint(x: midX, y: midY))
+        ctx.strokePath()
+
+        // Inner white blazing trail
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 1.0, blue: 0.95, alpha: 0.9 * k).cgColor)
+        ctx.setLineWidth(1.8 * k)
+        ctx.beginPath()
+        ctx.move(to: b.from)
+        ctx.addQuadCurve(to: b.to, control: CGPoint(x: midX, y: midY))
+        ctx.strokePath()
+
+        // Spinning Soccer Ball at target
+        ctx.translateBy(x: b.to.x, y: b.to.y)
+        ctx.rotate(by: b.life * 40)
+
+        let ballR: CGFloat = 13 * (0.85 + k * 0.35)
+        // White ball base
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.95 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -ballR, y: -ballR, width: ballR * 2, height: ballR * 2))
+
+        // Hexagonal black pentagon patches
+        ctx.setFillColor(NSColor(calibratedRed: 0.1, green: 0.1, blue: 0.15, alpha: 0.95 * k).cgColor)
+        let patchR = ballR * 0.38
+        ctx.fillEllipse(in: CGRect(x: -patchR, y: -patchR, width: patchR * 2, height: patchR * 2))
+        for i in 0..<5 {
+            let a = CGFloat(i) * .pi * 2 / 5
+            let px = cos(a) * (ballR * 0.65)
+            let py = sin(a) * (ballR * 0.65)
+            ctx.fillEllipse(in: CGRect(x: px - patchR * 0.5, y: py - patchR * 0.5, width: patchR, height: patchR))
+        }
+
+        // Impact spark ring
+        let spark: CGFloat = 16 * (1.2 - k)
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.0, green: 1.0, blue: 0.5, alpha: 0.85 * k).cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.strokeEllipse(in: CGRect(x: -spark, y: -spark, width: spark * 2, height: spark * 2))
+
+        ctx.restoreGState()
+    }
+
+    /// CR7's SIUUU Strike: supersonic golden comet soccer ball with goal-net geometry, concentric golden shockwaves, and confetti sparks
+    private func drawSiuuu(_ ctx: CGContext, _ b: Beam) {
+        let k = max(0, min(1, b.life / 0.35))
+        let dx = b.to.x - b.from.x, dy = b.to.y - b.from.y
+        let len = max(1, hypot(dx, dy))
+        let angle = atan2(dy, dx)
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        ctx.translateBy(x: b.from.x, y: b.from.y)
+        ctx.rotate(by: angle)
+
+        // Golden fiery energy beam
+        let w: CGFloat = 16 * (0.8 + k * 0.6)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.8, blue: 0.1, alpha: 0.45 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -w / 2, width: len, height: w))
+
+        // Intense emerald-gold core beam
+        ctx.setFillColor(NSColor(calibratedRed: 0.2, green: 1.0, blue: 0.5, alpha: 0.85 * k).cgColor)
+        ctx.fill(CGRect(x: 0, y: -w * 0.22, width: len, height: w * 0.44))
+
+        // Traveling golden energy pulses along trajectory
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.95, blue: 0.4, alpha: 0.9 * k).cgColor)
+        ctx.setLineWidth(2.0)
+        let ringCount = 4
+        for r in 1...ringCount {
+            let pos = ((CGFloat(r) / CGFloat(ringCount)) * len + b.life * 400).truncatingRemainder(dividingBy: len)
+            ctx.strokeEllipse(in: CGRect(x: pos - 4, y: -w * 0.7, width: 8, height: w * 1.4))
+        }
+
+        // At target: Goal net geometry + explosive golden SIUUU shockwave
+        ctx.translateBy(x: len, y: 0)
+
+        // Expanding concentric golden shockwaves
+        let burstR = 36 * (1.3 - k * 0.5)
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 0.85, blue: 0.2, alpha: 0.9 * k).cgColor)
+        ctx.setLineWidth(2.5)
+        ctx.strokeEllipse(in: CGRect(x: -burstR, y: -burstR, width: burstR * 2, height: burstR * 2))
+
+        // Goal net lattice grid at impact
+        let netSize: CGFloat = 26 * (0.8 + k * 0.4)
+        ctx.setStrokeColor(NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.75 * k).cgColor)
+        ctx.setLineWidth(1.2)
+        ctx.beginPath()
+        for i in -2...2 {
+            let offset = CGFloat(i) * (netSize * 0.35)
+            ctx.move(to: CGPoint(x: offset, y: -netSize))
+            ctx.addLine(to: CGPoint(x: offset, y: netSize))
+            ctx.move(to: CGPoint(x: -netSize, y: offset))
+            ctx.addLine(to: CGPoint(x: netSize, y: offset))
+        }
+        ctx.strokePath()
+
+        // Rotating golden soccer ball core
+        ctx.rotate(by: b.life * 50)
+        let ballR: CGFloat = 16 * (0.85 + k * 0.4)
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 0.92, blue: 0.3, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -ballR, y: -ballR, width: ballR * 2, height: ballR * 2))
+
+        // White core center
+        let whiteCore = ballR * 0.45
+        ctx.setFillColor(NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.98 * k).cgColor)
+        ctx.fillEllipse(in: CGRect(x: -whiteCore, y: -whiteCore, width: whiteCore * 2, height: whiteCore * 2))
 
         ctx.restoreGState()
     }
@@ -989,7 +1113,7 @@ final class Overlay {
     func fire(at id: Int, fromEyes eyes: [CGPoint], style: String = "beam") -> Bool {
         guard let index = view.beetles.firstIndex(where: { $0.id == id && $0.alive }) else { return false }
         let target = CGPoint(x: view.beetles[index].x, y: view.beetles[index].y + view.beetles[index].size)
-        let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam" || style == "rasenshuriken") ? 0.35 : 0.2
+        let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam" || style == "rasenshuriken" || style == "siuuu") ? 0.35 : 0.2
         for eye in eyes {
             view.beams.append(Beam(from: screenPoint(eye), to: target, life: beamLife, style: style))
         }

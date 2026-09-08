@@ -87,6 +87,14 @@
   #timeline{display:block;width:100%;height:36px;margin-top:12px}
   .tl-legend{display:flex;justify-content:space-between;padding:0 16px;
     font:400 9px/1 var(--mono);color:var(--faint);letter-spacing:.05em}
+  #span[hidden]{display:none}
+  .where{padding:14px 16px 0}
+  .split{display:flex;height:4px;gap:2px;overflow:hidden}
+  .split i{display:block;min-width:2px}
+  .keys{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:7px;font-size:10.5px;color:var(--dim)}
+  .keys span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .keys i{width:6px;height:6px;flex:0 0 auto}
+  .keys b{font:400 10.5px/1 var(--mono);color:var(--faint);font-weight:400}
 
   /* ------------------------------------------------------------------ stream */
   .log{flex:1;min-height:60px;padding:2px 0 10px}
@@ -178,8 +186,14 @@
       <div class="count" id="cPrompts"><b>0</b><span>prompts</span></div>
       <div class="count" id="cTools"><b>0</b><span>tool calls</span></div>
     </div>
-    <canvas id="timeline" height="72" aria-label="The last twelve hours"></canvas>
-    <div class="tl-legend"><span>12H AGO</span><span>NOW</span></div>
+    <div id="span">
+      <canvas id="timeline" height="72" aria-label="Today's activity over time"></canvas>
+      <div class="tl-legend"><span id="tlFrom">—</span><span>NOW</span></div>
+      <div class="where" id="where">
+        <div class="split" id="split"></div>
+        <div class="keys" id="keys"></div>
+      </div>
+    </div>
 
     <div class="rule">Stream</div>
     <div class="log scroll" id="log"></div>
@@ -381,10 +395,31 @@
 
   // ------------------------------------------------------------------ timeline
   const tl = $('#timeline'), tc = tl.getContext('2d');
-  const TL_HOURS = 12;
+  const HOUR = 3600000;
   const TONE = { push: '#f0b45e', deploy: '#f0b45e', fail: '#ff7a7a', pass: '#5fd493', claude: '#7ee7d7', commit: '#8b8f9c' };
+  const SHADES = ['#7ee7d7', '#9aa0b0', '#6b7180', '#4d5261', '#3a3e4a'];
+
+  const dayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const todaysEvents = () => (data.events || []).filter((e) => e.t >= dayStart());
+
+  /// Show the working day, not a fixed window: an hour of work should not sit crushed
+  /// against the right edge of twelve empty hours.
+  function timeWindow(events) {
+    const now = Date.now();
+    if (!events.length) return null;
+    const oldest = Math.min(...events.map((e) => e.t));
+    // Twelve percent of headroom before the first event, and never so short a window that
+    // two events a minute apart collapse into one column.
+    const span = Math.min(Math.max((now - oldest) * 1.12, 20 * 60000), now - dayStart() + HOUR);
+    return { from: now - span, to: now, span };
+  }
 
   function drawTimeline() {
+    const events = todaysEvents();
+    const win = timeWindow(events);
+    $('#span').hidden = !win;
+    if (!win) return;
+
     const dpr = window.devicePixelRatio || 1;
     const w = tl.clientWidth, h = 36;
     if (!w) return;
@@ -392,29 +427,57 @@
     tc.setTransform(dpr, 0, 0, dpr, 0, 0);
     tc.clearRect(0, 0, w, h);
 
-    const pad = 16, span = w - pad * 2, base = h - 8, now = Date.now();
+    const pad = 16, width = w - pad * 2, base = h - 8;
     tc.fillStyle = 'rgba(255,255,255,.09)';
-    tc.fillRect(pad, base, span, 1);
+    tc.fillRect(pad, base, width, 1);
 
-    // One faint tick an hour, a taller one every three.
-    for (let i = 0; i <= TL_HOURS; i++) {
-      const x = Math.round(pad + (span * i) / TL_HOURS) + 0.5;
-      const tall = i % 3 === 0;
-      tc.fillStyle = tall ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.07)';
-      tc.fillRect(x, base + 1, 1, tall ? 4 : 2);
+    // Grid step chosen so the strip carries six to twelve marks whatever the span is.
+    const hours = win.span / HOUR;
+    const step = hours <= 3 ? 0.5 : hours <= 7 ? 1 : hours <= 14 ? 2 : 4;
+    const first = Math.ceil(win.from / (step * HOUR)) * step * HOUR;
+    for (let t = first; t <= win.to; t += step * HOUR) {
+      const x = Math.round(pad + width * ((t - win.from) / win.span)) + 0.5;
+      const onHour = new Date(t).getMinutes() === 0;
+      tc.fillStyle = onHour ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.07)';
+      tc.fillRect(x, base + 1, 1, onHour ? 4 : 2);
     }
 
-    for (const e of data.events || []) {
-      const age = (now - e.t) / 3600000;
-      if (age < 0 || age >= TL_HOURS) continue;
-      const x = Math.round(pad + span * (1 - age / TL_HOURS));
+    for (const e of events) {
+      if (e.t < win.from) continue;
+      const x = Math.round(pad + width * ((e.t - win.from) / win.span));
       const cls = classOf(e.kind);
       const height = cls === 'fail' || cls === 'deploy' ? 20 : cls === 'commit' ? 11 : 15;
       tc.fillStyle = TONE[cls] || TONE.commit;
       tc.globalAlpha = cls === 'commit' ? 0.7 : 0.95;
-      tc.fillRect(Math.min(x, pad + span - 2), base - height, 2, height);
+      tc.fillRect(Math.max(pad, Math.min(x, pad + width - 2)), base - height, 2, height);
     }
     tc.globalAlpha = 1;
+    $('#tlFrom').textContent = clock(win.from);
+    drawSplit(events);
+  }
+
+  /// Where the day actually went, by repository, from the same events the stream lists.
+  function drawSplit(events) {
+    const tally = new Map();
+    for (const e of events) {
+      if (!e.repo) continue;
+      tally.set(e.repo, (tally.get(e.repo) || 0) + 1);
+    }
+    const ranked = [...tally].sort((a, b) => b[1] - a[1]);
+    const where = $('#where');
+    if (!ranked.length) { where.hidden = true; return; }
+    where.hidden = false;
+
+    const top = ranked.slice(0, 4);
+    const rest = ranked.slice(4).reduce((n, r) => n + r[1], 0);
+    const rows = rest ? [...top, [`${ranked.length - 4} more`, rest]] : top;
+    const total = rows.reduce((n, r) => n + r[1], 0);
+
+    $('#split').innerHTML = rows.map(([, n], i) =>
+      `<i style="flex:${n};background:${SHADES[Math.min(i, SHADES.length - 1)]}"></i>`).join('');
+    $('#keys').innerHTML = rows.map(([name, n], i) =>
+      `<span><i style="background:${SHADES[Math.min(i, SHADES.length - 1)]}"></i>` +
+      `${esc(name)} <b>${Math.round((n / total) * 100)}%</b></span>`).join('');
   }
 
   // ------------------------------------------------------------------ stream

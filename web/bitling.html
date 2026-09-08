@@ -1427,7 +1427,13 @@
     if (bubbleUntil && performance.now() > bubbleUntil) { bubble.hidden = true; bubbleUntil = 0; }
     if (!bubble.hidden) {
       const r = state.hatched ? petR() : eggR();
-      const top = state.hatched ? pet.y - r * (pet.chute > 0.05 ? 4.85 : 3.15) - (pet.mode === 'fly' ? 8 : 0) - 10 : groundY - r * 2.2 - 12;
+      // How far the drawing actually reaches above pet.y, measured off the canvas rather
+      // than guessed: the box is squat, the robot's antenna carries it to 3.61r, and the
+      // grown stage's halo to 3.86r. The old 3.15 was tuned for a creature with no antenna,
+      // so the bubble's tail hung inside the pet's head.
+      const reach = state.hatched ? (stageOf(state) >= 3 ? 3.9 : 3.68) : 1.95;
+      const lift = r * (reach + (pet.chute > 0.05 ? 1.7 : 0)) + (pet.mode === 'fly' ? 8 : 0) + 14;
+      const top = (state.hatched ? pet.y : groundY) - lift;
       // Clamp by the bubble's own measured box so long or wrapped lines cannot run off
       // any edge, then slide the tail along it so it still points at the pet.
       const bw = bubble.offsetWidth, bh = bubble.offsetHeight;

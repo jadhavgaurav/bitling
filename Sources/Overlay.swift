@@ -15,6 +15,8 @@ struct Beetle {
     var x: CGFloat            // screen coordinates, origin bottom left
     var y: CGFloat
     var vx: CGFloat
+    var vy: CGFloat = 0       // 2D velocity for screen-wide crawling
+    var angle: CGFloat = 0    // crawling heading angle (radians)
     var dart: CGFloat
     var wiggle: CGFloat
     var label: String
@@ -66,13 +68,13 @@ final class OverlayView: NSView {
     func loadDemoScene() {
         let h = bounds.height, floor = h * 0.22
         beetles = [
-            Beetle(id: 1, x: bounds.width * 0.16, y: floor, vx: 70, dart: 1, wiggle: 0.7,
+            Beetle(id: 1, x: bounds.width * 0.16, y: floor, vx: 70, vy: 0, angle: 0, dart: 1, wiggle: 0.7,
                    label: "test_webhook_signature", boss: false, hp: 1, maxHP: 1, dead: false, dying: 0, born: Date()),
-            Beetle(id: 2, x: bounds.width * 0.42, y: floor, vx: -70, dart: 1, wiggle: 2.1,
+            Beetle(id: 2, x: bounds.width * 0.42, y: floor, vx: -70, vy: 0, angle: .pi, dart: 1, wiggle: 2.1,
                    label: "test_invoice_total", boss: false, hp: 1, maxHP: 1, dead: false, dying: 0, born: Date()),
-            Beetle(id: 3, x: bounds.width * 0.72, y: floor, vx: 30, dart: 1, wiggle: 0.2,
+            Beetle(id: 3, x: bounds.width * 0.72, y: floor, vx: 30, vy: 0, angle: 0, dart: 1, wiggle: 0.2,
                    label: "the suite", boss: true, hp: 5, maxHP: 8, dead: false, dying: 0, born: Date()),
-            Beetle(id: 4, x: bounds.width * 0.56, y: floor, vx: 0, dart: 1, wiggle: 0,
+            Beetle(id: 4, x: bounds.width * 0.56, y: floor, vx: 0, vy: 0, angle: 0, dart: 1, wiggle: 0,
                    label: "", boss: false, hp: 0, maxHP: 1, dead: true, dying: 0.4, born: Date()),
         ]
         let eyes = CGPoint(x: bounds.width * 0.5, y: floor + 120)
@@ -839,72 +841,118 @@ final class OverlayView: NSView {
 
         if !b.alive {
             let a = max(0, min(1, b.dying / 0.5))
-            ctx.setFillColor(NSColor(calibratedWhite: 0.15, alpha: 0.5 * a).cgColor)
-            ctx.fillEllipse(in: CGRect(x: -u * 2, y: 0, width: u * 4, height: u * 0.9))
+            ctx.setFillColor(NSColor(calibratedWhite: 0.15, alpha: 0.45 * a).cgColor)
+            ctx.fillEllipse(in: CGRect(x: -u * 1.8, y: -u * 1.2, width: u * 3.6, height: u * 2.4))
             ctx.restoreGState()
             return
         }
 
-        let facing: CGFloat = b.vx < 0 ? -1 : 1
-        ctx.scaleBy(x: facing, y: 1)
+        let heading = (b.vx == 0 && b.vy == 0) ? b.angle : atan2(b.vy, b.vx)
+        ctx.rotate(by: heading)
         let wig = sin(b.wiggle)
 
-        // legs
-        ctx.setStrokeColor(NSColor(calibratedRed: 0.23, green: 0.16, blue: 0.2, alpha: 1).cgColor)
-        ctx.setLineWidth(max(1, u * 0.18))
+        // 6 articulated insect legs with natural alternating tripod gait
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.20, green: 0.14, blue: 0.18, alpha: 1).cgColor)
+        ctx.setLineWidth(max(1.2, u * 0.18))
         ctx.setLineCap(.round)
-        for k in -1...1 {
-            let swing = wig * (k == 0 ? -1 : 1) * u * 0.35
-            ctx.move(to: CGPoint(x: CGFloat(k) * u * 0.7, y: u * 0.6))
-            ctx.addLine(to: CGPoint(x: CGFloat(k) * u * 0.7 + swing - u * 0.2, y: 0))
+
+        for side: CGFloat in [-1, 1] {
+            for pair in -1...1 {
+                let k = CGFloat(pair)
+                // Alternating tripod gait: left front/back & right middle move together
+                let phase: CGFloat = (side > 0 ? (pair == 0 ? 1 : -1) : (pair == 0 ? -1 : 1))
+                let swing = wig * phase * u * 0.35
+                let rootX = k * u * 0.55
+                let kneeX = k * u * 0.65 + swing * 0.6
+                let kneeY = side * (u * 1.05)
+                let footX = k * u * 0.75 + swing - (k < 0 ? u * 0.25 : -u * 0.15)
+                let footY = side * (u * 1.65)
+
+                ctx.beginPath()
+                ctx.move(to: CGPoint(x: rootX, y: side * u * 0.4))
+                ctx.addLine(to: CGPoint(x: kneeX, y: kneeY))
+                ctx.addLine(to: CGPoint(x: footX, y: footY))
+                ctx.strokePath()
+            }
         }
+
+        // Elytra (hard wing shell)
+        let shellColor = b.boss
+            ? NSColor(calibratedRed: 0.75, green: 0.15, blue: 0.18, alpha: 1)
+            : NSColor(calibratedRed: 0.88, green: 0.28, blue: 0.26, alpha: 1)
+        ctx.setFillColor(shellColor.cgColor)
+        ctx.fillEllipse(in: CGRect(x: -u * 1.35, y: -u * 0.95, width: u * 2.3, height: u * 1.9))
+
+        // Center wing split line
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.18, green: 0.12, blue: 0.15, alpha: 1).cgColor)
+        ctx.setLineWidth(max(1, u * 0.14))
+        ctx.beginPath()
+        ctx.move(to: CGPoint(x: -u * 1.35, y: 0))
+        ctx.addLine(to: CGPoint(x: u * 0.95, y: 0))
         ctx.strokePath()
 
-        // shell
-        ctx.setFillColor(NSColor(calibratedRed: 0.85, green: 0.33, blue: 0.31, alpha: 1).cgColor)
-        ctx.fillEllipse(in: CGRect(x: -u * 1.35, y: u * 0.1, width: u * 2.7, height: u * 1.7))
-        ctx.setStrokeColor(NSColor(calibratedRed: 0.23, green: 0.16, blue: 0.2, alpha: 1).cgColor)
-        ctx.setLineWidth(max(1, u * 0.15))
-        ctx.move(to: CGPoint(x: 0, y: u * 0.15)); ctx.addLine(to: CGPoint(x: 0, y: u * 1.75)); ctx.strokePath()
-        ctx.setFillColor(NSColor(calibratedRed: 0.23, green: 0.16, blue: 0.2, alpha: 1).cgColor)
-        for (dx, dy) in [(-0.6, 1.15), (0.35, 1.25), (-0.2, 0.6), (0.7, 0.7)] {
+        // Elytra spots
+        ctx.setFillColor(NSColor(calibratedRed: 0.18, green: 0.12, blue: 0.15, alpha: 1).cgColor)
+        let spots: [(CGFloat, CGFloat)] = [
+            (-0.6, 0.45), (-0.6, -0.45),
+            (-0.1, 0.62), (-0.1, -0.62),
+            (0.4, 0.38), (0.4, -0.38)
+        ]
+        for (dx, dy) in spots {
             ctx.fillEllipse(in: CGRect(x: dx * u - u * 0.18, y: dy * u - u * 0.18, width: u * 0.36, height: u * 0.36))
         }
-        // head and antennae
-        ctx.fillEllipse(in: CGRect(x: u * 0.8, y: u * 0.45, width: u, height: u))
-        ctx.setLineWidth(max(1, u * 0.13))
-        ctx.move(to: CGPoint(x: u * 1.5, y: u * 1.3)); ctx.addLine(to: CGPoint(x: u * 2.0, y: u * 2.0 + wig * u * 0.2))
-        ctx.move(to: CGPoint(x: u * 1.6, y: u * 1.2)); ctx.addLine(to: CGPoint(x: u * 2.3, y: u * 1.5 - wig * u * 0.2))
-        ctx.strokePath()
+
+        // Pronotum / Thorax
+        ctx.setFillColor(NSColor(calibratedRed: 0.18, green: 0.12, blue: 0.15, alpha: 1).cgColor)
+        ctx.fillEllipse(in: CGRect(x: u * 0.65, y: -u * 0.65, width: u * 0.65, height: u * 1.3))
+
+        // Head
+        ctx.fillEllipse(in: CGRect(x: u * 0.95, y: -u * 0.45, width: u * 0.6, height: u * 0.9))
+
+        // Eyes
         ctx.setFillColor(NSColor.white.cgColor)
-        ctx.fillEllipse(in: CGRect(x: u * 1.34, y: u * 0.89, width: u * 0.32, height: u * 0.32))
+        ctx.fillEllipse(in: CGRect(x: u * 1.25, y: u * 0.22, width: u * 0.22, height: u * 0.22))
+        ctx.fillEllipse(in: CGRect(x: u * 1.25, y: -u * 0.44, width: u * 0.22, height: u * 0.22))
+
+        // Twitching Antennae
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.18, green: 0.12, blue: 0.15, alpha: 1).cgColor)
+        ctx.setLineWidth(max(1, u * 0.12))
+        ctx.beginPath()
+        ctx.move(to: CGPoint(x: u * 1.45, y: u * 0.2))
+        ctx.addQuadCurve(to: CGPoint(x: u * 2.15, y: u * 0.75 + wig * u * 0.15),
+                         control: CGPoint(x: u * 1.85, y: u * 0.35))
+        ctx.move(to: CGPoint(x: u * 1.45, y: -u * 0.2))
+        ctx.addQuadCurve(to: CGPoint(x: u * 2.15, y: -u * 0.75 - wig * u * 0.15),
+                         control: CGPoint(x: u * 1.85, y: -u * 0.35))
+        ctx.strokePath()
+
         ctx.restoreGState()
 
-        // boss health bar
+        // Boss health bar (drawn upright above the beetle)
         if b.boss, b.maxHP > 1 {
             let w: CGFloat = 76, h: CGFloat = 6
             let frac = max(0, min(1, CGFloat(b.hp) / CGFloat(b.maxHP)))
-            let barY = b.y + u * 2.9
-            ctx.setFillColor(NSColor(calibratedWhite: 0, alpha: 0.35).cgColor)
+            let barY = b.y + u * 2.4
+            ctx.setFillColor(NSColor(calibratedWhite: 0, alpha: 0.45).cgColor)
             ctx.fill(CGRect(x: b.x - w / 2, y: barY, width: w, height: h))
             ctx.setFillColor(NSColor(calibratedRed: 0.95, green: 0.3, blue: 0.28, alpha: 0.95).cgColor)
             ctx.fill(CGRect(x: b.x - w / 2, y: barY, width: w * frac, height: h))
         }
 
-        // label
+        // Test label badge (drawn upright below the beetle)
         if !b.label.isEmpty {
             let text = b.label as NSString
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedSystemFont(ofSize: b.boss ? 13 : 11, weight: .medium),
-                .foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.92),
+                .foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.95),
             ]
             let size = text.size(withAttributes: attrs)
             let pad: CGFloat = 5
-            let labelY = max(4, b.y - size.height - 8)
+            let labelY = b.y - size.height - u * 1.8
             let box = CGRect(x: b.x - size.width / 2 - pad, y: labelY - 2,
                              width: size.width + pad * 2, height: size.height + 4)
             let path = CGPath(roundedRect: box, cornerWidth: 5, cornerHeight: 5, transform: nil)
-            ctx.setFillColor(NSColor(calibratedRed: 0.09, green: 0.07, blue: 0.11, alpha: 0.8).cgColor)
+            ctx.setFillColor(NSColor(calibratedRed: 0.09, green: 0.07, blue: 0.11, alpha: 0.85).cgColor)
             ctx.addPath(path); ctx.fillPath()
             text.draw(at: CGPoint(x: b.x - size.width / 2, y: labelY), withAttributes: attrs)
         }
@@ -1024,17 +1072,37 @@ final class Overlay {
         ensureWindow(on: screen)
         guard let frame = window?.frame else { return }
         floorY = floorScreenY
-        let localFloor = floorScreenY - frame.minY
-        let localX = x - frame.minX
+        let minMarginX: CGFloat = 50
+        let maxMarginX: CGFloat = max(minMarginX + 100, frame.width - 50)
+        let minMarginY: CGFloat = 60
+        let maxMarginY: CGFloat = max(minMarginY + 100, frame.height - 60)
+
         for i in 0..<max(0, count) {
             guard view.beetles.count < 14 else { break }
-            let side: CGFloat = Bool.random() ? -1 : 1
-            let spread = CGFloat.random(in: 110...max(160, frame.width * 0.42))
-            let sx = min(max(30, localX + side * spread), frame.width - 30)
+            let sx: CGFloat
+            let sy: CGFloat
+            if i % 2 == 0 {
+                // Scatter near pet's location initially, scurrying outward in 2D
+                let localX = x - frame.minX
+                let localFloor = floorScreenY - frame.minY
+                let offset = CGFloat.random(in: -160...160)
+                sx = min(max(minMarginX, localX + offset), maxMarginX)
+                sy = min(max(minMarginY, localFloor + CGFloat.random(in: -40...100)), maxMarginY)
+            } else {
+                // Distributed randomly across the screen
+                sx = CGFloat.random(in: minMarginX...maxMarginX)
+                sy = CGFloat.random(in: minMarginY...maxMarginY)
+            }
+
+            let angle = CGFloat.random(in: 0...(2 * .pi))
+            let speed = CGFloat.random(in: 45...95)
             view.beetles.append(Beetle(
-                id: nextID, x: sx, y: localFloor,
-                vx: CGFloat.random(in: 45...95) * (Bool.random() ? -1 : 1),
-                dart: CGFloat.random(in: 0.5...2), wiggle: CGFloat.random(in: 0...6),
+                id: nextID, x: sx, y: sy,
+                vx: cos(angle) * speed,
+                vy: sin(angle) * speed,
+                angle: angle,
+                dart: CGFloat.random(in: 0.8...2.5),
+                wiggle: CGFloat.random(in: 0...6),
                 label: i < labels.count ? labels[i] : "", boss: false, hp: 1, maxHP: 1,
                 persistent: persistent, doomed: false, dead: false, dying: 0, born: Date()
             ))
@@ -1047,12 +1115,22 @@ final class Overlay {
         ensureWindow(on: screen)
         guard let frame = window?.frame else { return }
         floorY = floorScreenY
-        let localX = x - frame.minX
-        let sx = min(max(70, localX + CGFloat.random(in: 180...300) * (Bool.random() ? -1 : 1)), frame.width - 70)
+        let minMarginX: CGFloat = 80
+        let maxMarginX: CGFloat = max(minMarginX + 100, frame.width - 80)
+        let minMarginY: CGFloat = 100
+        let maxMarginY: CGFloat = max(minMarginY + 100, frame.height - 100)
+
+        // Boss spawns menacingly in the upper or mid region of the screen
+        let sx = CGFloat.random(in: minMarginX...maxMarginX)
+        let sy = CGFloat.random(in: max(minMarginY, frame.height * 0.35)...maxMarginY)
+        let angle = CGFloat.random(in: 0...(2 * .pi))
+        let speed = CGFloat.random(in: 26...42)
         view.beetles.append(Beetle(
-            id: nextID, x: sx, y: floorScreenY - frame.minY,
-            vx: CGFloat.random(in: 26...44) * (Bool.random() ? -1 : 1),
-            dart: 1.4, wiggle: 0, label: label, boss: true, hp: max(1, hp), maxHP: max(1, hp),
+            id: nextID, x: sx, y: sy,
+            vx: cos(angle) * speed,
+            vy: sin(angle) * speed,
+            angle: angle,
+            dart: 1.6, wiggle: 0, label: label, boss: true, hp: max(1, hp), maxHP: max(1, hp),
             persistent: true, doomed: false, dead: false, dying: 0, born: Date()
         ))
         nextID += 1
@@ -1112,7 +1190,7 @@ final class Overlay {
     @discardableResult
     func fire(at id: Int, fromEyes eyes: [CGPoint], style: String = "beam") -> Bool {
         guard let index = view.beetles.firstIndex(where: { $0.id == id && $0.alive }) else { return false }
-        let target = CGPoint(x: view.beetles[index].x, y: view.beetles[index].y + view.beetles[index].size)
+        let target = CGPoint(x: view.beetles[index].x, y: view.beetles[index].y)
         let beamLife: CGFloat = (style == "kamehameha" || style == "unibeam" || style == "rasenshuriken" || style == "siuuu") ? 0.35 : 0.2
         for eye in eyes {
             view.beams.append(Beam(from: screenPoint(eye), to: target, life: beamLife, style: style))
@@ -1149,6 +1227,7 @@ final class Overlay {
     private func tick() {
         let dt: CGFloat = 1.0 / 60.0
         let w = view.bounds.width
+        let h = view.bounds.height
         var changed = false
 
         for i in view.beetles.indices {
@@ -1160,16 +1239,45 @@ final class Overlay {
             view.beetles[i].wiggle += dt * 26
             view.beetles[i].dart -= dt
             if view.beetles[i].dart <= 0 {
-                view.beetles[i].dart = CGFloat.random(in: 0.5...2.2)
-                let speed = view.beetles[i].boss ? CGFloat.random(in: 22...40) : CGFloat.random(in: 40...110)
-                view.beetles[i].vx = speed * (Bool.random() ? -1 : 1)
+                view.beetles[i].dart = CGFloat.random(in: 0.8...2.6)
+                let speed = view.beetles[i].boss ? CGFloat.random(in: 24...42) : CGFloat.random(in: 45...105)
+                let turn = Bool.random() ? CGFloat.random(in: -1.2...1.2) : CGFloat.random(in: -2.6...2.6)
+                view.beetles[i].angle = (view.beetles[i].angle + turn).truncatingRemainder(dividingBy: 2 * .pi)
+                view.beetles[i].vx = cos(view.beetles[i].angle) * speed
+                view.beetles[i].vy = sin(view.beetles[i].angle) * speed
             }
+
+            // 2D position movement
             view.beetles[i].x += view.beetles[i].vx * dt
-            let edge: CGFloat = 24
-            if view.beetles[i].x < edge { view.beetles[i].x = edge; view.beetles[i].vx = abs(view.beetles[i].vx) }
-            if view.beetles[i].x > w - edge { view.beetles[i].x = w - edge; view.beetles[i].vx = -abs(view.beetles[i].vx) }
+            view.beetles[i].y += view.beetles[i].vy * dt
+
+            // Screen boundary bounce & smooth steering
+            let padX: CGFloat = 36
+            let padY: CGFloat = 46
+            if view.beetles[i].x < padX {
+                view.beetles[i].x = padX
+                view.beetles[i].vx = abs(view.beetles[i].vx)
+                view.beetles[i].angle = atan2(view.beetles[i].vy, view.beetles[i].vx)
+            } else if view.beetles[i].x > w - padX {
+                view.beetles[i].x = w - padX
+                view.beetles[i].vx = -abs(view.beetles[i].vx)
+                view.beetles[i].angle = atan2(view.beetles[i].vy, view.beetles[i].vx)
+            }
+            if view.beetles[i].y < padY {
+                view.beetles[i].y = padY
+                view.beetles[i].vy = abs(view.beetles[i].vy)
+                view.beetles[i].angle = atan2(view.beetles[i].vy, view.beetles[i].vx)
+            } else if view.beetles[i].y > h - padY {
+                view.beetles[i].y = h - padY
+                view.beetles[i].vy = -abs(view.beetles[i].vy)
+                view.beetles[i].angle = atan2(view.beetles[i].vy, view.beetles[i].vx)
+            }
+
             // A beetle that outlives its welcome wanders off rather than staying for ever.
-            if Date().timeIntervalSince(view.beetles[i].born) > 150 { view.beetles[i].dead = true; view.beetles[i].dying = 0.5 }
+            if Date().timeIntervalSince(view.beetles[i].born) > 180 {
+                view.beetles[i].dead = true
+                view.beetles[i].dying = 0.5
+            }
             changed = true
         }
         view.beetles.removeAll { $0.dead && $0.dying <= 0 }

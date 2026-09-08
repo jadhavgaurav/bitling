@@ -178,13 +178,11 @@ final class ControlPanel: NSObject, WKScriptMessageHandler, WKNavigationDelegate
 
         let win = NSWindow(
             contentRect: frame,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false
         )
         win.title = "Bitling"
-        win.titleVisibility = .hidden
         win.titlebarAppearsTransparent = true
-        win.isMovableByWindowBackground = true
         win.appearance = NSAppearance(named: .darkAqua)
         win.backgroundColor = NSColor(red: 0.078, green: 0.086, blue: 0.165, alpha: 1)
         win.minSize = NSSize(width: 384, height: 520)

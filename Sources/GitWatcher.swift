@@ -343,6 +343,9 @@ final class GitWatcher {
     }
 
     private var pollCount = 0
+    /// Reflogs are history files. Anything written before the watcher started has already
+    /// happened and must never be reported again, whatever order the files are noticed in.
+    private let watchingSince = Date()
 
     private func poll() {
         pollCount += 1
@@ -369,6 +372,7 @@ final class GitWatcher {
                 for raw in text.split(separator: "\n") {
                     guard let line = Self.parseReflogLine(String(raw)) else { continue }
                     repo.lastCommitDate = line.date
+                    guard line.date > watchingSince else { continue }
                     guard let event = classify(line, repo: repo) else { continue }
                     if stashed && event.kind == "reset" { continue }
                     emit(event)
@@ -386,14 +390,14 @@ final class GitWatcher {
                     guard newSize > old else { continue }
                     start = old
                 } else {
-                    // A remote branch log that just appeared (first push of a new branch) counts only if it is fresh.
-                    let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                    guard Date().timeIntervalSince(modified) < 10 else { continue }
+                    // First sighting: read the whole file, but the timestamp filter below
+                    // keeps everything that predates this session out of the counters.
                     start = 0
                 }
                 let text = readTail(url, from: start)
                 for raw in text.split(separator: "\n") {
                     guard let line = Self.parseReflogLine(String(raw)), line.message.hasPrefix("update by push") else { continue }
+                    guard line.date > watchingSince else { continue }
                     let branch = URL(fileURLWithPath: path).lastPathComponent
                     repo.lastActivity = Date()
                     lastActiveRepo = key

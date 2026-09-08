@@ -34,12 +34,10 @@
 
   /* ------------------------------------------------------------------ chrome */
   .bar{
-    height:38px;flex:0 0 auto;display:flex;align-items:center;gap:10px;
-    padding:0 14px 0 76px;                 /* 76px keeps clear of the traffic lights */
-    border-bottom:1px solid var(--line);
+    height:38px;flex:0 0 auto;display:flex;align-items:center;
+    padding:0 12px;border-bottom:1px solid var(--line);
   }
-  .mark{font-size:10px;letter-spacing:.18em;color:var(--faint);font-weight:600}
-  .tabs{margin-left:auto;display:flex;gap:2px}
+  .tabs{margin-left:-6px;display:flex;gap:2px}
   .tabs button{padding:5px 10px;font-size:11.5px;color:var(--faint);border-radius:5px}
   .tabs button:hover{color:var(--dim)}
   .tabs button[aria-selected="true"]{color:var(--ink);background:var(--raise)}
@@ -152,7 +150,6 @@
 <div id="app">
 
   <header class="bar">
-    <span class="mark">BITLING</span>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="activity" aria-selected="true">Activity</button>
       <button role="tab" data-tab="setup" aria-selected="false">Setup</button>

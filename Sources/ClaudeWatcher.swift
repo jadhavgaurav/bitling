@@ -31,6 +31,17 @@ final class ClaudeWatcher {
     private var scanTimer: Timer?
     private var pollTimer: Timer?
     private var started = Date()
+    private static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let isoPlain = ISO8601DateFormatter()
+
+    private static func entryDate(_ raw: Any?) -> Date? {
+        guard let text = raw as? String else { return nil }
+        return isoFractional.date(from: text) ?? isoPlain.date(from: text)
+    }
 
     private(set) var promptsToday = 0
     private(set) var toolsToday = 0
@@ -85,8 +96,12 @@ final class ClaudeWatcher {
         let now = Date()
         for project in projects {
             guard (try? project.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            guard let files = try? fm.contentsOfDirectory(at: project, includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey], options: [.skipsHiddenFiles]) else { continue }
-            for file in files where file.pathExtension == "jsonl" {
+            guard let walk = fm.enumerator(
+                at: project,
+                includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else { continue }
+            for case let file as URL in walk where file.pathExtension == "jsonl" {
                 let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey])
                 let modified = values?.contentModificationDate ?? .distantPast
                 guard now.timeIntervalSince(modified) < 15 * 60 else { continue }
@@ -122,7 +137,7 @@ final class ClaudeWatcher {
         let now = Date()
         for (key, var session) in sessions {
             let size = fileSize(session.file)
-            if size < session.offset { session.offset = 0 }
+            if size < session.offset { session.offset = size }
             if size > session.offset {
                 let text = readTail(session.file, from: session.offset)
                 session.offset = size
@@ -160,6 +175,7 @@ final class ClaudeWatcher {
               let type = entry["type"] as? String else { return }
         if let cwd = entry["cwd"] as? String, !cwd.isEmpty { session.project = URL(fileURLWithPath: cwd).lastPathComponent }
         if entry["isSidechain"] as? Bool == true { return }
+        if let when = Self.entryDate(entry["timestamp"]), when < started { return }
         let message = entry["message"] as? [String: Any]
         let content = message?["content"]
 

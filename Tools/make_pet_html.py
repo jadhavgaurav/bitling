@@ -44,6 +44,7 @@ def build(source: Path, target: Path) -> None:
         "    scale = clamp(Math.min(W, H) / 520, 0.7, 1.3);\n    if (W <= 0 || H <= 0) return;",
         "    scale = clamp(Math.min(W, H) / 520, 0.7, 1.3);\n"
         "    if (DESKTOP) { groundY = Math.round(H - 34); scale = 0.8; }\n"
+        "    hitDpr = dpr;\n"
         "    if (W <= 0 || H <= 0) return;",
     )
 
@@ -124,6 +125,42 @@ def build(source: Path, target: Path) -> None:
         "    say('a new box arrives', 2400);\n  });",
         "    say('a new box arrives', 2400);\n    pushState(true);\n  }\n"
         "  resetDialog.addEventListener('close', () => { if (resetDialog.returnValue === 'yes') doReset(); });",
+    )
+
+    # --- click-through: the window is a big transparent rectangle, and everywhere the
+    # creature is not drawn has to let the click reach whatever is behind it. On the desktop
+    # the canvas is cleared every frame and only the creature is painted on it, so its alpha
+    # channel is an exact mask of the pet. Probe it and tell the host what the cursor is over.
+    s = patch(
+        s,
+        "  const pointer = { x: 0, y: 0, over: false, lastT: -10, vx: 0, vy: 0, pt: 0 };\n",
+        "  const pointer = { x: 0, y: 0, over: false, lastT: -10, vx: 0, vy: 0, pt: 0 };\n"
+        "  let hitDpr = 1, hoverOn = null, hoverSentAt = 0, hoverTick = 0;\n"
+        "  function reportHover() {\n"
+        "    if (++hoverTick % 2) return;                       // thirty probes a second\n"
+        "    let on = pet.held || pet.pressing;                 // never let go of a fast drag\n"
+        "    if (!on) {\n"
+        "      const pad = Math.max(1, Math.round(4 * hitDpr)); // a few forgiving pixels around the point\n"
+        "      const x = Math.round(pointer.x * hitDpr), y = Math.round(pointer.y * hitDpr);\n"
+        "      const x0 = Math.max(0, x - pad), y0 = Math.max(0, y - pad);\n"
+        "      const x1 = Math.min(canvas.width, x + pad + 1), y1 = Math.min(canvas.height, y + pad + 1);\n"
+        "      if (x1 > x0 && y1 > y0) {\n"
+        "        const d = ctx.getImageData(x0, y0, x1 - x0, y1 - y0).data;\n"
+        "        for (let i = 3; i < d.length; i += 4) { if (d[i] > 8) { on = true; break; } }\n"
+        "      }\n"
+        "    }\n"
+        "    // Report changes at once, and repeat regardless twice a second: the host treats\n"
+        "    // silence as a fault and stops swallowing clicks rather than trapping the cursor.\n"
+        "    const now = performance.now();\n"
+        "    if (on === hoverOn && now - hoverSentAt < 500) return;\n"
+        "    hoverOn = on; hoverSentAt = now;\n"
+        "    native({ type: 'hover', on });\n"
+        "  }\n",
+    )
+    s = patch(
+        s,
+        "    update(dt);\n    draw();\n    requestAnimationFrame(frame);",
+        "    update(dt);\n    draw();\n    if (DESKTOP) reportHover();\n    requestAnimationFrame(frame);",
     )
 
     # --- state snapshots for the menu bar
@@ -211,6 +248,7 @@ def build(source: Path, target: Path) -> None:
         "      const steps = Math.min(900, Math.max(0, Math.round((Number(seconds) || 0) * 60)));\n"
         "      for (let i = 0; i < steps; i++) update(1 / 60);\n"
         "      draw();\n"
+        "      if (DESKTOP) reportHover();\n"
         "    },\n"
         "    // Put the pet at an exact position. Verification helper only.\n"
         "    place(x) {\n"

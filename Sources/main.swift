@@ -174,6 +174,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var chuteOpen = false
     private var chuteSway: CGFloat = 0
     private var lastMouse = NSPoint(x: -1, y: -1)
+    /// The page probes its own canvas and says whether the cursor is over the drawn creature.
+    /// Everywhere else the window has to let the click through to whatever is behind it.
+    private var lastHoverReport = Date.distantPast
     private var dragEventCount = 0
 
     // Menu items whose titles or states change
@@ -515,6 +518,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let first = body["first"] as? Bool ?? false
             let suggestion = body["suggestion"] as? String ?? "Pip"
             DispatchQueue.main.async { self.askName(first: first, suggestion: suggestion) }
+        case "hover":
+            lastHoverReport = Date()
+            setClickThrough(!(body["on"] as? Bool ?? true))
         case "ready":
             pageReady = true
             js("petNative.swarmMode(\(swarmEnabled ? "true" : "false"))")
@@ -827,6 +833,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     /// The line the pet stands on, in screen coordinates. The page keeps its ground
     /// 34px above the bottom of the window.
+    /// Swallow clicks only where the creature actually is. Never while it is being dragged:
+    /// a fast drag can outrun the cursor probe, and losing the pet mid-throw is worse than
+    /// blocking a click. Flight is fine, since the host moves the window, not the mouse.
+    private func setClickThrough(_ through: Bool) {
+        let value = through && !dragging
+        if window.ignoresMouseEvents != value { window.ignoresMouseEvents = value }
+    }
+
     private func petFloorY() -> CGFloat { window.frame.minY + 34 }
 
     @objc private func toggleSwarm() {
@@ -908,6 +922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     private func dragEnded(_ vx: CGFloat, _ vy: CGFloat) {
+        defer { lastHoverReport = Date() }
         dragging = false
         js("petNative.release()")
         let onFloor = abs(window.frame.minY - screenForWindow().visibleFrame.minY) < 2
@@ -1055,7 +1070,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
         }
 
-        if tickCount % 4 == 0 && window.isVisible {
+        if window.ignoresMouseEvents, Date().timeIntervalSince(lastHoverReport) > 3 {
+            window.ignoresMouseEvents = false
+        }
+
+        // Every other tick: the page cannot decide whether the cursor is over the creature
+        // until it knows where the cursor is, and that answer gates every click.
+        if tickCount % 2 == 0 && window.isVisible {
             let mouse = NSEvent.mouseLocation
             if mouse != lastMouse {
                 lastMouse = mouse

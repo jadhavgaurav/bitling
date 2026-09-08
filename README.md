@@ -324,6 +324,15 @@ always-on-top `WKWebView` and supplies everything a web page cannot do: moving t
 you drag the pet, gravity and screen edges, the menu bar, native dialogs, durable state, and
 the watchers.
 
+That window is much bigger than the robot, because it has to hold a parachute, a rocket and a
+speech bubble. Only about eight percent of it is ever painted, so the rest must not eat your
+clicks. Every frame the page probes its own canvas where the cursor is: on the desktop the
+canvas is cleared each frame and nothing but the creature is drawn on it, which makes its
+alpha channel an exact mask of the pet. It tells the host what the cursor is over and the host
+sets `ignoresMouseEvents` to match, so a click lands on the robot or goes straight through to
+whatever is behind it. If the page ever stops reporting, the host stops swallowing clicks
+rather than trapping your cursor in an invisible box.
+
 ```
 Sources/main.swift          window, drag and physics, menu bar, bridge, bitling:// scheme
 Sources/GitWatcher.swift    repository discovery and reflog tailing

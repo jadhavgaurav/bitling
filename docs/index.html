@@ -107,13 +107,36 @@
     .dock button{padding:10px 12px}
     .dock button span{display:none}
   }
-  .demo{position:absolute;left:50%;bottom:calc(74px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:4px;padding:6px;border-radius:18px;max-width:min(560px,calc(100vw - 24px))}
-  .demo b{align-self:center;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);padding:0 6px}
-  .demo button{all:unset;cursor:pointer;padding:7px 12px;border-radius:999px;font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:500;font-size:14px;color:var(--ink);background:var(--hover);transition:transform .1s,filter .2s}
-  .demo button:hover{filter:brightness(1.08)}
+  .pet-bar{position:absolute;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;z-index:20;max-width:calc(100vw - 24px);overflow-x:auto;scrollbar-width:none}
+  .pet-bar::-webkit-scrollbar{display:none}
+  .pet-bar-label{font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);padding:0 4px 0 8px;white-space:nowrap}
+  .pet-chip{all:unset;cursor:pointer;display:flex;align-items:center;gap:7px;padding:4px 11px 4px 4px;border-radius:999px;font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-size:13px;font-weight:500;color:var(--ink);background:transparent;transition:all .18s cubic-bezier(.2,.8,.2,1);white-space:nowrap;position:relative}
+  .pet-chip:hover{background:var(--hover);transform:translateY(-1px)}
+  .pet-chip:active{transform:scale(.95)}
+  .pet-chip.active{background:var(--hover);font-weight:600;box-shadow:inset 0 0 0 1.5px var(--chip-accent, var(--accent)), 0 2px 12px var(--chip-glow, rgba(0,0,0,.15))}
+  .pet-chip-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1.5px solid var(--chip-border, rgba(255,255,255,.2));background:var(--chip-bg, #1a1a1a);flex-shrink:0;transition:transform .18s ease}
+  .pet-chip.active .pet-chip-avatar{transform:scale(1.08)}
+  .pet-chip-avatar img{width:22px;height:22px;object-fit:contain;display:block}
+  @media (max-width:860px){
+    .pet-bar{top:calc(74px + env(safe-area-inset-top))}
+  }
+  @media (max-width:520px){
+    .pet-bar{top:calc(70px + env(safe-area-inset-top));padding:4px 6px;gap:4px}
+    .pet-chip{padding:3px 8px 3px 3px;font-size:12px;gap:5px}
+    .pet-chip-avatar{width:24px;height:24px}
+    .pet-chip-avatar img{width:18px;height:18px}
+  }
+  .demo{position:absolute;left:50%;bottom:calc(74px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:5px;padding:6px 10px;border-radius:20px;max-width:min(680px,calc(100vw - 20px));z-index:15}
+  .demo-group{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:center}
+  .demo-sep{width:1px;height:18px;background:var(--panel-border);margin:0 2px}
+  .demo b{align-self:center;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);padding:0 4px}
+  .demo button{all:unset;cursor:pointer;padding:7px 12px;border-radius:999px;font-family:Fredoka,'Atkinson Hyperlegible',sans-serif;font-weight:500;font-size:13px;color:var(--ink);background:var(--hover);transition:transform .1s,filter .2s,background .2s;white-space:nowrap}
+  .demo button:hover{filter:brightness(1.08);background:var(--hover)}
   .demo button:active{transform:scale(.95)}
   .demo button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  @media (max-width:520px){ .demo button{font-size:13px;padding:6px 10px} }
+  .demo button.demo-combat{background:rgba(255,127,163,.15);border:1px solid rgba(255,127,163,.3);color:var(--ink)}
+  .demo button.demo-combat:hover{background:rgba(255,127,163,.25)}
+  @media (max-width:520px){ .demo button{font-size:12px;padding:5px 9px} .demo-sep{display:none} }
   @media (prefers-reduced-motion:reduce){ .bubble{animation:none} }
   html.desktop,html.desktop body,html.desktop #app{background:transparent}
   html.desktop .hud,html.desktop .dock{display:none}
@@ -165,16 +188,27 @@
     </button>
   </nav>
 
-  <nav class="card demo" id="demoBar" aria-label="Demo: fire a developer event" hidden>
-    <b>Try it</b>
-    <button type="button" data-demo="commit">Commit</button>
-    <button type="button" data-demo="push">Push</button>
-    <button type="button" data-demo="merge">Merge</button>
-    <button type="button" data-demo="test-failed">Tests fail</button>
-    <button type="button" data-demo="test-passed">Tests pass</button>
-    <button type="button" data-demo="deploy">Deploy</button>
-    <button type="button" data-demo="claude">Claude works</button>
-    <button type="button" data-demo="rebase">Rebase</button>
+  <nav class="card pet-bar" id="petBar" aria-label="Choose pet" hidden>
+    <span class="pet-bar-label">Pet:</span>
+    <div id="petChips" style="display:contents"></div>
+  </nav>
+
+  <nav class="card demo" id="demoBar" aria-label="Demo: test developer and combat actions" hidden>
+    <div class="demo-group">
+      <b>Combat:</b>
+      <button type="button" data-demo="special" id="demoSpecialBtn" class="demo-combat">⚡ Kamehameha</button>
+      <button type="button" data-demo="boss" class="demo-combat">👹 Boss Bug</button>
+      <button type="button" data-demo="test-failed">🐛 Bugs</button>
+      <button type="button" data-demo="test-passed">✅ Pass</button>
+    </div>
+    <div class="demo-sep" role="separator"></div>
+    <div class="demo-group">
+      <b>Dev:</b>
+      <button type="button" data-demo="commit">Commit</button>
+      <button type="button" data-demo="push">Push</button>
+      <button type="button" data-demo="deploy">Deploy</button>
+      <button type="button" data-demo="claude">Claude</button>
+    </div>
   </nav>
 
   <dialog id="nameDialog">
@@ -352,6 +386,7 @@
   };
 
   const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
   const clamp = (v, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v));
   const rand = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -1617,23 +1652,41 @@
     bugs.length = 0;
     if (swarmOn()) native({ type: 'doomAll' });
   }
-  function spawnBug(x) {
+  function spawnBug(x, isBoss, label) {
     const bx = x !== undefined ? x : (Math.random() < 0.5 ? rand(14, W * 0.3) : rand(W * 0.7, W - 14));
     const bugEdge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
-    bugs.push({ x: clamp(bx, bugEdge, W - bugEdge), vx: rand(50, 90) * (Math.random() < 0.5 ? -1 : 1), dart: rand(0.5, 2), alive: true, squash: 0, wig: rand(0, 6) });
+    bugs.push({
+      x: clamp(bx, bugEdge, W - bugEdge),
+      vx: rand(40, 80) * (Math.random() < 0.5 ? -1 : 1),
+      dart: rand(0.5, 2),
+      alive: true,
+      squash: 0,
+      wig: rand(0, 6),
+      boss: !!isBoss,
+      hp: isBoss ? 3 : 1,
+      maxHp: isBoss ? 3 : 1,
+      label: label || (isBoss ? 'BOSS BUG' : '')
+    });
   }
   function squashBug(b, byPet, byLaser) {
     if (!b.alive) return;
+    if (b.boss && b.hp && b.hp > 1 && !byLaser) {
+      b.hp -= 1;
+      audio.pop();
+      spawn('spark', b.x, groundY - 12, 4, { spread: 6, vx: 50, vy: -60, size: 8, hue: 35 });
+      return;
+    }
     b.alive = false;
     b.squash = 0.45;
-    countKill(byLaser);
+    countKill(byLaser, b.boss);
     if (byLaser) {
-      spawn('flame', b.x, groundY - 10, 7, { spread: 7, vx: 70, vy: -90, size: 8, dur: 0.5, hue: rand(0, 40) });
-      spawn('spark', b.x, groundY - 10, 4, { spread: 5, vx: 90, vy: -70, size: 7, hue: 12, dur: 0.6 });
+      const sparkHue = state.species === 'pikachu' ? 52 : state.species === 'kaiju' ? 185 : state.species === 'goku' ? 195 : state.species === 'ironman' ? 190 : 12;
+      spawn('flame', b.x, groundY - 10, b.boss ? 14 : 7, { spread: b.boss ? 14 : 7, vx: 90, vy: -120, size: b.boss ? 12 : 8, dur: 0.6, hue: sparkHue });
+      spawn('spark', b.x, groundY - 10, b.boss ? 10 : 4, { spread: 8, vx: 110, vy: -90, size: 9, hue: sparkHue, dur: 0.7 });
     } else {
       audio.pop();
       spawn('check', b.x, groundY - 12, 2, { spread: 6, vx: 30, vy: -70, size: 12, dur: 0.9 });
-      say(line('squash'), 1300);
+      say(line(b.boss ? 'bossDown' : 'squash'), 1400);
     }
     if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
   }
@@ -2425,6 +2478,10 @@
 
   // ---------------------------------------------------------------- draw
   function drawBackground() {
+    if (window.customBgImage && window.customBgImage.complete) {
+      ctx.drawImage(window.customBgImage, 0, 0, W, H);
+      return;
+    }
     const g = ctx.createLinearGradient(0, 0, 0, groundY);
     g.addColorStop(0, sky.top);
     g.addColorStop(1, sky.bottom);
@@ -4589,7 +4646,7 @@
 
   function drawBugs() {
     for (const b of bugs) {
-      const u = 6.5 * scale;
+      const u = (b.boss ? 11 : 6.5) * scale;
       ctx.save();
       ctx.translate(b.x, groundY - 1);
       if (!b.alive) {
@@ -4598,6 +4655,18 @@
         ctx.beginPath(); ctx.ellipse(0, -u * 0.3, u * 2, u * 0.45, 0, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
         continue;
+      }
+      if (b.boss) {
+        const bw = 64, bh = 5;
+        ctx.fillStyle = 'rgba(18, 20, 26, 0.85)';
+        ctx.fillRect(-bw / 2 - 1, -u * 2.8 - 1, bw + 2, bh + 2);
+        ctx.fillStyle = '#ef4444';
+        const hpPct = clamp((b.hp || 1) / (b.maxHp || 1), 0, 1);
+        ctx.fillRect(-bw / 2, -u * 2.8, bw * hpPct, bh);
+        ctx.font = 'bold 8px ui-monospace, Menlo, monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.label || 'BOSS BUG', 0, -u * 2.8 - 4);
       }
       ctx.scale(Math.sign(b.vx) || 1, 1);
       const wig = Math.sin(pet.t * 28 + b.wig);
@@ -4608,7 +4677,7 @@
         const swing = wig * (k === 0 ? -1 : 1) * u * 0.35;
         ctx.beginPath(); ctx.moveTo(k * u * 0.7, -u * 0.6); ctx.lineTo(k * u * 0.7 + swing - u * 0.2, 0); ctx.stroke();
       }
-      ctx.fillStyle = '#d9534f';
+      ctx.fillStyle = b.boss ? '#b91c1c' : '#d9534f';
       ctx.beginPath(); ctx.ellipse(0, -u * 0.95, u * 1.35, u * 0.85, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#3a2a33';
       ctx.beginPath(); ctx.moveTo(0, -u * 1.8); ctx.lineTo(0, -u * 0.1); ctx.lineWidth = 1; ctx.stroke();
@@ -5030,11 +5099,186 @@
     say('a new box arrives', 2400);
   });
 
+  const PET_ROSTER = [
+    { id: 'robot', name: 'Bitling', tag: 'Machine', icon: 'avatars/robot.png', accent: '#7ee7d7', bg: 'linear-gradient(135deg, #132225 0%, #091316 100%)', border: 'rgba(126,231,215,0.35)', special: '⚡ Overclock Laser' },
+    { id: 'dragon', name: 'Ember', tag: 'Dragon', icon: 'avatars/dragon.png', accent: '#ff9a3c', bg: 'linear-gradient(135deg, #0e241c 0%, #06130e 100%)', border: 'rgba(65,196,140,0.35)', special: '🔥 Fire Breath' },
+    { id: 'goku', name: 'Goku', tag: 'Saiyan', icon: 'avatars/goku.png', accent: '#fbbf24', bg: 'linear-gradient(135deg, #3d1b06 0%, #170900 100%)', border: 'rgba(251,191,36,0.4)', special: '⚡ Kamehameha' },
+    { id: 'rider', name: 'Rider', tag: 'Hero', icon: 'avatars/rider.png', accent: '#ffd166', bg: 'linear-gradient(135deg, #241d10 0%, #120e06 100%)', border: 'rgba(255,209,102,0.3)', special: '⚡ Rider Beam' },
+    { id: 'pikachu', name: 'Pikachu', tag: 'Electric', icon: 'avatars/pikachu.png', accent: '#eab308', bg: 'linear-gradient(135deg, #2e2600 0%, #131000 100%)', border: 'rgba(250,204,21,0.4)', special: '⚡ Thunderbolt' },
+    { id: 'ironman', name: 'Iron Man', tag: 'Avenger', icon: 'avatars/ironman.png', accent: '#ef4444', bg: 'linear-gradient(135deg, #260a0a 0%, #100303 100%)', border: 'rgba(239,68,68,0.35)', special: '⚡ Unibeam' },
+    { id: 'kaiju', name: 'Godzilla', tag: 'Titan', icon: 'avatars/kaiju.png', accent: '#00f0ff', bg: 'linear-gradient(135deg, #091d24 0%, #040e13 100%)', border: 'rgba(0,240,255,0.35)', special: '☢️ Atomic Breath' },
+  ];
+
+  function updateSpecialBtn() {
+    const btn = $('#demoSpecialBtn');
+    if (!btn) return;
+    const petInfo = PET_ROSTER.find((p) => p.id === state.species);
+    btn.textContent = (petInfo && petInfo.special) || '⚡ Special Move';
+  }
+
+  function triggerSpecialAttack() {
+    audio.ensure();
+    if (!state.hatched) eggTap();
+    if (state.asleep) wake();
+    comeDown();
+    let targetBug = bugs.find((b) => b.alive && b.boss);
+    if (!targetBug) {
+      const targetX = pet.x > W / 2 ? rand(30, W * 0.35) : rand(W * 0.65, W - 30);
+      const bossLabels = {
+        goku: 'CELL (BOSS)',
+        ironman: 'ULTRON (BOSS)',
+        pikachu: 'TEAM ROCKET',
+        kaiju: 'KING GHIDORAH',
+        dragon: 'ICE WYRM (BOSS)',
+        rider: 'SHOCKER BOSS',
+        robot: 'KERNEL PANIC',
+      };
+      spawnBug(targetX, true, bossLabels[state.species] || 'BOSS BUG');
+      targetBug = bugs[bugs.length - 1];
+    }
+    pet.facing = Math.sign(targetBug.x - pet.x) || 1;
+    pet.zapAim = { host: false, bug: targetBug };
+    pet.zapBoss = true;
+    const spAttack = species().attack;
+    const resolved = (spAttack && typeof spAttack.resolve === 'function') ? spAttack.resolve(true) : spAttack;
+    pet.zapStyle = (resolved && resolved.style) || (spAttack && spAttack.style) || 'beam';
+    pet.zapCharge = (resolved && resolved.charge) || 0.85;
+    pet.zapFull = pet.zapCharge;
+    pet.zapCool = 0;
+    pet.zap = 0;
+    if (resolved && resolved.sound === 'kameCharge') {
+      audio.kameCharge();
+      if (state.species === 'goku') say('KA... ME... HA... ME...', Math.round(pet.zapFull * 1000) + 150);
+    } else if (state.species === 'ironman') {
+      audio.charge();
+      say("Jarvis: 'Rerouting all power to chest Arc Reactor.'", Math.round(pet.zapFull * 1000) + 150);
+    } else if (state.species === 'pikachu') {
+      audio.charge();
+      audio.pikaPika();
+      say('PIKA... CHUUUUU!', Math.round(pet.zapFull * 1000) + 150);
+    } else if (state.species === 'kaiju') {
+      audio.charge();
+      say('SKREEEEOOOGH!', Math.round(pet.zapFull * 1000) + 150);
+    } else {
+      audio.charge();
+    }
+  }
+
+  function selectSpecies(speciesId, announce) {
+    if (!SPECIES[speciesId]) return;
+    const prevSpecies = state.species;
+    state.species = speciesId;
+    state.hatched = true;
+    state.asleep = false;
+    state.eggTaps = 0;
+    if (state.energy < 35) state.energy = 85;
+    if (state.full < 35) state.full = 85;
+    state.joy = Math.max(state.joy, 75);
+
+    pet.grounded = !floats();
+    if (floats()) {
+      pet.y = Math.min(pet.y, groundY - petR() * 1.5);
+      pet.vy = 0;
+    } else {
+      pet.y = groundY;
+      pet.vy = 0;
+    }
+
+    const spec = species();
+    const prevSpec = SPECIES[prevSpecies];
+    if (!state.name || state.name === 'Bitling' || state.name === 'Egg' || state.name === 'A mysterious box' || (prevSpec && state.name === prevSpec.name)) {
+      state.name = spec.name;
+    }
+
+    const chips = $$('.pet-chip');
+    chips.forEach((c) => {
+      const active = c.dataset.species === speciesId;
+      c.classList.toggle('active', active);
+      c.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    const petInfo = PET_ROSTER.find((p) => p.id === speciesId);
+    if (petInfo && petInfo.accent) {
+      document.documentElement.style.setProperty('--accent', petInfo.accent);
+    }
+
+    updateSpecialBtn();
+    updateHud();
+    saveState();
+
+    if (announce) {
+      audio.ensure();
+      pet.stretchT = 1.35;
+      pet.happy = 2.2;
+      const hue = speciesId === 'goku' ? 45 : speciesId === 'pikachu' ? 52 : speciesId === 'ironman' ? 0 : speciesId === 'kaiju' ? 185 : speciesId === 'dragon' ? 25 : 175;
+      spawn('spark', pet.x, pet.y - petR() * 0.8, 12, { spread: petR() * 0.9, vx: 80, vy: -70, size: 8, hue });
+
+      if (speciesId === 'goku') {
+        audio.kiBlast();
+        say("Yo! I'm Goku! Let's train hard together!", 2600);
+      } else if (speciesId === 'pikachu') {
+        audio.pikaChu();
+        say('Pika-pi! Pikachu!', 2200);
+      } else if (speciesId === 'ironman') {
+        audio.jarvisOnline();
+        say("Jarvis: 'All systems online, sir.'", 2600);
+      } else if (speciesId === 'kaiju') {
+        audio.tone(140, 70, 0.35, 'sawtooth', 0.12);
+        say('SKREEECH! (Roar)', 2200);
+      } else if (speciesId === 'dragon') {
+        audio.whoosh();
+        say('Rawr! Ember is ready to incinerate bugs!', 2200);
+      } else if (speciesId === 'rider') {
+        audio.ok();
+        say('Henshin! Rider justice will protect this code!', 2200);
+      } else {
+        audio.squeak();
+        say('Beep boop! Bitling initialized!', 2200);
+      }
+    }
+    draw();
+  }
+
+  function initPetSwitcher() {
+    const container = $('#petChips');
+    if (!container) return;
+    container.innerHTML = '';
+    PET_ROSTER.forEach((p) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'pet-chip' + (state.species === p.id ? ' active' : '');
+      chip.dataset.species = p.id;
+      chip.setAttribute('role', 'tab');
+      chip.setAttribute('aria-selected', state.species === p.id ? 'true' : 'false');
+      chip.style.setProperty('--chip-accent', p.accent);
+      chip.style.setProperty('--chip-glow', p.border);
+      chip.innerHTML = `
+        <span class="pet-chip-avatar" style="--chip-bg:${p.bg};--chip-border:${p.border}">
+          <img src="${p.icon}" alt="${p.name}" onerror="this.style.display='none'">
+        </span>
+        <span>${p.name}</span>
+      `;
+      chip.addEventListener('click', (e) => {
+        e.preventDefault();
+        selectSpecies(p.id, true);
+        canvas.focus({ preventScroll: true });
+      });
+      container.appendChild(chip);
+    });
+    updateSpecialBtn();
+  }
+
   // The GitHub Pages demo sets window.__demoControls so visitors can fire the real
   // developer events by hand. The app and the plain page never show this strip.
   if (window.__demoControls) {
+    const petBar = $('#petBar');
+    if (petBar) {
+      petBar.hidden = false;
+      initPetSwitcher();
+    }
     const bar = $('#demoBar');
     bar.hidden = false;
+    updateSpecialBtn();
     const COMMITS = ['fix: stop the widget eating cookies', 'feat: add parafoil physics', 'wip',
       'typo in the README', 'refactor the whole rendering pipeline'];
     const TESTS = ['test_webhook_signature', 'test_invoice_total', 'test_retry_backoff',
@@ -5043,7 +5287,13 @@
       const kind = e.target instanceof HTMLElement ? e.target.dataset.demo : null;
       if (!kind) return;
       audio.ensure();
-      if (kind === 'commit') {
+      if (kind === 'special') {
+        triggerSpecialAttack();
+      } else if (kind === 'boss') {
+        const targetX = pet.x > W / 2 ? rand(30, W * 0.35) : rand(W * 0.65, W - 30);
+        spawnBug(targetX, true, 'BOSS BUG');
+        say(line('bossSpawn') || 'A massive boss bug appeared!', 2200);
+      } else if (kind === 'commit') {
         handleGitEvent({ kind: 'commit', message: pick(COMMITS), hash: Math.random().toString(16).slice(2, 9),
           insertions: Math.floor(rand(5, 520)), deletions: Math.floor(rand(0, 60)) });
       } else if (kind === 'push') {
@@ -5095,6 +5345,20 @@
     say(text, dur) { say(text, dur); },
     species(id) { return species(id); },
     draw() { draw(); },
+    bugs() { return bugs; },
+    drop() { return drop; },
+    rocket() { return rocket; },
+    particles() { return particles; },
+    spawnDrop(kind, label) { spawnDrop(kind, label); },
+    releaseBugs(n, labels, persistent) { releaseBugs(n, labels, persistent); },
+    launchRocket(label) { launchRocket(label); },
+    spawn(kind, x, y, n, opts) { spawn(kind, x, y, n, opts); },
+    selectSpecies(id) { selectSpecies(id, true); },
+    triggerSpecial() { triggerSpecialAttack(); },
+    spawnBoss(label) {
+      const targetX = pet.x > W / 2 ? rand(30, W * 0.35) : rand(W * 0.65, W - 30);
+      spawnBug(targetX, true, label || 'BOSS BUG');
+    },
   };
 
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveState(); });

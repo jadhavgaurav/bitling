@@ -46,6 +46,8 @@ final class PetWindow: NSWindow {
     var onDrag: ((CGFloat, CGFloat) -> Void)?
     var onDragEnd: ((CGFloat, CGFloat) -> Void)?
     var onRightClick: (() -> Void)?
+    /// A desktop stage stays fixed; a drag moves its creature instead of its window.
+    var onStageDrag: ((CGFloat, CGFloat) -> Void)?
 
     private var pressed = false
     private var dragging = false
@@ -82,7 +84,11 @@ final class PetWindow: NSWindow {
             origin.y += point.y - lastPoint.y
             let visible = (screen ?? NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main)?.visibleFrame
             if let visible { origin = Self.clamped(origin, in: visible, size: frame.size) }
-            setFrameOrigin(origin)
+            if let onStageDrag {
+                onStageDrag(point.x - lastPoint.x, lastPoint.y - point.y)
+            } else {
+                setFrameOrigin(origin)
+            }
             lastPoint = point
             lastTime = event.timestamp
             onDrag?(velocity.x, velocity.y)
@@ -126,6 +132,7 @@ struct PetSnapshot {
     var species = "robot"
     var locomotion = "ground"
     var attack = "beam"
+    var shenronSettings: [String: Double] = [:]
 
     init() {}
 
@@ -149,6 +156,9 @@ struct PetSnapshot {
         species = message["species"] as? String ?? "robot"
         locomotion = message["locomotion"] as? String ?? "ground"
         attack = message["attack"] as? String ?? "beam"
+        if let values = message["shenronSettings"] as? [String: NSNumber] {
+            shenronSettings = values.mapValues(\.doubleValue)
+        }
     }
 }
 
@@ -192,6 +202,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var lastMouse = NSPoint(x: -1, y: -1)
     /// A floating species has no use for gravity: it hangs where you leave it.
     private var floating = false
+    private var desktopStage = false
+    private var ordinaryPetFrame: NSRect?
     /// The roster the page publishes on boot, shown by the control room's picker.
     private var speciesCatalogue: [[String: Any]] = []
     /// The page probes its own canvas and says whether the cursor is over the drawn creature.
@@ -491,12 +503,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "state":
             if let snap = PetSnapshot(message: body) {
                 snapshot = snap
+                applyDesktopStage(snap.species == "dragon" && snap.hatched)
                 applyLocomotion(snap.locomotion == "float")
             }
         case "walk":
             let direction = (body["dir"] as? Double ?? 1) < 0 ? CGFloat(-1) : CGFloat(1)
             startWalk(direction: direction)
         case "fly":
+            guard !desktopStage else { return }
             guard !dragging, !airborne, (flight == .none || flight == .hovering) else { return }
             let fx = CGFloat(body["x"] as? Double ?? 0.5), fy = CGFloat(body["y"] as? Double ?? 0.5)
             let visible = screenForWindow().visibleFrame
@@ -509,6 +523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             flight = .flying
             js("petNative.flight('takeoff')")
         case "land":
+            guard !desktopStage else { return }
             guard flight != .none else { return }
             flight = .landing
             js("petNative.flight('landing')")
@@ -560,6 +575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
         case "ready":
             pageReady = true
+            if desktopStage { js("petNative.stageSize(\(Double(petSizeScale)))") }
             js("petNative.swarmMode(\(swarmEnabled ? "true" : "false"))")
         default:
             break
@@ -651,6 +667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "asleep": snapshot.asleep, "hatched": snapshot.hatched,
                 "working": snapshot.working, "screen": snapshot.screen,
                 "sound": snapshot.sound, "species": snapshot.species,
+                "shenron": snapshot.shenronSettings,
             ],
             "today": [
                 "commits": git.commitsToday, "pushes": git.pushesToday,
@@ -694,6 +711,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "hide": toggleShown()
         case _ where action.hasPrefix("size:"):
             applyPetSize(CGFloat(Double(action.dropFirst(5)) ?? 1))
+        case _ where action.hasPrefix("shenron:"):
+            let parts = action.split(separator: ":", omittingEmptySubsequences: false)
+            let allowed = Set(["size", "length", "speed", "motion", "depth", "opacity"])
+            guard parts.count == 3, allowed.contains(String(parts[1])), let value = Double(parts[2]), value.isFinite else { return }
+            js("petNative.shenronSetting(\(jsString(String(parts[1]))), \(value))")
         case "rename": renameAction()
         case "sound": soundAction()
         case "login": toggleLogin()
@@ -733,6 +755,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc private func bringHere() {
         let screen = screenUnderMouse()
         let visible = screen.visibleFrame
+        if desktopStage {
+            window.setFrame(visible, display: true)
+            js("petNative.stageSize(\(Double(petSizeScale)))")
+            window.orderFrontRegardless()
+            return
+        }
         airborne = false
         flight = .none
         js("petNative.flight('landed')")
@@ -961,6 +989,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard abs(wanted - petSizeScale) > 0.01 else { return }
         petSizeScale = wanted
         UserDefaults.standard.set(Double(wanted), forKey: petSizeDefaultsKey)
+        if desktopStage {
+            js("petNative.stageSize(\(Double(wanted)))")
+            return
+        }
         let visible = screenForWindow().visibleFrame
         var frame = window.frame
         let centreX = frame.midX
@@ -973,6 +1005,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         saveWindowX()
     }
 
+    /// Shenron owns movement inside a display-sized transparent surface. Other pets
+    /// retain the existing window physics and saved position.
+    private func applyDesktopStage(_ enabled: Bool) {
+        guard enabled != desktopStage else { return }
+        let visible = screenForWindow().visibleFrame
+        desktopStage = enabled
+        airborne = false
+        flight = .none
+        velocityX = 0
+        velocityY = 0
+        walkRemaining = 0
+        walkDirection = 0
+        chuteOpen = false
+        if enabled {
+            ordinaryPetFrame = window.frame
+            window.onStageDrag = { [weak self] dx, dy in
+                self?.js("petNative.stageDrag(\(Double(dx)), \(Double(dy)))")
+            }
+            window.ignoresMouseEvents = true
+            window.setFrame(visible, display: true)
+            js("petNative.stageSize(\(Double(petSizeScale)))")
+        } else {
+            window.onStageDrag = nil
+            let previous = ordinaryPetFrame ?? NSRect(origin: visible.origin, size: petWindowSize)
+            let origin = PetWindow.clamped(previous.origin, in: visible, size: petWindowSize)
+            window.setFrame(NSRect(origin: origin, size: petWindowSize), display: true)
+            ordinaryPetFrame = nil
+            // Force locomotion to initialize even when switching between two floaters.
+            floating = !(snapshot.locomotion == "float")
+            js("petNative.stageSize(\(Double(petSizeScale)))")
+        }
+        lastMouse = NSPoint(x: -1, y: -1)
+    }
+
     private func petFloorY() -> CGFloat {
         floating ? window.frame.minY + petWindowSize.height * 0.46 : window.frame.minY + 34
     }
@@ -980,6 +1046,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     /// Switching between a walker and a floater has to move the creature: one belongs on
     /// the floor, the other in the air.
     private func applyLocomotion(_ isFloat: Bool) {
+        if desktopStage { floating = true; return }
         guard isFloat != floating else { return }
         floating = isFloat
         guard !dragging else { return }
@@ -1061,6 +1128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
 
     private func saveWindowX() {
+        guard !desktopStage else { return }
         UserDefaults.standard.set(Double(window.frame.minX), forKey: windowXDefaultsKey)
     }
 
@@ -1085,6 +1153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         defer { lastHoverReport = Date() }
         dragging = false
         js("petNative.release()")
+        if desktopStage { return }
         if floating {
             // Dropped a floater: it simply stays in the air where you left it.
             flight = .hovering
@@ -1127,6 +1196,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc private func screensChanged() {
         // The floor may have moved (dock, resolution, display added or removed): let gravity sort it out.
         let visible = screenForWindow().visibleFrame
+        if desktopStage {
+            window.setFrame(visible, display: true)
+            js("petNative.stageSize(\(Double(petSizeScale)))")
+            return
+        }
         var origin = window.frame.origin
         origin.x = clampX(origin.x, in: visible)
         if origin.y < visible.minY { origin.y = visible.minY }
@@ -1144,98 +1218,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         var frame = window.frame
         let floor = visible.minY
 
-        switch flight {
-        case .flying:
-            chuteOpen = false
-            let dx = flyTarget.x - frame.origin.x, dy = flyTarget.y - frame.origin.y
-            let dist = hypot(dx, dy)
-            if dist < 3 {
-                flight = .hovering
-                hoverBase = frame.origin
-                hoverT = 0
-                js("petNative.flight('hover')")
-                saveWindowX()
-            } else {
-                let speed = min(380, 70 + dist * 2.2)
-                frame.origin.x += dx / dist * speed * dt
-                frame.origin.y += dy / dist * speed * dt
-                window.setFrameOrigin(frame.origin)
-                // Tell the page which way it is travelling so it can pitch into the flight
-                // and aim its thrust backwards. Screen coordinates: y grows downward.
-                if tickCount % 6 == 0 {
-                    js("petNative.flightVec(\(String(format: "%.2f", dx / dist)), \(String(format: "%.2f", -dy / dist)))")
-                }
-            }
-        case .hovering:
-            if tickCount % 12 == 0 { js("petNative.flightVec(0, 0)") }
-            hoverT += dt
-            frame.origin = NSPoint(x: hoverBase.x + sin(hoverT * 0.9) * 8, y: hoverBase.y + sin(hoverT * 2.1) * 5)
-            window.setFrameOrigin(frame.origin)
-        case .landing:
-            frame.origin.y -= 230 * dt
-            frame.origin.x = clampX(frame.origin.x, in: visible)
-            if frame.origin.y <= floor {
-                frame.origin.y = floor
-                flight = .none
-                airborne = false
-                velocityX = 0
-                velocityY = 0
-                js("petNative.flight('landed')")
-                saveWindowX()
-            }
-            window.setFrameOrigin(frame.origin)
-        case .none:
-            if airborne {
-                let height = frame.minY - floor
-                if chuteOpen {
-                    // Under canopy: slow terminal descent with a gentle side-to-side drift.
-                    velocityY += max(0, (-140 - velocityY)) * min(1, dt * 3)
-                    velocityY = max(velocityY, -170)
-                    chuteSway += dt * 1.7
-                    velocityX += (sin(chuteSway) * 70 - velocityX) * min(1, dt * 2)
+        if !desktopStage {
+            switch flight {
+            case .flying:
+                chuteOpen = false
+                let dx = flyTarget.x - frame.origin.x, dy = flyTarget.y - frame.origin.y
+                let dist = hypot(dx, dy)
+                if dist < 3 {
+                    flight = .hovering
+                    hoverBase = frame.origin
+                    hoverT = 0
+                    js("petNative.flight('hover')")
+                    saveWindowX()
                 } else {
-                    velocityY -= 2600 * dt
-                    // Falling fast with room to spare: pop the chute.
-                    if velocityY < -620 && height > max(220, visible.height * 0.22) {
-                        chuteOpen = true
-                        js("petNative.flight('chute')")
+                    let speed = min(380, 70 + dist * 2.2)
+                    frame.origin.x += dx / dist * speed * dt
+                    frame.origin.y += dy / dist * speed * dt
+                    window.setFrameOrigin(frame.origin)
+                    // Tell the page which way it is travelling so it can pitch into the flight
+                    // and aim its thrust backwards. Screen coordinates: y grows downward.
+                    if tickCount % 6 == 0 {
+                        js("petNative.flightVec(\(String(format: "%.2f", dx / dist)), \(String(format: "%.2f", -dy / dist)))")
                     }
                 }
-                frame.origin.x += velocityX * dt
-                frame.origin.y += velocityY * dt
-                if frame.minX < visible.minX { frame.origin.x = visible.minX; velocityX = abs(velocityX) * (chuteOpen ? 0.4 : 0.5) }
-                if frame.maxX > visible.maxX { frame.origin.x = visible.maxX - frame.width; velocityX = -abs(velocityX) * (chuteOpen ? 0.4 : 0.5) }
-                if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.height; velocityY = -abs(velocityY) * 0.3 }
-                if frame.minY <= floor {
-                    // Robots land on their feet: no bounce, a knee bend instead.
+            case .hovering:
+                if tickCount % 12 == 0 { js("petNative.flightVec(0, 0)") }
+                hoverT += dt
+                frame.origin = NSPoint(x: hoverBase.x + sin(hoverT * 0.9) * 8, y: hoverBase.y + sin(hoverT * 2.1) * 5)
+                window.setFrameOrigin(frame.origin)
+            case .landing:
+                frame.origin.y -= 230 * dt
+                frame.origin.x = clampX(frame.origin.x, in: visible)
+                if frame.origin.y <= floor {
                     frame.origin.y = floor
-                    let impact = chuteOpen ? 0.12 : min(0.45, abs(velocityY) / 2600)
-                    velocityY = 0
-                    velocityX = 0
+                    flight = .none
                     airborne = false
-                    if chuteOpen { chuteOpen = false; js("petNative.flight('chute-cut')") }
-                    js("petNative.land(\(String(format: "%.2f", impact)))")
+                    velocityX = 0
+                    velocityY = 0
+                    js("petNative.flight('landed')")
                     saveWindowX()
                 }
                 window.setFrameOrigin(frame.origin)
-            } else if walkRemaining > 0 {
-                let speed: CGFloat = snapshot.species == "kaiju" ? 32 : 70
-                let step = min(walkRemaining, speed * dt)
-                frame.origin.x += step * walkDirection
-                walkRemaining -= step
-                if frame.minX < visible.minX || frame.maxX > visible.maxX {
-                    frame.origin.x = clampX(frame.origin.x, in: visible)
-                    walkRemaining = 0
+            case .none:
+                if airborne {
+                    let height = frame.minY - floor
+                    if chuteOpen {
+                        // Under canopy: slow terminal descent with a gentle side-to-side drift.
+                        velocityY += max(0, (-140 - velocityY)) * min(1, dt * 3)
+                        velocityY = max(velocityY, -170)
+                        chuteSway += dt * 1.7
+                        velocityX += (sin(chuteSway) * 70 - velocityX) * min(1, dt * 2)
+                    } else {
+                        velocityY -= 2600 * dt
+                        // Falling fast with room to spare: pop the chute.
+                        if velocityY < -620 && height > max(220, visible.height * 0.22) {
+                            chuteOpen = true
+                            js("petNative.flight('chute')")
+                        }
+                    }
+                    frame.origin.x += velocityX * dt
+                    frame.origin.y += velocityY * dt
+                    if frame.minX < visible.minX { frame.origin.x = visible.minX; velocityX = abs(velocityX) * (chuteOpen ? 0.4 : 0.5) }
+                    if frame.maxX > visible.maxX { frame.origin.x = visible.maxX - frame.width; velocityX = -abs(velocityX) * (chuteOpen ? 0.4 : 0.5) }
+                    if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.height; velocityY = -abs(velocityY) * 0.3 }
+                    if frame.minY <= floor {
+                        // Robots land on their feet: no bounce, a knee bend instead.
+                        frame.origin.y = floor
+                        let impact = chuteOpen ? 0.12 : min(0.45, abs(velocityY) / 2600)
+                        velocityY = 0
+                        velocityX = 0
+                        airborne = false
+                        if chuteOpen { chuteOpen = false; js("petNative.flight('chute-cut')") }
+                        js("petNative.land(\(String(format: "%.2f", impact)))")
+                        saveWindowX()
+                    }
+                    window.setFrameOrigin(frame.origin)
+                } else if walkRemaining > 0 {
+                    let speed: CGFloat = snapshot.species == "kaiju" ? 32 : 70
+                    let step = min(walkRemaining, speed * dt)
+                    frame.origin.x += step * walkDirection
+                    walkRemaining -= step
+                    if frame.minX < visible.minX || frame.maxX > visible.maxX {
+                        frame.origin.x = clampX(frame.origin.x, in: visible)
+                        walkRemaining = 0
+                    }
+                    window.setFrameOrigin(frame.origin)
+                    if walkRemaining <= 0 {
+                        walkDirection = 0
+                        js("petNative.walking(0)")
+                        saveWindowX()
+                    }
+                } else if abs(frame.minY - floor) > 1 {
+                    airborne = true
+                    js("petNative.flight('thrown')")
                 }
-                window.setFrameOrigin(frame.origin)
-                if walkRemaining <= 0 {
-                    walkDirection = 0
-                    js("petNative.walking(0)")
-                    saveWindowX()
-                }
-            } else if abs(frame.minY - floor) > 1 {
-                airborne = true
-                js("petNative.flight('thrown')")
             }
         }
 
@@ -1250,8 +1326,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
         }
 
-        if window.ignoresMouseEvents, Date().timeIntervalSince(lastHoverReport) > 3 {
-            window.ignoresMouseEvents = false
+        if Date().timeIntervalSince(lastHoverReport) > 3 {
+            // A failed full-display renderer must never block every app underneath.
+            window.ignoresMouseEvents = desktopStage
         }
 
         // Every other tick: the page cannot decide whether the cursor is over the creature

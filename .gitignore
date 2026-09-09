@@ -2,7 +2,10 @@ build/
 Resources/pet.html
 .DS_Store
 node_modules/
+artifacts/
+scratch/
 graphify-out/cache/
 graphify-out/manifest.json
 graphify-out/cost.json
-graphify-out/.graphify_python
+graphify-out/.graphify_*
+graphify-out/20*

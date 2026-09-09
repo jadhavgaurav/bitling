@@ -11,6 +11,7 @@ silently producing a broken pet.
 from __future__ import annotations
 
 import sys
+import base64
 from pathlib import Path
 
 
@@ -22,6 +23,11 @@ def patch(src: str, old: str, new: str) -> str:
 
 def build(source: Path, target: Path) -> None:
     s = source.read_text(encoding="utf-8")
+    asset_root = Path(__file__).resolve().parent.parent / "web/assets"
+    for filename in ("shenron.png", "shenron-head.png", "shenron-body.png", "shenron-limb.png"):
+        asset = asset_root / filename
+        sprite = "data:image/png;base64," + base64.b64encode(asset.read_bytes()).decode("ascii")
+        s = s.replace(f"assets/{filename}", sprite)
 
     # --- state: prefer the host-injected snapshot, mirror saves to the host
     s = patch(
@@ -46,7 +52,7 @@ def build(source: Path, target: Path) -> None:
         "    if (DESKTOP) {\n"
         "      // The creature is sized by its window, so the size setting only has to\n"
         "      // resize the window and everything here follows.\n"
-        "      const grow = W / 300;\n"
+        "      const grow = state.species === 'dragon' ? shenron.size : W / 300;\n"
         "      // Floaters hang lower than the middle so a speech bubble still has headroom\n"
         "      // above them. At 0.54 the bubble hit the top of the window and was clamped\n"
         "      // back down onto the creature's head.\n"
@@ -68,9 +74,8 @@ def build(source: Path, target: Path) -> None:
     # --- stretch while the host drags the window
     s = patch(
         s,
-        "      pet.stretch = lerp(pet.stretch, 0, Math.min(1, dt * 10));\n      if (!pet.grounded) {",
-        "      pet.stretch = lerp(pet.stretch, pet.carried ? clamp(pet.dragSpeed / 3500, 0, 0.3) : 0, Math.min(1, dt * 10));\n"
-        "      if (!pet.grounded) {",
+        "      pet.stretch = lerp(pet.stretch, 0, Math.min(1, dt * 10));",
+        "      pet.stretch = lerp(pet.stretch, pet.carried ? clamp(pet.dragSpeed / 3500, 0, 0.3) : 0, Math.min(1, dt * 10));",
     )
 
     # --- look priority: carried, walking, then the usual chain
@@ -188,6 +193,7 @@ def build(source: Path, target: Path) -> None:
         "      bugsToday: state.bugsDay === new Date().toISOString().slice(0, 10) ? state.bugsToday : 0,\n"
         "      working: pet.working, screen: pet.screenT > 0 ? pet.screenTint : '',\n"
         "      species: state.species, locomotion: species().kind,\n"
+        "      shenronSettings: state.shenronSettings,\n"
         "      attack: (species().attack && species().attack.style) || 'beam',\n"
         "    };\n"
         "    const key = JSON.stringify(snap);\n"
@@ -208,6 +214,28 @@ def build(source: Path, target: Path) -> None:
         "  // ---------------------------------------------------------------- boot\n",
         "  // ---------------------------------------------------------------- host bridge\n"
         "  window.petNative = {\n"
+        "    stageSize(value) {\n"
+        "      const size = Number(value);\n"
+        "      if (!Number.isFinite(size)) return;\n"
+        "      shenron.size = clamp(size, 0.45, 2);\n"
+        "      resize();\n"
+        "      if (state.species === 'dragon') { clampShenron(); shenron.nextTurn = 0; }\n"
+        "    },\n"
+        "    stageDrag(dx, dy) {\n"
+        "      if (state.species !== 'dragon') return;\n"
+        "      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;\n"
+        "      pet.x += dx; pet.y += dy; clampShenron();\n"
+        "      shenron.targetX = pet.x; shenron.targetY = pet.y; shenron.nextTurn = 3;\n"
+        "    },\n"
+        "    shenronSetting(key, value) {\n"
+        "      if (!Object.hasOwn(SHENRON_SETTING_RANGES, key)) return;\n"
+        "      const number = Number(value);\n"
+        "      if (!Number.isFinite(number)) return;\n"
+        "      const range = SHENRON_SETTING_RANGES[key];\n"
+        "      state.shenronSettings[key] = clamp(number, range[0], range[1]);\n"
+        "      if (key === 'length') resetShenronSpine();\n"
+        "      saveState(); pushState(true);\n"
+        "    },\n"
         "    action(name) {\n"
         "      audio.ensure();\n"
         "      switch (name) {\n"
@@ -265,7 +293,13 @@ def build(source: Path, target: Path) -> None:
         "    },\n"
         "    setSpecies(id) {\n"
         "      if (!SPECIES[id] || state.species === id) return;\n"
+        "      const previous = species();\n"
         "      state.species = id;\n"
+        "      if (!state.name || state.name === previous.name || state.name === 'Ember') state.name = species().name;\n"
+        "      pet.grounded = !floats(); pet.mode = floats() ? 'fly' : 'ground';\n"
+        "      pet.thrown = false; pet.chuteOpen = false; pet.chute = 0; pet.landing = false;\n"
+        "      shenron.nextTurn = 0;\n"
+
         "      saveState();\n"
         "      resize();               // a walker stands on the floor, a floater hangs mid window\n"
         "      bubble.hidden = true; bubbleUntil = 0;\n"

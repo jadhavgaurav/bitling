@@ -429,7 +429,24 @@
       meals: 0, games: 0, pets: 0, stageSeen: 0,
       commits: 0, pushes: 0, bugs: 0, lastCommitAt: 0, prompts: 0,
       bugsDay: '', bugsToday: 0,
+      // Shenron gets a compact starting footprint; the control room can still
+      // scale the full-screen flyer up for users who want a display-sized dragon.
+      shenronSettings: { size: 0.58, length: 1, speed: 1, motion: 1, depth: 0.65, opacity: 1 },
+      dragonBalls: undefined, dragonKills: 0,
     };
+  }
+  const SHENRON_SETTING_RANGES = Object.freeze({
+    size: [0.45, 1.5], length: [0.65, 1.6], speed: [0.45, 1.8],
+    motion: [0.35, 1.7], depth: [0, 1], opacity: [0.35, 1],
+  });
+  function normalizeShenronSettings(raw) {
+    const defaults = freshState().shenronSettings;
+    if (!raw || typeof raw !== 'object') return defaults;
+    for (const [key, range] of Object.entries(SHENRON_SETTING_RANGES)) {
+      const value = Number(raw[key]);
+      defaults[key] = Number.isFinite(value) ? clamp(value, range[0], range[1]) : defaults[key];
+    }
+    return defaults;
   }
   function loadState() {
     try {
@@ -487,6 +504,11 @@
   let awayMs = 0;
   if (!state) state = freshState();
   else { awayMs = now() - state.lastSeen; applyElapsed(state, awayMs); }
+  state.shenronSettings = normalizeShenronSettings(state.shenronSettings);
+  if (state.species === 'dragon' && state.name === 'Ember') state.name = 'Shenron';
+  if (state.dragonBalls === undefined) {
+    state.dragonBalls = clamp(state.commits || Math.floor((state.care || 0) / 60), 0, 7);
+  }
 
   const PIKA_AUDIO = {
     pikaPika: 'data:audio/mp3;base64,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',
@@ -949,19 +971,19 @@
   });
 
   defineSpecies({
-    id: 'dragon', name: 'Ember', kind: 'float',
-    blurb: 'A hatchling that never learned to land. Hangs wherever you leave it and burns bugs.',
-    accent: '#ff9a3c',
-    radius: [46, 42, 50, 58],
-    reach: () => 3.90,                  // horn tips, measured: bubble cleared by 12px
-    half: (r) => r * 1.98,              // wing tips at full flap
+    id: 'dragon', name: 'Shenron', kind: 'float',
+    blurb: 'The Eternal Dragon. Vast emerald coils, crimson eyes, and a slow flight across your entire desktop.',
+    accent: '#83ce46',
+    radius: [56, 56, 64, 70],
+    reach: () => shenronReach(),
+    half: () => shenronPose().width * 0.52,
     draw: () => drawDragon(),
     attack: {
       style: 'flame',
       charge: 0.45,
-      origin: (r) => [{ x: Math.round(pet.x), y: Math.round(pet.y - r * 2.05) }],
+      origin: () => [shenronMouth()],
       draw(r, k) {
-        const ox = pet.x, oy = pet.y - r * 2.05;
+        const { x: ox, y: oy } = shenronMouth();
         const ang = Math.atan2(pet.zapY - oy, pet.zapX - ox);
         const len = Math.hypot(pet.zapX - ox, pet.zapY - oy);
         ctx.save();
@@ -987,22 +1009,25 @@
       },
     },
     voice: {
-      hello: ['rawr', 'a small rawr', 'I am extremely fierce', 'hello, tiny human'],
-      happy: ['toasty', 'good fire today', 'wings feel great', 'I could burn something'],
-      hungry: ['I could eat a knight', 'fuel, please', 'my fire is running low', 'feed the furnace'],
-      sleepy: ['banking the fire', 'dragons nap for centuries', 'just resting my wings'],
-      bored: ['nothing to burn', 'no bugs, no glory', 'hovering, waiting, hovering'],
-      petted: ['scratch behind the horn', 'mind the scales', 'purr, but with smoke'],
-      eat: ['crunch', 'more coal', 'delicious', 'straight to the furnace'],
-      zapped: ['extra crispy', 'well done', 'toasted', 'ashes', 'that one is charcoal now'],
-      play: ['hunting', 'I smell bugs', 'wings out', 'to the hunt'],
-      working: ['smouldering…', 'building heat', 'the forge is lit', 'stoking'],
-      done: ['fire out', 'that is cooked', 'done and toasted'],
-      testFail: ['everything is on fire', 'red, and not the good red', 'the suite is ash'],
-      testPass: ['all green, no smoke', 'clean burn', 'nothing left to burn'],
-      shipped: ['off it flies', 'launched on a thermal', 'up and away'],
-      held: ['put me down, I can fly', 'wings, human', 'I hover for a living'],
-      night: ['the sky is mine', 'stars and embers', 'good hovering weather'],
+      hello: ['I am Shenron. State your wish.', 'The Eternal Dragon has awakened.'],
+      happy: ['Your wish has been granted.', 'Fortune smiles upon you.'],
+      hungry: ['Even a dragon must be sustained.', 'An offering, mortal?'],
+      sleepy: ['I shall rest among the clouds.', 'The sky grows quiet.'],
+      sleeping: ['The Eternal Dragon rests.'],
+      wake: ['Speak. What is your wish?'],
+      bored: ['What would you ask of me?', 'I await your wish.'],
+      petted: ['You have my attention.', 'A brave mortal indeed.'],
+      eat: ['Your offering is accepted.', 'My strength returns.'],
+      zapped: ['It is done.', 'Your obstacle is no more.', 'The path is clear.'],
+      play: ['Show me what troubles you.', 'I shall clear the way.'],
+      working: ['Your wish is taking shape.', 'The dragon is watching.'],
+      done: ['Your wish is fulfilled.', 'It is complete.'],
+      testFail: ['An obstacle remains.', 'This wish requires more care.'],
+      testPass: ['All obstacles have been overcome.', 'A worthy result.'],
+      shipped: ['Go forth. Your wish is granted.', 'May your work prosper.'],
+      held: ['Guide me through your sky.', 'Where shall we go, mortal?'],
+      hovering: ['I watch over this realm.', 'The winds carry me.'],
+      night: ['Beneath these stars, speak your wish.'],
     },
   });
 
@@ -1647,7 +1672,7 @@
     blurb: 'The legendary Mushroom Kingdom plumber! Levels up from Small Mario to Super Mario and Fire Mario as you commit code, stomps crawling bugs, hits floating ? blocks, and warps into green pipes on deployment!',
     accent: '#e52521',
     radius: [34, 38, 48, 56],
-    reach: () => 2.4,
+    reach: () => 2.24,                 // measured: bubble clears the cap by 20px
     half: (r) => r * 1.4,
     draw: () => drawMario(),
     trail: null,
@@ -1694,6 +1719,500 @@
   function petHalfWidth() { return species().half(petR(), stageOf(state)); }
   const eggR = () => 46 * scale;
 
+  // ---------------------------------------------------------------- Shenron
+  // A long procedural spine gives the head, body and tail separate timing. The detailed
+  // head is an isolated asset; body geometry remains free to bend instead of sliding as one image.
+  const shenronImage = new Image();
+  shenronImage.src = 'assets/shenron.png'; // picker portrait
+  const shenronHead = new Image();
+  shenronHead.src = 'assets/shenron-head.png';
+  const shenronBody = new Image();
+  shenronBody.src = 'assets/shenron-body.png';
+  const shenronLimb = new Image();
+  shenronLimb.src = 'assets/shenron-limb.png';
+  const shenron = { ready: false, size: 1, time: 0, targetX: 0, targetY: 0, nextTurn: 0,
+    heading: -0.12, turn: 0, depth: 1, depthTarget: 1, points: [], trail: [], failed: false,
+    growthScale: 1, growthLength: 1, headNormal: { x: 0, y: 1 } };
+  const SHENRON_POINT_COUNT = 80;
+  function shenronAssetReady() {
+    shenron.ready = shenronHead.complete && shenronHead.naturalWidth > 0
+      && shenronBody.complete && shenronBody.naturalWidth > 0
+      && shenronLimb.complete && shenronLimb.naturalWidth > 0;
+  }
+  for (const asset of [shenronHead, shenronBody, shenronLimb]) {
+    asset.addEventListener('load', shenronAssetReady);
+    asset.addEventListener('error', () => {
+      shenron.failed = true;
+      console.error('Shenron art could not be loaded. Rebuild the pet resources.');
+    });
+  }
+
+  function shenronSettings() { return state.shenronSettings; }
+  function shenronRadius() {
+    const balls = clamp(state.dragonBalls ?? 7, 0, 7);
+    const targetScale = lerp(0.52, 1.05, balls / 7);
+    shenron.growthScale = lerp(shenron.growthScale || targetScale, targetScale, 0.15);
+    return petR() * 0.58 * shenronSettings().size * lerp(0.88, 1.13, shenron.depth) * shenron.growthScale;
+  }
+  function shenronPathLength() {
+    const balls = clamp(state.dragonBalls ?? 7, 0, 7);
+    const targetLen = lerp(0.55, 1.15, balls / 7);
+    shenron.growthLength = lerp(shenron.growthLength || targetLen, targetLen, 0.15);
+    const base = W < 600 ? W * 0.85 : Math.max(W * 0.48, 650);
+    return Math.min(base, 1080) * shenronSettings().length * shenron.size * shenron.growthLength;
+  }
+  function shenronPose() {
+    const radius = shenronRadius(), headWidth = radius * 6.7;
+    return { x: pet.x, y: pet.y, width: headWidth, height: headWidth * 0.735, time: shenron.time };
+  }
+  function shenronHeadPose() {
+    const pose = shenronPose(), neck = shenron.points[1] || { x: pet.x - 1, y: pet.y };
+    const tangent = Math.atan2(pet.y - neck.y, pet.x - neck.x);
+    const isLeft = Math.cos(tangent) < 0;
+    const baseAngle = isLeft ? wrapAngle(tangent - Math.PI) : tangent;
+    const tilt = clamp(baseAngle * 0.45 + shenron.turn * 0.18, -0.55, 0.55);
+    return {
+      ...pose,
+      flip: isLeft ? -1 : 1,
+      rotation: tilt,
+      bob: Math.sin(shenron.time * 1.7) * shenronRadius() * 0.12,
+    };
+  }
+  function shenronHeadPoint(localX, localY) {
+    const pose = shenronHeadPose(), x = localX * pose.flip;
+    const cos = Math.cos(pose.rotation), sin = Math.sin(pose.rotation);
+    return { x: pose.x + x * cos - localY * sin, y: pose.y + pose.bob + x * sin + localY * cos };
+  }
+  function resetShenronSpine() {
+    const count = SHENRON_POINT_COUNT, spacing = shenronPathLength() / (count - 1), sampleSpacing = 3;
+    shenron.points = Array.from({ length: count }, (_, index) => ({
+      x: pet.x - Math.cos(shenron.heading) * spacing * index,
+      y: pet.y - Math.sin(shenron.heading) * spacing * index,
+    }));
+    shenron.trail = Array.from({ length: Math.ceil(shenronPathLength() * 1.8 / sampleSpacing) + 4 }, (_, index) => ({
+      x: pet.x - Math.cos(shenron.heading) * sampleSpacing * index,
+      y: pet.y - Math.sin(shenron.heading) * sampleSpacing * index,
+    })).reverse();
+  }
+  function updateShenronSpine() {
+    if (shenron.points.length !== SHENRON_POINT_COUNT) resetShenronSpine();
+    const pathLength = shenronPathLength();
+    const count = shenron.points.length;
+    const dTarget = pathLength / (count - 1);
+    const newest = shenron.trail[shenron.trail.length - 1];
+    if (!newest || Math.hypot(pet.x - newest.x, pet.y - newest.y) >= 1.5) {
+      shenron.trail.push({ x: pet.x, y: pet.y });
+    }
+
+    // Retain sufficient trail for full body length
+    let retained = 0, cutIndex = 0;
+    for (let index = shenron.trail.length - 1; index > 0; index--) {
+      retained += Math.hypot(shenron.trail[index].x - shenron.trail[index - 1].x,
+        shenron.trail[index].y - shenron.trail[index - 1].y);
+      if (retained >= pathLength * 1.8) {
+        cutIndex = Math.max(0, index - 2);
+        break;
+      }
+    }
+    if (cutIndex > 0) shenron.trail.splice(0, cutIndex);
+
+    // 1. Arc-length sampling along trail
+    let trailIndex = shenron.trail.length - 1, walked = 0;
+    for (let index = 0; index < count; index++) {
+      const s = index / (count - 1);
+      const targetDistance = pathLength * s;
+      while (trailIndex > 0) {
+        const a = shenron.trail[trailIndex], b = shenron.trail[trailIndex - 1];
+        const seg = Math.hypot(a.x - b.x, a.y - b.y);
+        if (walked + seg >= targetDistance) break;
+        walked += seg; trailIndex--;
+      }
+      if (trailIndex > 0) {
+        const a = shenron.trail[trailIndex], b = shenron.trail[trailIndex - 1];
+        const seg = Math.max(0.001, Math.hypot(a.x - b.x, a.y - b.y));
+        const mix = clamp((targetDistance - walked) / seg, 0, 1);
+        shenron.points[index].x = lerp(a.x, b.x, mix);
+        shenron.points[index].y = lerp(a.y, b.y, mix);
+      } else {
+        // Trail exhausted: extrapolate smoothly backwards along the oldest segment
+        const a = shenron.trail[0] || { x: pet.x, y: pet.y };
+        const b = shenron.trail[1] || a;
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const seg = Math.max(0.001, Math.hypot(dx, dy));
+        const over = targetDistance - walked;
+        shenron.points[index].x = a.x + (dx / seg) * over;
+        shenron.points[index].y = a.y + (dy / seg) * over;
+      }
+    }
+
+    // 2. Anchor head strictly to pet position
+    shenron.points[0].x = pet.x;
+    shenron.points[0].y = pet.y;
+
+    // 3. Gentle Laplacian smoothing to eliminate sampling jitter
+    for (let i = 1; i < count - 1; i++) {
+      shenron.points[i].x = 0.15 * shenron.points[i - 1].x + 0.70 * shenron.points[i].x + 0.15 * shenron.points[i + 1].x;
+      shenron.points[i].y = 0.15 * shenron.points[i - 1].y + 0.70 * shenron.points[i].y + 0.15 * shenron.points[i + 1].y;
+    }
+
+    // A restrained traveling wave keeps the painted body supple between turns.
+    // It is applied after trail sampling so the head still leads and the tail
+    // retains the previous flight path instead of becoming a rigid polyline.
+    const motion = shenronSettings().motion;
+    for (let i = 3; i < count - 1; i++) {
+      const before = shenron.points[i - 1], after = shenron.points[i + 1];
+      const tangentLength = Math.max(0.001, Math.hypot(after.x - before.x, after.y - before.y));
+      const normalX = -(after.y - before.y) / tangentLength;
+      const normalY = (after.x - before.x) / tangentLength;
+      const along = i / (count - 1);
+      const amplitude = shenronRadius() * 0.28 * motion * (0.72 + along * 0.28);
+      const wave = Math.sin(pet.t * 2.25 * motion - i * 0.34) * amplitude;
+      shenron.points[i].x += normalX * wave;
+      shenron.points[i].y += normalY * wave;
+    }
+  }
+  function shenronRigSnapshot() {
+    updateShenronSpine();
+    return { head: { ...shenron.points[0] }, points: shenron.points.map(point => ({ ...point })),
+      pathLength: shenronPathLength(), radius: shenronRadius(), heading: shenron.heading,
+      settings: { ...shenronSettings() } };
+  }
+  function shenronHit(x, y) {
+    if (!shenron.ready || x < 0 || y < 0 || x >= W || y >= H) return false;
+    updateShenronSpine();
+    const radius = shenronRadius(), pose = shenronPose();
+    if (Math.hypot(x - pet.x, y - pet.y) < radius * 3.5) return true;
+    // Native hover already limits pointer delivery to painted pixels; these generous
+    // appendage bounds make those delivered whisker and claw clicks interact as expected.
+    if (Math.abs(x - pet.x) < pose.width * 1.8 && Math.abs(y - pet.y) < radius * 2.6) return true;
+    for (const index of [13, 16, 49, 53]) {
+      if (Math.hypot(x - shenron.points[index].x, y - shenron.points[index].y) < radius * 4) return true;
+    }
+    for (let index = 1; index < shenron.points.length; index++) {
+      const a = shenron.points[index - 1], b = shenron.points[index];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const t = clamp(((x - a.x) * dx + (y - a.y) * dy) / Math.max(1, dx * dx + dy * dy), 0, 1);
+      const taper = lerp(1, 0.18, index / shenron.points.length);
+      if (Math.hypot(x - (a.x + dx * t), y - (a.y + dy * t)) < radius * taper) return true;
+    }
+    return false;
+  }
+  function shenronMouth() {
+    const pose = shenronPose();
+    return shenronHeadPoint(pose.width * 0.086, pose.height * 0.134);
+  }
+  function shenronReach() {
+    const pose = shenronPose();
+    return (pose.height * 0.69 - 8) / petR();
+  }
+  function clampShenron() {
+    const radius = shenronRadius();
+    pet.x = clamp(pet.x, radius * 2.8, Math.max(radius * 2.8, W - radius * 2.8));
+    pet.y = clamp(pet.y, radius * 3.1 + 70, Math.max(radius * 3.1 + 70, H - radius * 2.3));
+    pet.ax = pet.x;
+    updateShenronSpine();
+  }
+  function wrapAngle(angle) { return Math.atan2(Math.sin(angle), Math.cos(angle)); }
+  function updateShenron(dt) {
+    pet.mode = 'fly'; pet.grounded = false; pet.thrown = false;
+    pet.landing = false; pet.chute = 0; pet.chuteOpen = false; pet.walking = false;
+    const settings = shenronSettings();
+    shenron.time += reduceMotion ? 0 : dt * (state.asleep ? 0.15 : 1);
+    shenron.depth += (shenron.depthTarget - shenron.depth) * Math.min(1, dt * 0.35);
+    if (state.asleep || pet.carried || pet.held || reduceMotion) { clampShenron(); return; }
+    // The ordinary 300px pet preview cannot contain a screen-length vertical turn. Keep
+    // its miniature pose horizontal; the installed dragon always uses the full display.
+    if (W < 600) { shenron.heading = 0; shenron.turn = 0; updateShenronSpine(); return; }
+    shenron.nextTurn -= dt;
+    const radius = shenronRadius(), marginX = radius * 3.2, marginY = radius * 3.4 + 60;
+    if (shenron.nextTurn <= 0 || Math.hypot(shenron.targetX - pet.x, shenron.targetY - pet.y) < 90) {
+      shenron.targetX = rand(marginX, Math.max(marginX, W - marginX));
+      shenron.targetY = rand(marginY, Math.max(marginY, H - radius * 2.5));
+      shenron.depthTarget = rand(0.18, 1) * settings.depth;
+      shenron.nextTurn = rand(5.5, 9.5) / settings.speed;
+    }
+    const desired = Math.atan2(shenron.targetY - pet.y, shenron.targetX - pet.x);
+    const delta = wrapAngle(desired - shenron.heading);
+    const desiredTurn = clamp(delta * 0.9, -0.48, 0.48);
+    shenron.turn += (desiredTurn - shenron.turn) * Math.min(1, dt * 1.25);
+    shenron.heading = wrapAngle(shenron.heading + shenron.turn * dt);
+    const speed = (48 + settings.speed * 24) * lerp(0.84, 1.08, shenron.depth);
+    const slither = reduceMotion ? 0 : Math.sin(shenron.time * 2.4) * 0.16 * settings.motion;
+    const travelAngle = shenron.heading + slither;
+    pet.flyVX = Math.cos(travelAngle); pet.flyVY = Math.sin(travelAngle);
+    pet.x += pet.flyVX * speed * dt; pet.y += pet.flyVY * speed * dt;
+    if (pet.x <= marginX || pet.x >= W - marginX || pet.y <= marginY || pet.y >= H - radius * 2.5) shenron.nextTurn = 0;
+    clampShenron();
+  }
+
+  function drawTexturedTriangle(img, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2) {
+    const det = u0 * (v1 - v2) - v0 * (u1 - u2) + (u1 * v2 - u2 * v1);
+    if (Math.abs(det) < 1e-5) return;
+    const a = (x0 * (v1 - v2) - v0 * (x1 - x2) + (x1 * v2 - x2 * v1)) / det;
+    const b = (y0 * (v1 - v2) - v0 * (y1 - y2) + (y1 * v2 - y2 * v1)) / det;
+    const c = (u0 * (x1 - x2) - x0 * (u1 - u2) + (u1 * x2 - u2 * x1)) / det;
+    const d = (u0 * (y1 - y2) - y0 * (u1 - u2) + (u1 * y2 - u2 * y1)) / det;
+    const e = (x0 * (u1 * v2 - u2 * v1) - u0 * (x1 * v2 - x2 * v1) + v0 * (x1 * u2 - x2 * u1)) / det;
+    const f = (y0 * (u1 * v2 - u2 * v1) - u0 * (y1 * v2 - y2 * v1) + v0 * (y1 * u2 - y2 * u1)) / det;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.closePath();
+    ctx.clip();
+    ctx.transform(a, b, c, d, e, f);
+    ctx.drawImage(img, 0, 0);
+    ctx.restore();
+  }
+
+  function getShenronMeshGeometry() {
+    const count = shenron.points.length;
+    const radius = shenronRadius();
+    const T = new Array(count), B = new Array(count), normals = new Array(count), tangents = new Array(count);
+
+    // 1. Tangents: forward unit vector along the dragon's spine (tail -> head)
+    for (let i = 0; i < count; i++) {
+      let tx, ty;
+      if (i === 0) {
+        tx = shenron.points[0].x - shenron.points[1].x;
+        ty = shenron.points[0].y - shenron.points[1].y;
+      } else if (i === count - 1) {
+        tx = shenron.points[count - 2].x - shenron.points[count - 1].x;
+        ty = shenron.points[count - 2].y - shenron.points[count - 1].y;
+      } else {
+        tx = shenron.points[i - 1].x - shenron.points[i + 1].x;
+        ty = shenron.points[i - 1].y - shenron.points[i + 1].y;
+      }
+      const len = Math.max(0.001, Math.hypot(tx, ty));
+      tangents[i] = { x: tx / len, y: ty / len };
+    }
+
+    // 2. Smooth, continuous normal vector field:
+    // Left normal is (-ty, tx).
+    // Head orientation determines which side connects to the dorsal horns vs ventral jaw.
+    const t0 = tangents[0];
+    const isLeft = t0.x < 0;
+    const dorsalSign = isLeft ? 1 : -1;
+
+    for (let i = 0; i < count; i++) {
+      const t = tangents[i];
+      const leftNx = -t.y, leftNy = t.x;
+      normals[i] = { x: -dorsalSign * leftNx, y: -dorsalSign * leftNy };
+    }
+
+    // 3. Compute dorsal T and ventral B with curvature-clamped safe inner radius
+    const dTarget = shenronPathLength() / (count - 1);
+    for (let i = 0; i < count; i++) {
+      const s = i / (count - 1);
+      const taper = lerp(1, 0.14, s ** 1.7);
+      const baseR = radius * 1.35 * taper;
+
+      let maxAngle = 0;
+      if (i > 0) {
+        const pT = tangents[i - 1], cT = tangents[i];
+        maxAngle = Math.max(maxAngle, Math.abs(Math.atan2(pT.x * cT.y - pT.y * cT.x, pT.x * cT.x + pT.y * cT.y)));
+      }
+      if (i < count - 1) {
+        const cT = tangents[i], nT = tangents[i + 1];
+        maxAngle = Math.max(maxAngle, Math.abs(Math.atan2(cT.x * nT.y - cT.y * nT.x, cT.x * nT.x + cT.y * nT.y)));
+      }
+      const safeR = Math.min(baseR, (0.80 * dTarget) / Math.max(0.01, maxAngle));
+
+      const nx = normals[i].x, ny = normals[i].y;
+      // Dorsal back scales & fins (in direction -normal)
+      T[i] = { x: shenron.points[i].x - nx * safeR * 1.05, y: shenron.points[i].y - ny * safeR * 1.05 };
+      // Ventral ribbed belly (in direction +normal)
+      B[i] = { x: shenron.points[i].x + nx * safeR * 0.95, y: shenron.points[i].y + ny * safeR * 0.95 };
+    }
+
+    return { T, B, normals, tangents, count, radius, isLeft };
+  }
+
+  function drawShenronPaintedBody(mesh) {
+    const { T, B, count } = mesh;
+    const texW = shenronBody.naturalWidth || 800;
+    const texH = shenronBody.naturalHeight || 120;
+    const vTop = texH * 0.207;
+    const vBot = texH * 0.785;
+    const uSpan = Math.max(1, texW - 60);
+    const uHead = texW - 30;
+
+    for (let i = 0; i < count - 1; i++) {
+      const u0 = uHead - (i / (count - 1)) * uSpan;
+      const u1 = uHead - ((i + 1) / (count - 1)) * uSpan;
+
+      const p0 = T[i], p1 = T[i + 1], p2 = B[i + 1], p3 = B[i];
+
+      // Local quad base underlay to guarantee zero hairline seams
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fillStyle = '#0f3818';
+      ctx.fill();
+
+      drawTexturedTriangle(shenronBody,
+        p0.x, p0.y, p1.x, p1.y, p3.x, p3.y,
+        u0, vTop, u1, vTop, u0, vBot);
+
+      drawTexturedTriangle(shenronBody,
+        p1.x, p1.y, p2.x, p2.y, p3.x, p3.y,
+        u1, vTop, u1, vBot, u0, vBot);
+    }
+  }
+
+  function drawShenronLimb(mesh, index, isFront, isNear) {
+    const point = shenron.points[index];
+    const { tangents, normals, radius } = mesh;
+    const tangent = tangents[index] || { x: 1, y: 0 };
+    const normal = normals[index] || { x: 0, y: 1 };
+
+    // Flank attachment offset along ventral flank (+normal)
+    const sideOffset = isNear ? 0.28 : -0.18;
+    const attachX = point.x + normal.x * radius * sideOffset;
+    const attachY = point.y + normal.y * radius * sideOffset;
+
+    const spriteW = shenronLimb.naturalWidth || 1225;
+    const spriteH = shenronLimb.naturalHeight || 1284;
+    const scaleFactor = isNear ? 1.0 : 0.82;
+    const width = radius * 2.80 * scaleFactor;
+    const height = width * (spriteH / spriteW);
+    const shoulderX = width * 0.158;
+    const shoulderY = height * 0.092;
+
+    const phase = (isFront ? 0 : 2.4) + (isNear ? 1.1 : 0);
+    const sway = Math.sin(shenron.time * 2.2 + phase) * 0.08;
+
+    // Symmetrical arm aim: limbs always hang downwards with gravity, reaching forward or backward
+    const limbFlip = tangent.x < 0 ? -1 : 1;
+    const aimFwd = isFront ? 0.42 : -0.38;
+    const localAimX = Math.abs(tangent.x) * aimFwd;
+    const localAimY = 0.88;
+    const aimAngle = Math.atan2(localAimY, localAimX);
+
+    // Natural arm angle in shenron-limb.png from shoulder to claws is ~0.88 rad
+    const rot = aimAngle - 0.88 + sway;
+
+    ctx.save();
+    ctx.translate(attachX, attachY);
+    ctx.scale(limbFlip, 1);
+    ctx.rotate(rot);
+    if (!isNear) ctx.globalAlpha *= 0.82;
+    ctx.drawImage(shenronLimb, -shoulderX, -shoulderY, width, height);
+    ctx.restore();
+  }
+
+  function drawShenronLimbsBack(mesh) {
+    drawShenronLimb(mesh, 18, true, false);
+    drawShenronLimb(mesh, 52, false, false);
+  }
+
+  function drawShenronLimbsFront(mesh) {
+    drawShenronLimb(mesh, 19, true, true);
+    drawShenronLimb(mesh, 53, false, true);
+  }
+
+  function drawDragon() {
+    if (!shenron.ready) return;
+    updateShenronSpine();
+    const mesh = getShenronMeshGeometry();
+    const radius = shenronRadius(), settings = shenronSettings(), pose = shenronPose();
+    ctx.save(); ctx.globalAlpha *= settings.opacity;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // 1. Far limbs behind body
+    drawShenronLimbsBack(mesh);
+
+    // 2. Seamless textured quad-mesh with local underlay
+    drawShenronPaintedBody(mesh);
+
+    // 3. Near limbs in front of body
+    drawShenronLimbsFront(mesh);
+
+    // 5. Head and dynamic whiskers
+    const headPose = shenronHeadPose();
+    const whiskTime = shenron.time * 2.0;
+    ctx.save();
+    ctx.translate(headPose.x, headPose.y + headPose.bob);
+    ctx.rotate(headPose.rotation);
+    ctx.scale(headPose.flip, 1);
+
+    for (const [sideY, phase] of [[-1, 0], [1, 1.4]]) {
+      const startX = pose.width * 0.17;
+      const startY = pose.height * 0.03 + sideY * radius * 0.18;
+      const wave1 = Math.sin(whiskTime + phase) * radius * 0.22;
+      const wave2 = Math.cos(whiskTime * 0.9 + phase) * radius * 0.32;
+      const cp1X = startX + radius * 0.55;
+      const cp1Y = startY + sideY * radius * 0.45 + wave1;
+      const cp2X = startX - radius * 0.75;
+      const cp2Y = startY + sideY * radius * 0.95 + wave2;
+      const endX = startX - radius * 2.1;
+      const endY = startY + sideY * radius * 1.35 + wave1 * 1.3;
+
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, endX, endY);
+      ctx.strokeStyle = '#275e18';
+      ctx.lineWidth = Math.max(2.5, radius * 0.08);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, endX, endY);
+      ctx.strokeStyle = '#8ee533';
+      ctx.lineWidth = Math.max(1.5, radius * 0.045);
+      ctx.stroke();
+    }
+
+    ctx.drawImage(shenronHead, -pose.width * 0.5, -pose.height * 0.64, pose.width, pose.height);
+    ctx.restore();
+
+    if ((state.asleep || pet.blink > 0.05) && !state.asleep) {
+      ctx.strokeStyle = '#214819'; ctx.lineWidth = Math.max(2, radius * 0.13);
+      const leftA = shenronHeadPoint(-radius * 0.7, -radius * 0.42), leftB = shenronHeadPoint(-radius * 0.1, -radius * 0.3);
+      const rightA = shenronHeadPoint(radius * 0.1, -radius * 0.3), rightB = shenronHeadPoint(radius * 0.7, -radius * 0.42);
+      ctx.beginPath(); ctx.moveTo(leftA.x, leftA.y); ctx.lineTo(leftB.x, leftB.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(rightA.x, rightA.y); ctx.lineTo(rightB.x, rightB.y); ctx.stroke();
+    }
+    if (pet.zapCharge > 0 && !state.asleep) {
+      const mouth = shenronMouth(), glowRadius = radius * 0.8;
+      const glow = ctx.createRadialGradient(mouth.x, mouth.y, 0, mouth.x, mouth.y, glowRadius);
+      glow.addColorStop(0, '#fff8c9'); glow.addColorStop(0.35, '#f4d366'); glow.addColorStop(1, 'rgba(190,235,96,0)');
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(mouth.x, mouth.y, glowRadius, 0, Math.PI * 2); ctx.fill();
+    }
+    if ((state.dragonBalls || 0) === 7 && !state.asleep && !reduceMotion) {
+      ctx.save();
+      const sparkCount = 6;
+      for (let i = 0; i < sparkCount; i++) {
+        const segIdx = Math.floor((i / sparkCount) * (mesh.count - 1));
+        const pt = shenron.points[segIdx];
+        const sparkTime = shenron.time * 3.5 + i * 1.6;
+        const offX = Math.sin(sparkTime) * radius * 1.2;
+        const offY = Math.cos(sparkTime * 0.8) * radius * 0.8;
+        const sparkR = Math.max(1.5, Math.sin(sparkTime * 2) * radius * 0.12);
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffea70';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(pt.x + offX, pt.y + offY, Math.abs(sparkR), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function triggerShenronCommitGrowth() {
+    const cur = state.dragonBalls || 0;
+    if (cur < 7) {
+      state.dragonBalls = cur + 1;
+      saveState();
+      spawn('spark', pet.x, pet.y, 22, { spread: petR() * 1.5, vx: 110, vy: -120, size: 8, hue: 45, dur: 1.4 });
+      if (state.dragonBalls === 7) {
+        say('All 7 Dragon Balls gathered! The Eternal Dragon awakens!', 3800);
+      } else {
+        say(`Dragon Ball ${state.dragonBalls}/7 gathered!`, 2500);
+      }
+    }
+  }
+
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const prevW = W;
@@ -1712,7 +2231,7 @@
     const ratio = W / prevW;
     pet.ax = clamp(pet.ax * ratio, petHalfWidth(), W - petHalfWidth());
     pet.x = clamp(pet.x * ratio, petHalfWidth(), W - petHalfWidth());
-    if (pet.grounded && !pet.held) pet.y = groundY;
+    if ((pet.grounded || (DESKTOP && floats())) && !pet.held) pet.y = groundY;
   }
   window.addEventListener('resize', resize);
   resize();
@@ -1884,6 +2403,10 @@
     snack.y = -30;
     snack.vy = 0;
     snack.kind = pick(['battery', 'chip', 'cookie']);
+    if (state.species === 'dragon') {
+      const mouth = shenronMouth();
+      snack.x = mouth.x; snack.y = mouth.y - 100; snack.kind = 'cookie';
+    }
     pet.ax = snack.x;
   }
   function eatSnack() {
@@ -1896,7 +2419,8 @@
     audio.munch();
     setTimeout(() => audio.munch(), 180);
     setTimeout(() => audio.munch(), 360);
-    spawn('crumb', pet.x, pet.y - petR() * 0.8, 6, { spread: 6, vx: 90, vy: -60, g: 900, size: 6, hue: snack.kind === 'battery' ? 130 : snack.kind === 'chip' ? 220 : 30 });
+    const mouth = state.species === 'dragon' ? shenronMouth() : { x: pet.x, y: pet.y - petR() * 0.8 };
+    spawn('crumb', mouth.x, mouth.y, 6, { spread: 6, vx: 90, vy: -60, g: 900, size: 6, hue: snack.kind === 'battery' ? 130 : snack.kind === 'chip' ? 220 : 30 });
     say(line('eat'));
     saveState();
   }
@@ -1946,7 +2470,7 @@
     b.squash = 0.45;
     countKill(byLaser, b.boss);
     if (byLaser) {
-      const sparkHue = state.species === 'pikachu' ? 52 : state.species === 'kaiju' ? 185 : state.species === 'goku' ? 195 : state.species === 'ironman' ? 190 : 12;
+      const sparkHue = state.species === 'pikachu' ? 52 : state.species === 'kaiju' ? 185 : state.species === 'goku' ? 195 : state.species === 'ironman' ? 190 : state.species === 'dragon' ? 125 : 12;
       spawn('flame', b.x, groundY - 10, b.boss ? 14 : 7, { spread: b.boss ? 14 : 7, vx: 90, vy: -120, size: b.boss ? 12 : 8, dur: 0.6, hue: sparkHue });
       spawn('spark', b.x, groundY - 10, b.boss ? 10 : 4, { spread: 8, vx: 110, vy: -90, size: 9, hue: sparkHue, dur: 0.7 });
     } else {
@@ -1967,6 +2491,15 @@
     state.joy = clamp(state.joy + (boss ? 12 : 4));
     state.care += boss ? 3 : 1;
     if (byLaser) { audio.zap(); say(line(boss ? 'bossDown' : 'zapped'), 1400); }
+    if (state.species === 'dragon') {
+      state.dragonKills = (state.dragonKills || 0) + (boss ? 3 : 1);
+      if (state.dragonKills >= 3 && (state.dragonBalls || 0) < 7) {
+        state.dragonKills = 0;
+        state.dragonBalls = Math.min(7, (state.dragonBalls || 0) + 1);
+        spawn('spark', pet.x, pet.y, 14, { spread: 30, vx: 50, vy: -60, size: 6, hue: 120, dur: 1.0 });
+        say('Bug incinerated! Dragon power restored!', 2200);
+      }
+    }
     saveState();
   }
   function eyePoints() {
@@ -2273,7 +2806,7 @@
       return;
     }
     const r = petR();
-    if (Math.hypot(x - pet.x, y - (pet.y - r)) < r * 1.25) { if (state.asleep) wake(); else petTap(); }
+    if ((state.species === 'dragon' ? shenronHit(x, y) : Math.hypot(x - pet.x, y - (pet.y - r)) < r * 1.25)) { if (state.asleep) wake(); else petTap(); }
   }
   canvas.addEventListener('click', (e) => {
     if (performance.now() - lastPointerDown < 400) return;
@@ -2309,7 +2842,7 @@
       return;
     }
     const r = petR();
-    if (Math.hypot(x - pet.x, y - (pet.y - r)) < r * 1.25) {
+    if ((state.species === 'dragon' ? shenronHit(x, y) : Math.hypot(x - pet.x, y - (pet.y - r)) < r * 1.25)) {
       pet.pressing = true;
       pet.pressX = x; pet.pressY = y;
       pet.holdOff = { x: x - pet.x, y: y - pet.y };
@@ -2324,7 +2857,7 @@
     pointer.vy = (y - pointer.y) / dtp;
     pointer.pt = tnow;
     pointer.x = x; pointer.y = y; pointer.over = true; pointer.lastT = pet.t;
-    if (pet.pressing && !pet.held && !state.asleep && Math.hypot(x - pet.pressX, y - pet.pressY) > 10) grab();
+    if (!(DESKTOP && state.species === 'dragon') && pet.pressing && !pet.held && !state.asleep && Math.hypot(x - pet.pressX, y - pet.pressY) > 10) grab();
   });
   const endPointer = () => {
     if (pet.held) release();
@@ -2403,7 +2936,9 @@
       pet.lookT.y = 0.6;
     } else {
       pet.stretch = lerp(pet.stretch, 0, Math.min(1, dt * 10));
-      if (!pet.grounded) {
+      if (state.species === 'dragon' && state.hatched) {
+        pet.vx = 0; pet.vy = 0;
+      } else if (!pet.grounded) {
         if (pet.mode === 'fly') {
           if (!DESKTOP) {
             const dx = pet.fx - pet.x, dy = pet.fy - pet.y;
@@ -2537,6 +3072,15 @@
 
   function updateSnack(dt) {
     if (!snack.active) return;
+    if (state.species === 'dragon') {
+      const mouth = shenronMouth();
+      const dx = mouth.x - snack.x, dy = mouth.y - snack.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance < petR() * 0.85 && !pet.held && !pet.carried) { eatSnack(); return; }
+      const travel = Math.min(1, dt * 8);
+      snack.x += dx * travel; snack.y += dy * travel;
+      return;
+    }
     if (!snack.rest) {
       snack.vy += 1400 * dt;
       snack.y += snack.vy * dt;
@@ -3101,6 +3645,7 @@
 
     updateNeeds(dt);
     updatePet(dt);
+    if (state.species === 'dragon' && state.hatched) updateShenron(dt);
     updateSnack(dt);
     updateBugs(dt);
     updateDrop(dt);
@@ -3636,162 +4181,6 @@
     ctx.restore();
     ctx.restore();
   }
-
-
-  // ---------------------------------------------------------------- Ember, the dragon
-  // Drawn facing the viewer, feet at the origin, everything in radii so it grows
-  // with the stage like every other species.
-  function drawDragon() {
-    const asleep = state.asleep;
-    const flying = pet.mode === 'fly' || pet.thrown;
-    const charging = pet.zapCharge > 0 && !asleep;
-    stageBody({ shadow: false, bob: 0.055, bobRate: 2.4, sway: 0.03 }, (r, t) => {
-      const flap = Math.sin(t * (flying ? 10 : asleep ? 1.6 : 4.6));
-      const skin = '#41c48c', shade = '#249169', edge = '#166b4c';
-      const belly = '#ffe3ad', horn = '#f4e6c8';
-      const lw = Math.max(1.4, r * 0.055);
-      ctx.lineWidth = lw;
-      ctx.strokeStyle = edge;
-
-      // tail, curling away behind the body
-      ctx.save();
-      ctx.strokeStyle = shade;
-      ctx.lineWidth = r * 0.3;
-      ctx.beginPath();
-      ctx.moveTo(0, -r * 0.55);
-      ctx.quadraticCurveTo(r * 1.1, -r * 0.45 + flap * r * 0.12, r * 1.42, -r * 1.05 + flap * r * 0.2);
-      ctx.stroke();
-      ctx.fillStyle = shade;
-      ctx.beginPath();
-      const tx = r * 1.5, ty = -r * 1.16 + flap * r * 0.22;
-      ctx.moveTo(tx - r * 0.1, ty + r * 0.16);
-      ctx.lineTo(tx + r * 0.34, ty - r * 0.02);
-      ctx.lineTo(tx - r * 0.06, ty - r * 0.28);
-      ctx.closePath(); ctx.fill();
-      ctx.restore();
-
-      // wings, one behind each shoulder
-      for (const sgn of [-1, 1]) {
-        ctx.save();
-        ctx.translate(sgn * r * 0.5, -r * 1.5);
-        ctx.rotate(sgn * (0.35 + flap * 0.42));
-        ctx.fillStyle = shade;
-        ctx.strokeStyle = edge;
-        ctx.lineWidth = lw * 0.8;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.quadraticCurveTo(sgn * r * 0.9, -r * 0.95, sgn * r * 1.45, -r * 0.5);
-        // three scalloped membrane cells on the trailing edge
-        ctx.quadraticCurveTo(sgn * r * 1.15, -r * 0.32, sgn * r * 1.0, -r * 0.02);
-        ctx.quadraticCurveTo(sgn * r * 0.82, -r * 0.26, sgn * r * 0.66, -r * 0.02);
-        ctx.quadraticCurveTo(sgn * r * 0.5, -r * 0.24, sgn * r * 0.34, -r * 0.04);
-        ctx.quadraticCurveTo(sgn * r * 0.16, -r * 0.1, 0, 0);
-        ctx.fill(); ctx.stroke();
-        ctx.restore();
-      }
-
-      // dangling legs
-      ctx.strokeStyle = shade;
-      ctx.lineWidth = r * 0.22;
-      for (const sgn of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(sgn * r * 0.34, -r * 0.62);
-        ctx.lineTo(sgn * r * 0.4, -r * 0.12 + Math.sin(t * 2.2 + sgn) * r * 0.03);
-        ctx.stroke();
-      }
-
-      // body
-      ctx.fillStyle = skin;
-      ctx.strokeStyle = edge;
-      ctx.lineWidth = lw;
-      ctx.beginPath(); ctx.ellipse(0, -r * 1.2, r * 0.82, r * 1.02, 0, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = belly;
-      ctx.beginPath(); ctx.ellipse(0, -r * 1.05, r * 0.46, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.07)';
-      ctx.lineWidth = Math.max(1, r * 0.03);
-      for (let i = 0; i < 3; i++) {
-        const y = -r * (0.62 + i * 0.34);
-        ctx.beginPath(); ctx.moveTo(-r * 0.36, y); ctx.lineTo(r * 0.36, y); ctx.stroke();
-      }
-
-      // little arms
-      ctx.strokeStyle = shade;
-      ctx.lineWidth = r * 0.17;
-      for (const sgn of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(sgn * r * 0.66, -r * 1.34);
-        ctx.lineTo(sgn * r * (charging ? 0.92 : 0.86), -r * (charging ? 1.72 : 1.1));
-        ctx.stroke();
-      }
-
-      // horns, swept back
-      ctx.strokeStyle = horn;
-      ctx.lineWidth = r * 0.15;
-      for (const sgn of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(sgn * r * 0.44, -r * 2.86);
-        ctx.quadraticCurveTo(sgn * r * 0.78, -r * 3.3, sgn * r * 0.66, -r * 3.62);
-        ctx.stroke();
-      }
-
-      // head
-      ctx.fillStyle = skin;
-      ctx.strokeStyle = edge;
-      ctx.lineWidth = lw;
-      ctx.beginPath(); ctx.ellipse(0, -r * 2.4, r * 0.86, r * 0.78, 0, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
-      // snout
-      ctx.fillStyle = skin;
-      ctx.beginPath(); ctx.ellipse(0, -r * 2.06, r * 0.5, r * 0.34, 0, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      for (const sgn of [-1, 1]) {
-        ctx.beginPath(); ctx.ellipse(sgn * r * 0.17, -r * 2.14, r * 0.05, r * 0.04, 0, 0, Math.PI * 2); ctx.fill();
-      }
-
-      // eyes
-      const blink = pet.glance > 0 ? 0 : 1;
-      for (const sgn of [-1, 1]) {
-        ctx.fillStyle = '#12241d';
-        if (asleep || !blink) {
-          ctx.strokeStyle = '#12241d'; ctx.lineWidth = Math.max(1.4, r * 0.05);
-          ctx.beginPath();
-          ctx.moveTo(sgn * r * 0.5 - r * 0.14, -r * 2.56);
-          ctx.lineTo(sgn * r * 0.5 + r * 0.14, -r * 2.56);
-          ctx.stroke();
-        } else {
-          ctx.beginPath(); ctx.ellipse(sgn * r * 0.36, -r * 2.58, r * 0.13, r * 0.17, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = 'rgba(255,255,255,0.9)';
-          ctx.beginPath(); ctx.arc(sgn * r * 0.32, -r * 2.64, r * 0.05, 0, Math.PI * 2); ctx.fill();
-        }
-      }
-
-      // a mouth, and the glow it builds before it breathes
-      ctx.strokeStyle = '#12241d';
-      ctx.lineWidth = Math.max(1.2, r * 0.045);
-      ctx.beginPath();
-      if (charging || pet.zap > 0) {
-        ctx.ellipse(0, -r * 1.96, r * 0.2, r * 0.15, 0, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(30, 100%, ${60 + 25 * Math.sin(t * 18)}%, 0.95)`;
-        ctx.fill();
-      } else {
-        ctx.moveTo(-r * 0.18, -r * 1.98);
-        ctx.quadraticCurveTo(0, -r * (asleep ? 1.9 : 1.86), r * 0.18, -r * 1.98);
-      }
-      ctx.stroke();
-
-      if (charging) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = `hsla(28, 100%, 65%, ${0.35 + 0.3 * Math.sin(t * 20)})`;
-        ctx.beginPath(); ctx.arc(0, -r * 1.96, r * 0.34, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      }
-    });
-  }
-
-
 
 
   // ---------------------------------------------------------------- Son Goku, the Dragon Ball hero
@@ -6623,6 +7012,8 @@
         spawnDrop('commit', ev.hash ? String(ev.hash).slice(0, 7) : 'commit');
         if (state.species === 'mario') {
           triggerMarioCommitPowerUp();
+        } else if (state.species === 'dragon') {
+          triggerShenronCommitGrowth();
         }
         let said = msg.trim() ? `commit: ${shortMessage(msg)}` : line('commitPlain');
         if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { said = line('commitFix'); releaseBugs(1, [shortMessage(msg).slice(0, 22)]); }
@@ -6696,6 +7087,10 @@
           audio.marioPowerDown();
           marioState.transformT = 0.8;
           say("Mamma mia! Power down!", 2200);
+        } else if (state.species === 'dragon' && (state.dragonBalls || 0) > 0) {
+          state.dragonBalls = Math.max(0, (state.dragonBalls || 0) - 1);
+          saveState();
+          say("A Dragon Ball has been lost to darkness...", 2400);
         }
         const count = Math.max(0, Math.min(99, Number(ev.count) || 0));
         const label = String(ev.name || ev.repo || '').trim();
@@ -6958,7 +7353,7 @@
   const PET_ROSTER = [
     { id: 'mario', name: 'Mario', tag: 'Nintendo', icon: 'avatars/mario.png', accent: '#e52521', bg: 'linear-gradient(135deg, #3d0606 0%, #170000 100%)', border: 'rgba(255,215,0,0.45)', special: '🍄 Super Mushroom / Fireball' },
     { id: 'robot', name: 'Bitling', tag: 'Machine', icon: 'avatars/robot.png', accent: '#7ee7d7', bg: 'linear-gradient(135deg, #132225 0%, #091316 100%)', border: 'rgba(126,231,215,0.35)', special: '⚡ Overclock Laser' },
-    { id: 'dragon', name: 'Ember', tag: 'Dragon', icon: 'avatars/dragon.png', accent: '#ff9a3c', bg: 'linear-gradient(135deg, #0e241c 0%, #06130e 100%)', border: 'rgba(65,196,140,0.35)', special: '🔥 Fire Breath' },
+    { id: 'dragon', name: 'Shenron', tag: 'Eternal Dragon', icon: shenronImage.src, accent: '#83ce46', bg: 'linear-gradient(135deg, #173b20 0%, #06130e 100%)', border: 'rgba(131,206,70,0.4)', special: '🐉 Dragon Breath' },
     { id: 'goku', name: 'Goku', tag: 'Saiyan', icon: 'avatars/goku.png', accent: '#fbbf24', bg: 'linear-gradient(135deg, #3d1b06 0%, #170900 100%)', border: 'rgba(251,191,36,0.4)', special: '⚡ Kamehameha' },
     { id: 'rider', name: 'Rider', tag: 'Hero', icon: 'avatars/rider.png', accent: '#ffd166', bg: 'linear-gradient(135deg, #241d10 0%, #120e06 100%)', border: 'rgba(255,209,102,0.3)', special: '⚡ Rider Beam' },
     { id: 'pikachu', name: 'Pikachu', tag: 'Electric', icon: 'avatars/pikachu.png', accent: '#eab308', bg: 'linear-gradient(135deg, #2e2600 0%, #131000 100%)', border: 'rgba(250,204,21,0.4)', special: '⚡ Thunderbolt' },
@@ -7103,7 +7498,7 @@
         say('SKREEECH! (Roar)', 2200);
       } else if (speciesId === 'dragon') {
         audio.whoosh();
-        say('Rawr! Ember is ready to incinerate bugs!', 2200);
+        say('I am Shenron. State your wish.', 2200);
       } else if (speciesId === 'rider') {
         audio.ok();
         say('Henshin! Rider justice will protect this code!', 2200);
@@ -7220,6 +7615,18 @@
     pet() { return pet; },
     say(text, dur) { say(text, dur); },
     species(id) { return species(id); },
+    shenronReady() { return shenron.ready; },
+    shenronMouth() { return shenronMouth(); },
+    shenronHit(x, y) { return shenronHit(x, y); },
+    shenronRig() { return shenronRigSnapshot(); },
+    steerShenron(angle) {
+      const value = Number(angle);
+      if (!Number.isFinite(value)) return;
+      shenron.heading = wrapAngle(value); shenron.turn = 0;
+      shenron.targetX = pet.x + Math.cos(value) * W;
+      shenron.targetY = pet.y + Math.sin(value) * H;
+      shenron.nextTurn = 8;
+    },
     draw() { draw(); },
     bugs() { return bugs; },
     drop() { return drop; },

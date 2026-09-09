@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Wrap the shared creature page into docs/index.html for the GitHub Pages demo."""
 from pathlib import Path
+import base64
 
 ROOT = Path(__file__).resolve().parent.parent
 body = (ROOT / "web" / "bitling.html").read_text(encoding="utf-8")
+for filename in ("shenron.png", "shenron-head.png", "shenron-body.png", "shenron-limb.png"):
+    sprite = "data:image/png;base64," + base64.b64encode((ROOT / "web/assets" / filename).read_bytes()).decode("ascii")
+    body = body.replace(f"assets/{filename}", sprite)
 
 page = f"""<!doctype html>
 <html lang="en">

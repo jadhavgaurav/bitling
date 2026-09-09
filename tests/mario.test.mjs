@@ -35,7 +35,7 @@ test('Super Mario species definition, audio synths, and evolution mechanics', as
   assert.ok(html.includes("scoreMarioWarpPipe"), 'Warp pipe course clear must be defined');
 });
 
-test('desktop Mario renders sprite poses, handles commit-based evolution and attacks in browser', async () => {
+test('desktop Mario renders sprite poses across all stages, sizes and attacks in browser', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-mario-browser-'));
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
@@ -85,34 +85,60 @@ test('desktop Mario renders sprite poses, handles commit-based evolution and att
       const bossAttack = sp.attack.resolve(true);
       if (bossAttack.style !== 'fireball') failures.push(`Expected fireball for boss attack, got ${bossAttack.style}`);
 
-      // 3. Test rendering all evolution stages
-      const stages = [
-        { stage: 0, name: 'Small Mario idle' },
-        { stage: 1, name: 'Super Mario idle' },
-        { stage: 2, name: 'Fire Mario idle' },
-        { stage: 3, name: 'Star Mario idle' },
+      // 3. Test rendering all evolution stages across all poses
+      const stages = [0, 1, 2, 3]; // Small, Super, Fire, Star
+      const poses = [
+        { name: 'idle', walking: false, vy: 0, vx: 0 },
+        { name: 'walk', walking: true, vy: 0, vx: 30 },
+        { name: 'sprint', walking: true, vy: 0, vx: 80 },
+        { name: 'jump', walking: false, vy: -60, vx: 0 },
+        { name: 'throw', walking: false, vy: 0, vx: 0, zap: 0.5, zapStyle: 'fireball' },
+        { name: 'asleep', walking: false, vy: 0, vx: 0, asleep: true }
       ];
 
-      for (const st of stages) {
-        api.marioState.stage = st.stage;
-        Object.assign(api.pet, base, { x: 160, y: 220, mode: 'walk', grounded: true, facing: 1 });
-        api.ctx.clearRect(0, 0, 320, 360);
-        try {
-          api.drawMario();
-        } catch (e) {
-          failures.push(`Render failure in ${st.name}: ${e.message}`);
+      // 4. Test across multiple pet sizes (0.8, 1.0, 1.2, 1.6)
+      const testSizes = [0.8, 1.0, 1.2, 1.6];
+
+      for (const size of testSizes) {
+        api.state.petSize = size;
+        for (const st of stages) {
+          api.marioState.stage = st;
+          for (const pose of poses) {
+            Object.assign(api.pet, base, {
+              x: 160,
+              y: 220,
+              mode: pose.walking ? 'walk' : 'idle',
+              grounded: !pose.vy,
+              facing: 1,
+              walking: pose.walking,
+              vx: pose.vx,
+              vy: pose.vy,
+              zap: pose.zap || 0,
+              zapStyle: pose.zapStyle || null,
+              asleep: pose.asleep || false
+            });
+            api.ctx.clearRect(0, 0, 320, 360);
+            try {
+              api.drawMario();
+            } catch (e) {
+              failures.push(`Render failure [size=${size}, stage=${st}, pose=${pose.name}]: ${e.message}`);
+            }
+          }
         }
       }
 
-      // 4. Test attacks execution
-      try {
-        api.drawMarioAttack(api.petR(), 1, false, 'stomp');
-        api.drawMarioAttack(api.petR(), 1, true, 'fireball');
-      } catch (e) {
-        failures.push(`Attack execution error: ${e.message}`);
+      // 5. Test attacks execution across sizes
+      for (const size of testSizes) {
+        api.state.petSize = size;
+        try {
+          api.drawMarioAttack(api.petR(), 1, false, 'stomp');
+          api.drawMarioAttack(api.petR(), 1, true, 'fireball');
+        } catch (e) {
+          failures.push(`Attack execution error at size ${size}: ${e.message}`);
+        }
       }
 
-      // 5. Test commit power-up & warp pipe triggers
+      // 6. Test commit power-up & warp pipe triggers
       try {
         api.triggerMarioCommitPowerUp();
         if (!api.marioState.qblockActive) failures.push('QBlock should be active after commit trigger');
@@ -122,7 +148,7 @@ test('desktop Mario renders sprite poses, handles commit-based evolution and att
         failures.push(`Trigger error: ${e.message}`);
       }
 
-      // 6. Test simulation step
+      // 7. Test simulation step
       try {
         api.updateMarioSimulation(0.016);
       } catch (e) {

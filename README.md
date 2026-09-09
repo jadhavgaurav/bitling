@@ -224,10 +224,12 @@ stays inside the pet's own window, where it stomps and lasers as before.
 
 Three sources feed this, all optional:
 
-1. **GitHub Actions and GitHub Deployments** through the `gh` CLI, for any watched repo whose
-   origin is on github.com. Run `gh auth login` once. Workflows named deploy, release,
-   publish, cd or rollout count as deploys; the rest count as tests. Vercel and similar
-   services record GitHub Deployments, so those appear too.
+1. **GitHub Actions and GitHub Deployments**, for any watched repo whose origin is on
+   github.com. Uses the `gh` CLI's login when `gh` is installed, or **Connect GitHub** in the
+   control room's Setup tab otherwise, a one-time device-flow sign-in with no `gh` CLI and no
+   pasted token. Workflows named deploy, release, publish, cd or rollout count as deploys; the
+   rest count as tests. Vercel and similar services record GitHub Deployments, so those
+   appear too.
 2. **Local pytest runs**, detected from `.pytest_cache`, including the failure count and the
    names of the failing tests, which is what the beetles wear.
 3. **The `bitling` command**, for everything else.
@@ -330,10 +332,12 @@ about:
 - **git needs no account.** Bitling reads `.git/logs` on your own disk. No token, no OAuth,
   no network call, no GitHub. It works offline and on repositories that were never pushed
   anywhere. This is the whole git feature.
-- **GitHub Actions and Deployments** are the one part that talks to GitHub, and they borrow
-  the `gh` CLI's existing login rather than asking for a token of their own. No `gh`, no
-  login, or a repo whose origin is not github.com: that one feature stays off and the
-  control room says so. Everything else keeps working.
+- **GitHub Actions and Deployments** are the one part that talks to GitHub. They borrow the
+  `gh` CLI's existing login when `gh` is installed and logged in; otherwise **Connect GitHub**
+  in the control room's Setup tab starts a device-flow sign-in (the same kind CLI tools use:
+  a one-time code approved at github.com, no password or token ever typed into Bitling). The
+  token is stored in the macOS Keychain, nowhere else. Skip both and that one feature stays
+  off, with the control room saying so; everything else keeps working.
 - **Claude Code** is read from the transcript files Claude Code already writes locally, plus
   optional hooks in your own `~/.claude/settings.json`.
 

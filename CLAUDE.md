@@ -122,3 +122,22 @@ body, and "the topmost bright pixel" finds a beam's far end, not its root.
 Pets modelled on characters someone else owns are a decision for the repo's owner, not a
 default. This repository is public and MIT licensed. Traced or extracted sprite art carries
 more risk than an original drawing in a similar style.
+
+## GitHub without the `gh` CLI
+
+`CIWatcher` prefers the `gh` CLI when it's installed and logged in, and falls back to a
+GitHubAuth device-flow token otherwise (Setup tab, "Connect GitHub"). Most developers do not
+have `gh` installed, so the fallback is the common path for anyone outside this machine, not
+an edge case.
+
+- The device flow needs a real GitHub OAuth App (Settings → Developer settings → OAuth Apps,
+  "Enable Device Flow" checked) to get a client ID. Client IDs are public identifiers, safe to
+  commit; this one lives in `Sources/GitHubAuth.swift`. No client secret is needed or stored.
+- The token lives in the Keychain (service `app.bitling.pet.github`), not in UserDefaults.
+- Rebuilding via `./build.sh` re-signs the app ad hoc, which changes its code identity, so a
+  Keychain item written by yesterday's build can prompt for access again after a rebuild. Not
+  a bug: it goes away with a real Developer ID signature.
+- Both transports return the same REST JSON shapes (`repos/{slug}/actions/runs`,
+  `repos/{slug}/deployments`, snake_case fields) so `CIWatcher`'s polling logic never needs to
+  know which one is active. When adding a new GitHub call, fetch through `apiData(_:)`, not
+  `runGh` or `GitHubAuth.get` directly, so it keeps working under either transport.

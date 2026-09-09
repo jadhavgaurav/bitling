@@ -642,6 +642,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     private func panelPayload() -> [String: Any] {
         let ghConnected = ci.ghStatus.hasPrefix("GitHub Actions")
+        let githubLinked = GitHubAuth.storedToken() != nil
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         return [
             "pet": [
@@ -665,6 +666,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "ci": ghConnected ? "GitHub Actions" : "CI needs gh",
                 "ciOn": ghConnected,
                 "ciDetail": "\(ci.ghStatus). Last: \(ci.lastSummary)",
+                "githubLinked": githubLinked,
                 "claudeHooks": ClaudeHooks.installed(),
                 "gitHooks": GitHooks.installed(),
                 "swarm": swarmEnabled,
@@ -686,6 +688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "sleep": sleepAction()
         case "rescan": rescanRepos()
         case "gitHooks": toggleGitHooks()
+        case "githubConnect": toggleGitHubConnection()
         case "claudeHooks": toggleClaudeHooks()
         case "swarm": toggleSwarm()
         case "hide": toggleShown()
@@ -842,6 +845,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             failure.messageText = "Could not update the git hooks setting"
             failure.informativeText = error.localizedDescription
             failure.runModal()
+        }
+    }
+
+    /// Disconnects Bitling's own stored token, or starts the device-flow sign-in when
+    /// nothing is connected yet. When `gh` is already logged in there is nothing of ours
+    /// to disconnect, so this only ever touches the GitHubAuth-stored token.
+    @objc private func toggleGitHubConnection() {
+        NSApp.activate(ignoringOtherApps: true)
+        if GitHubAuth.storedToken() != nil {
+            let alert = NSAlert()
+            alert.messageText = "Disconnect GitHub?"
+            alert.informativeText = "Bitling forgets this sign-in. Actions runs and deployments still show up if the gh CLI is installed and logged in."
+            alert.addButton(withTitle: "Disconnect")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            GitHubAuth.signOut()
+            ci.refreshGitHubConnection()
+            panel.refresh()
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Connect GitHub?"
+        alert.informativeText = "Opens github.com in your browser to approve a one-time code, so Bitling can watch Actions runs and deployments without the gh CLI installed."
+        alert.addButton(withTitle: "Connect")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        startGitHubDeviceFlow()
+    }
+
+    private func startGitHubDeviceFlow() {
+        let code: GitHubAuth.DeviceCode
+        do {
+            code = try GitHubAuth.requestDeviceCode()
+        } catch {
+            let failure = NSAlert()
+            failure.messageText = "Could not start GitHub sign-in"
+            failure.informativeText = error.localizedDescription
+            failure.runModal()
+            return
+        }
+        let prompt = NSAlert()
+        prompt.messageText = "Enter this code on GitHub"
+        prompt.informativeText = "\(code.userCode)\n\nBitling opens github.com/login/device; paste the code there to finish connecting."
+        prompt.addButton(withTitle: "Open GitHub")
+        prompt.addButton(withTitle: "Cancel")
+        guard prompt.runModal() == .alertFirstButtonReturn else { return }
+        NSWorkspace.shared.open(code.verificationURI)
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            do {
+                let token = try GitHubAuth.pollForToken(code)
+                GitHubAuth.store(token)
+                let login = GitHubAuth.fetchLogin(token: token) ?? "your account"
+                self.ci.refreshGitHubConnection()
+                DispatchQueue.main.async {
+                    self.js("petNative.gitEvent({kind:'say', message: \(jsString("GitHub connected as \(login)"))})")
+                    self.panel.refresh()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.js("petNative.gitEvent({kind:'say', message: \(jsString("GitHub sign-in didn't finish: \(error.localizedDescription)"))})")
+                }
+            }
         }
     }
 

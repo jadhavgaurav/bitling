@@ -258,10 +258,10 @@
         <span class="k">Folders outside home</span>
         <span class="v"><em class="do">choose</em><span class="n" id="vRoots">0</span></span>
       </button>
-      <div class="row">
+      <button class="row" data-act="githubConnect">
         <span class="k">GitHub Actions and deploys</span>
         <span class="v"><span class="n" id="vCi">off</span></span>
-      </div>
+      </button>
       <div class="row">
         <span class="k">Claude Code sessions</span>
         <span class="v"><span class="n" id="vClaude">0 active</span></span>
@@ -687,7 +687,7 @@
     $('#vRepos').textContent = w.repos ?? 0;
     $('#vRoots').textContent = w.roots ?? 0;
     const ci = $('#vCi');
-    ci.textContent = w.ciOn ? 'connected' : 'needs gh';
+    ci.textContent = w.ciOn ? (w.githubLinked ? 'connected' : 'via gh') : 'not connected';
     ci.className = 'n ' + (w.ciOn ? 'good' : 'off');
     const active = w.claudeActive ?? 0;
     const cl = $('#vClaude');

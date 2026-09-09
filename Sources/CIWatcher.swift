@@ -2,10 +2,11 @@
 //
 // Three sources, all optional:
 //  1. GitHub Actions runs and GitHub Deployments for watched repositories that have a
-//     github.com origin, through the `gh` CLI when it is installed and logged in.
-//     Workflows whose name mentions deploy/release/publish/cd count as deployments,
-//     everything else counts as tests. Vercel and similar services record GitHub
-//     Deployments, so their deploys show up too.
+//     github.com origin, through the `gh` CLI when it is installed and logged in, or
+//     through a GitHubAuth device-flow token when it is not. Workflows whose name
+//     mentions deploy/release/publish/cd count as deployments, everything else counts
+//     as tests. Vercel and similar services record GitHub Deployments, so their
+//     deploys show up too.
 //  2. Local pytest runs: pytest rewrites .pytest_cache/v/cache/nodeids on every run
 //     and keeps failing test ids in .pytest_cache/v/cache/lastfailed.
 //  3. The bitling:// URL scheme (see Resources/bitling), handled by the host, for any
@@ -47,21 +48,37 @@ final class CIWatcher {
         queue.asyncAfter(deadline: .now() + 8) { self.pollGitHub() }
     }
 
-    // MARK: gh
+    // MARK: gh, or a GitHubAuth token when gh is not available
+
+    /// Re-checks both transports. Call after the user connects or disconnects GitHub
+    /// in the control room so the panel and the next poll pick it up immediately.
+    func refreshGitHubConnection() {
+        queue.async {
+            self.detectGh()
+            self.pollGitHub()
+        }
+    }
 
     private func detectGh() {
         let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
-        guard let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-            ghStatus = "gh not installed, GitHub Actions not watched"
+        if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            ghPath = path
+            if runGh(["auth", "status"]) != nil {
+                ghStatus = "GitHub Actions and deployments via gh"
+                return
+            }
+            ghPath = nil
+        }
+        if let token = GitHubAuth.storedToken() {
+            if let login = GitHubAuth.fetchLogin(token: token) {
+                ghStatus = "GitHub Actions and deployments via \(login)'s GitHub account"
+            } else {
+                GitHubAuth.signOut()
+                ghStatus = "GitHub sign-in expired, reconnect in Setup"
+            }
             return
         }
-        ghPath = path
-        if runGh(["auth", "status"]) != nil {
-            ghStatus = "GitHub Actions and deployments via gh"
-        } else {
-            ghPath = nil
-            ghStatus = "gh not logged in (run: gh auth login)"
-        }
+        ghStatus = "not connected, connect GitHub in Setup"
     }
 
     private func runGh(_ arguments: [String]) -> Data? {
@@ -86,8 +103,21 @@ final class CIWatcher {
         return process.terminationStatus == 0 ? data : nil
     }
 
-    private func json(_ data: Data?) -> [[String: Any]] {
+    /// Fetches a GitHub REST API path through whichever transport is active: `gh api`
+    /// when gh is installed and logged in, otherwise a direct call with the stored token.
+    private func apiData(_ path: String) -> Data? {
+        if ghPath != nil { return runGh(["api", path]) }
+        guard let token = GitHubAuth.storedToken() else { return nil }
+        return try? GitHubAuth.get(url: URL(string: "https://api.github.com/\(path)")!, token: token)
+    }
+
+    private func jsonArray(_ data: Data?) -> [[String: Any]] {
         guard let data, let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        return parsed
+    }
+
+    private func jsonObject(_ data: Data?) -> [String: Any] {
+        guard let data, let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
         return parsed
     }
 
@@ -102,7 +132,7 @@ final class CIWatcher {
     }
 
     private func pollGitHub() {
-        guard ghPath != nil else { return }
+        guard ghPath != nil || GitHubAuth.storedToken() != nil else { return }
         let repos = repositories().filter { $0.slug != nil }
         for repo in repos {
             guard let slug = repo.slug else { continue }
@@ -113,10 +143,10 @@ final class CIWatcher {
     }
 
     private func pollRuns(slug: String, repoName: String) {
-        let runs = json(runGh(["run", "list", "-R", slug, "--limit", "10", "--json", "databaseId,status,conclusion,name,headBranch,createdAt"]))
+        let runs = jsonObject(apiData("repos/\(slug)/actions/runs?per_page=10"))["workflow_runs"] as? [[String: Any]] ?? []
         let primed = primedSlugs.contains(slug)
         for run in runs {
-            guard let id = run["databaseId"] as? Int else { continue }
+            guard let id = run["id"] as? Int else { continue }
             let key = "\(slug)#\(id)"
             let status = run["status"] as? String ?? ""
             let conclusion = run["conclusion"] as? String ?? ""
@@ -124,9 +154,9 @@ final class CIWatcher {
             let previous = runState[key]
             runState[key] = current
             guard primed, previous != current else { continue }
-            if let created = Self.parseDate(run["createdAt"]), Date().timeIntervalSince(created) > 3 * 3600 { continue }
+            if let created = Self.parseDate(run["created_at"]), Date().timeIntervalSince(created) > 3 * 3600 { continue }
             let name = run["name"] as? String ?? "workflow"
-            let branch = run["headBranch"] as? String ?? ""
+            let branch = run["head_branch"] as? String ?? ""
             let deploy = Self.isDeployName(name)
             let target = "\(repoName) \(branch)".trimmingCharacters(in: .whitespaces)
             if status == "in_progress", previous == nil, deploy {
@@ -146,7 +176,7 @@ final class CIWatcher {
     }
 
     private func pollDeployments(slug: String, repoName: String) {
-        let deployments = json(runGh(["api", "repos/\(slug)/deployments?per_page=5"]))
+        let deployments = jsonArray(apiData("repos/\(slug)/deployments?per_page=5"))
         let primed = primedSlugs.contains(slug)
         let terminal: Set<String> = ["success", "failure", "error", "inactive"]
         for deployment in deployments {
@@ -159,7 +189,7 @@ final class CIWatcher {
             }
             let environment = (deployment["environment"] as? String ?? "").lowercased()
             let target = environment.isEmpty ? repoName : "\(repoName) \(environment)"
-            let statuses = json(runGh(["api", "repos/\(slug)/deployments/\(id)/statuses?per_page=1"]))
+            let statuses = jsonArray(apiData("repos/\(slug)/deployments/\(id)/statuses?per_page=1"))
             let state = statuses.first?["state"] as? String ?? "pending"
             let previous = deployState[key]
             deployState[key] = state

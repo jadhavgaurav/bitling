@@ -22,10 +22,10 @@ echo "-> deriving desktop page from $WEB_SOURCE"
 python3 Tools/make_pet_html.py "$WEB_SOURCE" Resources/pet.html
 python3 Tools/make_demo.py
 
-SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift Sources/Overlay.swift Sources/ControlPanel.swift)
+SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift Sources/Overlay.swift Sources/ControlPanel.swift Sources/GitHubAuth.swift)
 compile() {  # compile <arch> <output>
   swiftc -O -swift-version 5 -target "$1-apple-macosx$MIN_MACOS" \
-    -framework Cocoa -framework WebKit -framework ServiceManagement \
+    -framework Cocoa -framework WebKit -framework ServiceManagement -framework Security \
     -o "$2" "${SOURCES[@]}"
 }
 

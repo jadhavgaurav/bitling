@@ -1230,18 +1230,28 @@ enum GitHooks {
             .appendingPathComponent("Library/Application Support/Bitling/githooks")
     }
 
+    /// Runs git and returns trimmed stdout. Throws with git's own stderr message on a
+    /// non-zero exit, except for `config --get` on an unset key, which git reports as
+    /// exit 1 with no stderr, not a real failure.
     @discardableResult
     private static func git(_ arguments: [String]) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
         try process.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        let stdout = String(decoding: outData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        let stderr = String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard process.terminationStatus != 0 else { return stdout }
+        let isUnsetGet = arguments.first == "config" && arguments.contains("--get") && stdout.isEmpty && stderr.isEmpty
+        guard !isUnsetGet else { return stdout }
+        throw HooksError(message: stderr.isEmpty ? "git exited with status \(process.terminationStatus)" : stderr)
     }
 
     static func currentHooksPath() -> String {
@@ -1250,6 +1260,27 @@ enum GitHooks {
 
     static func installed() -> Bool {
         currentHooksPath() == directory.path
+    }
+
+    /// `git config --global` briefly fails with a lock-file error if another git process
+    /// on the machine is also writing the global config at that instant. That is a normal,
+    /// recoverable race, not a real failure, so retry a few times before giving up.
+    private static func retryingGlobalConfig(_ arguments: [String]) throws {
+        var lastError: Error?
+        for attempt in 0..<5 {
+            do {
+                try git(["config", "--global"] + arguments)
+                return
+            } catch {
+                lastError = error
+                if attempt < 4 { Thread.sleep(forTimeInterval: 0.2) }
+            }
+        }
+        throw lastError ?? HooksError(message: "git config --global \(arguments.joined(separator: " ")) failed")
+    }
+
+    private static func setGlobalConfig(_ key: String, _ value: String) throws {
+        try retryingGlobalConfig([key, value])
     }
 
     static func install() throws {
@@ -1279,16 +1310,16 @@ enum GitHooks {
             try script.write(to: url, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         }
-        try git(["config", "--global", "core.hooksPath", directory.path])
-        guard installed() else { throw HooksError(message: "git did not accept the new core.hooksPath value") }
+        try setGlobalConfig("core.hooksPath", directory.path)
+        guard installed() else { throw HooksError(message: "git accepted core.hooksPath but reading it back gave a different value") }
     }
 
     static func uninstall() throws {
         let previous = UserDefaults.standard.string(forKey: previousKey) ?? ""
         if previous.isEmpty {
-            try git(["config", "--global", "--unset", "core.hooksPath"])
+            try retryingGlobalConfig(["--unset", "core.hooksPath"])
         } else {
-            try git(["config", "--global", "core.hooksPath", previous])
+            try setGlobalConfig("core.hooksPath", previous)
         }
         UserDefaults.standard.removeObject(forKey: previousKey)
     }

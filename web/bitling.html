@@ -1730,7 +1730,13 @@
   shenronBody.src = 'assets/shenron-body.png';
   const shenronLimb = new Image();
   shenronLimb.src = 'assets/shenron-limb.png';
-  const shenron = { ready: false, size: 1, time: 0, targetX: 0, targetY: 0, nextTurn: 0,
+  // nextTurn starts positive (not 0): resetShenronSpine() fabricates its initial trail as a
+  // straight line running backward along `heading`, and if the wander logic picked a fresh
+  // random target on the very first frame, the real movement would immediately diverge from
+  // that fabricated direction, folding the spine back on itself right behind the head before
+  // any genuine trail history exists. Holding the seeded heading for a few seconds gives the
+  // arc-length trail time to catch up with real, consistent motion first.
+  const shenron = { ready: false, size: 1, time: 0, targetX: 0, targetY: 0, nextTurn: 6,
     heading: -0.12, turn: 0, depth: 1, depthTarget: 1, points: [], trail: [], failed: false,
     growthScale: 1, growthLength: 1, headNormal: { x: 0, y: 1 } };
   const SHENRON_POINT_COUNT = 80;
@@ -1931,10 +1937,28 @@
       shenron.depthTarget = rand(0.18, 1) * settings.depth;
       shenron.nextTurn = rand(5.5, 9.5) / settings.speed;
     }
-    const desired = Math.atan2(shenron.targetY - pet.y, shenron.targetX - pet.x);
+    // Steer toward the chosen target, but blend in an early, proportional pull back toward
+    // the stage centre as the head nears any edge. A body sampled only a few pixels apart
+    // per spine point cannot render a sharp direction change, so the ordinary 0.48 rad/s turn
+    // cap (tuned for graceful cruising) is not enough on its own: a dragon that happens to be
+    // heading close to straight at a nearby wall cannot finish turning away in the short
+    // distance the wall leaves it, and needing the hard clamp in clampShenron() - even once -
+    // bakes a fold into the trail regardless of whether anything here also touches heading.
+    // `urgency` (0 far from any edge, up to 1 deep in the margin) raises both the allowed turn
+    // rate and how fast the turn eases toward it, purely for the escape manoeuvre; cruising
+    // elsewhere is untouched.
+    const graceX = marginX * 1.6, graceY = marginY * 1.6;
+    const intrudeX = pet.x < graceX ? (graceX - pet.x) / graceX : pet.x > W - graceX ? (pet.x - (W - graceX)) / graceX : 0;
+    const intrudeY = pet.y < graceY ? (graceY - pet.y) / graceY : pet.y > H - radius * 2.5 - graceY ? (pet.y - (H - radius * 2.5 - graceY)) / graceY : 0;
+    const urgency = clamp(Math.max(intrudeX, intrudeY), 0, 1);
+    const pushX = pet.x < graceX ? (graceX - pet.x) : pet.x > W - graceX ? (W - graceX) - pet.x : 0;
+    const pushY = pet.y < graceY ? (graceY - pet.y) : pet.y > H - radius * 2.5 - graceY ? (H - radius * 2.5 - graceY) - pet.y : 0;
+    const steerX = shenron.targetX + pushX * 6, steerY = shenron.targetY + pushY * 6;
+    const desired = Math.atan2(steerY - pet.y, steerX - pet.x);
     const delta = wrapAngle(desired - shenron.heading);
-    const desiredTurn = clamp(delta * 0.9, -0.48, 0.48);
-    shenron.turn += (desiredTurn - shenron.turn) * Math.min(1, dt * 1.25);
+    const turnRateCap = lerp(0.48, 6.5, urgency);
+    const desiredTurn = clamp(delta * 0.9, -turnRateCap, turnRateCap);
+    shenron.turn += (desiredTurn - shenron.turn) * Math.min(1, dt * lerp(1.25, 6, urgency));
     shenron.heading = wrapAngle(shenron.heading + shenron.turn * dt);
     const speed = (48 + settings.speed * 24) * lerp(0.84, 1.08, shenron.depth);
     const slither = reduceMotion ? 0 : Math.sin(shenron.time * 2.4) * 0.16 * settings.motion;

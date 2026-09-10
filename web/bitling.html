@@ -2158,6 +2158,12 @@
     ctx.rotate(headPose.rotation);
     ctx.scale(headPose.flip, 1);
 
+    // The head sprite draws first so the whiskers below can be painted on top of it: the
+    // bushy mane art is opaque right where the upper whisker starts, so drawing the head
+    // afterward (as before) buried that whisker under the fur almost entirely and only the
+    // lower one, which crosses open background, ever read as visible - "both on one side".
+    ctx.drawImage(shenronHead, -pose.width * 0.5, -pose.height * 0.64, pose.width, pose.height);
+
     // Both whiskers start together at the mouth corner (matches shenronMouth()'s local
     // coordinates) and every control point moves further in -X than the last, so neither
     // one bulges forward over the snout. `sideY` is the fork: the two started close enough
@@ -2191,7 +2197,6 @@
       ctx.stroke();
     }
 
-    ctx.drawImage(shenronHead, -pose.width * 0.5, -pose.height * 0.64, pose.width, pose.height);
     ctx.restore();
 
     if ((state.asleep || pet.blink > 0.05) && !state.asleep) {

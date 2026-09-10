@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Apply HD Iron Man sprites, front-view hover, supersonic flight, and combat overhaul to web/bitling.html."""
-import os
 import re
 import base64
 from pathlib import Path

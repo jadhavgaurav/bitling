@@ -2,6 +2,7 @@
 """Process Iron Man sprites and audio, producing base64 assets for bitling.html."""
 import os
 import base64
+import json
 from PIL import Image
 
 OUT_DIR = '/tmp/ironman_processed_sprites'
@@ -57,7 +58,6 @@ for name, path in audio_src.items():
     print(f"Processed audio {name}: {os.path.getsize(path)} bytes")
 
 # Save as json for easy embedding
-import json
 with open('/tmp/ironman_data.json', 'w') as f:
     json.dump({'sprites': b64_sprites, 'audio': b64_audio}, f)
 

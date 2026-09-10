@@ -56,11 +56,13 @@ def main():
 
     fire_body = fire_full.crop((0, 0, gap_x, fh))
     fb_bbox = fire_body.getbbox()
-    if fb_bbox: fire_body = fire_body.crop(fb_bbox)
+    if fb_bbox:
+        fire_body = fire_body.crop(fb_bbox)
 
     fireball = fire_full.crop((gap_x, 0, fw, fh))
     fb_proj_bbox = fireball.getbbox()
-    if fb_proj_bbox: fireball = fireball.crop(fb_proj_bbox)
+    if fb_proj_bbox:
+        fireball = fireball.crop(fb_proj_bbox)
 
     mushroom = load_and_crop(os.path.join(raw_dir, 'movie_mushroom.png'))
     star = load_and_crop(os.path.join(raw_dir, 'super_star_3dw.png'))

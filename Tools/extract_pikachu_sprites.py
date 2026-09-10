@@ -7,7 +7,7 @@ def chroma_key(im_path, out_path, tolerance=55, shadow_filter=True):
     arr = np.array(im)
     
     # Target magenta is around R > 200, G < 60, B > 200
-    r, g, b, a = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2], arr[:, :, 3]
+    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
     
     # Distance to magenta (255, 0, 255)
     dist = np.sqrt((r.astype(float) - 255)**2 + (g.astype(float) - 0)**2 + (b.astype(float) - 255)**2)

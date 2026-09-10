@@ -23,11 +23,14 @@ struct GitEvent {
     var target = ""
     var name = ""
     var tests: [String] = []
+    var commitsToday = 0
+    var pushesToday = 0
 
     var asDictionary: [String: Any] {
         ["kind": kind, "repo": repo, "branch": branch, "message": message, "hash": hash,
          "insertions": insertions, "deletions": deletions, "files": files,
-         "count": count, "target": target, "name": name, "tests": tests]
+         "count": count, "target": target, "name": name, "tests": tests,
+         "commitsToday": commitsToday, "pushesToday": pushesToday]
     }
 }
 
@@ -41,9 +44,12 @@ struct GitStatus {
     var branch: String
     var dirty: Int
     var minutesSinceCommit: Int
+    var commitsToday = 0
+    var pushesToday = 0
 
     var asDictionary: [String: Any] {
-        ["repo": repo, "branch": branch, "dirty": dirty, "minutesSinceCommit": minutesSinceCommit]
+        ["repo": repo, "branch": branch, "dirty": dirty, "minutesSinceCommit": minutesSinceCommit,
+         "commitsToday": commitsToday, "pushesToday": pushesToday]
     }
 }
 
@@ -450,14 +456,21 @@ final class GitWatcher {
         return result
     }
 
+    func recordPretend(commits: Int = 0, pushes: Int = 0) {
+        bumpToday(commits: commits, pushes: pushes)
+    }
+
     private func emit(_ event: GitEvent) {
-        switch event.kind {
+        var ev = event
+        switch ev.kind {
         case "commit", "merge", "cherry-pick": bumpToday(commits: 1)
         case "push": bumpToday(pushes: 1)
         default: bumpToday()
         }
-        lastEventSummary = "\(event.kind) in \(event.repo)" + (event.branch.isEmpty ? "" : " (\(event.branch))")
-        DispatchQueue.main.async { self.onEvent?(event) }
+        ev.commitsToday = commitsToday
+        ev.pushesToday = pushesToday
+        lastEventSummary = "\(ev.kind) in \(ev.repo)" + (ev.branch.isEmpty ? "" : " (\(ev.branch))")
+        DispatchQueue.main.async { self.onEvent?(ev) }
     }
 
     // MARK: git subprocess helpers
@@ -500,7 +513,7 @@ final class GitWatcher {
         let out = runGit(["status", "--porcelain", "--untracked-files=no"], in: repo.workTree) ?? ""
         let dirty = out.split(separator: "\n").count
         let minutes = repo.lastCommitDate.map { Int(Date().timeIntervalSince($0) / 60) } ?? -1
-        let status = GitStatus(repo: repo.name, branch: currentBranch(repo.gitDir), dirty: dirty, minutesSinceCommit: minutes)
+        let status = GitStatus(repo: repo.name, branch: currentBranch(repo.gitDir), dirty: dirty, minutesSinceCommit: minutes, commitsToday: commitsToday, pushesToday: pushesToday)
         DispatchQueue.main.async { self.onStatus?(status) }
     }
 }

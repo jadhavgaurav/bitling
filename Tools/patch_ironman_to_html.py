@@ -53,7 +53,7 @@ ironman_audio_block = """
 
 anchor_audio = "  // ---------------------------------------------------------------- audio"
 if "const IRONMAN_AUDIO =" not in html:
-    assert anchor_audio in html, f"anchor_audio not found"
+    assert anchor_audio in html, "anchor_audio not found"
     html = html.replace(anchor_audio, ironman_audio_block + "\n" + anchor_audio, 1)
 
 # 2. Add playIronMan and IronMan methods to audio object
@@ -105,7 +105,7 @@ ironman_audio_methods = """    playIronMan(key, vol = 0.95) {
 
 anchor_methods = "    pikaThunder() {"
 if "playIronMan(key, vol = 0.95)" not in html:
-    assert anchor_methods in html, f"anchor_methods not found"
+    assert anchor_methods in html, "anchor_methods not found"
     html = html.replace(anchor_methods, ironman_audio_methods + anchor_methods, 1)
 
 # 3. Wire say(text) for ironman
@@ -120,7 +120,7 @@ ironman_say = """    if (state.species === 'ironman') {
     }
 """
 if "state.species === 'ironman'" not in html:
-    assert anchor_say in html, f"anchor_say not found"
+    assert anchor_say in html, "anchor_say not found"
     html = html.replace(anchor_say, ironman_say + anchor_say, 1)
 
 # 4. Wire attack shotStyle in updateBugs
@@ -137,13 +137,13 @@ ironman_shot = """          } else if (shotStyle === 'electroball') {
             audio.iroRepulsor();
           }"""
 if "shotStyle === 'unibeam'" not in html:
-    assert anchor_shot in html, f"anchor_shot not found"
+    assert anchor_shot in html, "anchor_shot not found"
     html = html.replace(anchor_shot, ironman_shot, 1)
 
 anchor_hue = "          const sparkHue = state.species === 'pikachu' ? 52 : state.species === 'kaiju' ? 185 : state.species === 'goku' ? (shotStyle === 'kamehameha' ? 195 : 45) : 8;"
 new_hue = "          const sparkHue = state.species === 'pikachu' ? 52 : state.species === 'kaiju' ? 185 : state.species === 'goku' ? (shotStyle === 'kamehameha' ? 195 : 45) : state.species === 'ironman' ? (shotStyle === 'unibeam' ? 190 : 180) : 8;"
 if "state.species === 'ironman' ?" not in html:
-    assert anchor_hue in html, f"anchor_hue not found"
+    assert anchor_hue in html, "anchor_hue not found"
     html = html.replace(anchor_hue, new_hue, 1)
 
 # 5. Define ironman species
@@ -314,7 +314,7 @@ ironman_species_block = """  defineSpecies({
 
 anchor_species = "  defineSpecies({\n    id: 'kaiju',"
 if "id: 'ironman'" not in html:
-    assert anchor_species in html, f"anchor_species not found"
+    assert anchor_species in html, "anchor_species not found"
     html = html.replace(anchor_species, ironman_species_block + "\n" + anchor_species, 1)
 
 # 6. Insert IRONMAN_SPRITES and drawIronMan()
@@ -550,7 +550,7 @@ ironman_sprites_and_renderer = """
 
 anchor_draw = "  function drawKaiju() {"
 if "function drawIronMan()" not in html:
-    assert anchor_draw in html, f"anchor_draw not found"
+    assert anchor_draw in html, "anchor_draw not found"
     html = html.replace(anchor_draw, ironman_sprites_and_renderer + "\n" + anchor_draw, 1)
 
 HTML_FILE.write_text(html, encoding='utf-8')

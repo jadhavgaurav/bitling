@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import base64
-import os
 
 artifact_dir = "/Users/a12345/.gemini/antigravity-ide/brain/251518e0-36c4-45f1-b359-1b1615cce758"
 

@@ -133,6 +133,7 @@ struct PetSnapshot {
     var locomotion = "ground"
     var attack = "beam"
     var shenronSettings: [String: Double] = [:]
+    var goku: [String: Any] = [:]
 
     init() {}
 
@@ -158,6 +159,9 @@ struct PetSnapshot {
         attack = message["attack"] as? String ?? "beam"
         if let values = message["shenronSettings"] as? [String: NSNumber] {
             shenronSettings = values.mapValues(\.doubleValue)
+        }
+        if let values = message["goku"] as? [String: Any] {
+            goku = values
         }
     }
 }
@@ -509,6 +513,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "walk":
             let direction = (body["dir"] as? Double ?? 1) < 0 ? CGFloat(-1) : CGFloat(1)
             startWalk(direction: direction)
+        case "rest":
+            guard !desktopStage, !dragging, !airborne else { return }
+            walkRemaining = 0
+            if walkDirection != 0 { walkDirection = 0; js("petNative.walking(0)") }
+            if flight == .flying || flight == .hovering {
+                flight = .hovering
+                hoverBase = window.frame.origin
+                flyTarget = hoverBase
+                js("petNative.flight('hover')")
+            }
+        case "roam":
+            guard !desktopStage, floating, !dragging, !airborne, flight == .hovering else { return }
+            let visible = screenForWindow().visibleFrame
+            let direction: CGFloat = (body["dir"] as? Double ?? 1) < 0 ? -1 : 1
+            let proposed = window.frame.minX + direction * 96
+            let target = clampX(proposed, in: visible)
+            let x = abs(target - window.frame.minX) < 24
+                ? clampX(window.frame.minX - direction * 96, in: visible) : target
+            flyTarget = NSPoint(x: x, y: window.frame.minY)
+            flight = .flying
+            js("petNative.flight('takeoff')")
         case "fly":
             guard !desktopStage else { return }
             guard !dragging, !airborne, (flight == .none || flight == .hovering) else { return }
@@ -668,6 +693,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "working": snapshot.working, "screen": snapshot.screen,
                 "sound": snapshot.sound, "species": snapshot.species,
                 "shenron": snapshot.shenronSettings,
+                "goku": snapshot.goku,
             ],
             "today": [
                 "commits": git.commitsToday, "pushes": git.pushesToday,
@@ -716,6 +742,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let allowed = Set(["size", "length", "speed", "motion", "depth", "opacity"])
             guard parts.count == 3, allowed.contains(String(parts[1])), let value = Double(parts[2]), value.isFinite else { return }
             js("petNative.shenronSetting(\(jsString(String(parts[1]))), \(value))")
+        case _ where action.hasPrefix("goku:"):
+            let parts = action.split(separator: ":", omittingEmptySubsequences: false)
+            if parts.count >= 3 {
+                let sub = String(parts[1])
+                let val = String(parts[2])
+                if sub == "simulate" {
+                    if val == "off" || val == "clear" {
+                        js("petNative.gokuSimulate(null)")
+                    } else if let n = Int(val) {
+                        js("petNative.gokuSimulate(\(n))")
+                    }
+                } else if let d = Double(val), d.isFinite {
+                    js("petNative.gokuSetting(\(jsString(sub)), \(d))")
+                }
+            }
         case "rename": renameAction()
         case "sound": soundAction()
         case "login": toggleLogin()
@@ -821,7 +862,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
         activity.record(event)
         panel.refresh()
-        guard let data = try? JSONSerialization.data(withJSONObject: event.asDictionary),
+        var dict = event.asDictionary
+        if (dict["commitsToday"] as? Int ?? 0) == 0 && git.commitsToday > 0 {
+            dict["commitsToday"] = git.commitsToday
+        }
+        if (dict["pushesToday"] as? Int ?? 0) == 0 && git.pushesToday > 0 {
+            dict["pushesToday"] = git.pushesToday
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return }
         js("petNative.gitEvent(\(json))")
     }
@@ -940,12 +988,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     @objc private func pretendCommit() {
+        git.recordPretend(commits: 1)
         let samples = ["fix: stop the widget from eating cookies", "wip", "feat: add jelly physics", "typo in README", "Revert \"remove tests\"", "refactor everything"]
-        deliverGitEvent(GitEvent(kind: "commit", repo: "demo", branch: "main", message: samples.randomElement() ?? "commit", hash: String(UUID().uuidString.prefix(7)).lowercased(), insertions: Int.random(in: 1...600), deletions: Int.random(in: 0...80), files: Int.random(in: 1...12)))
+        deliverGitEvent(GitEvent(kind: "commit", repo: "demo", branch: "main", message: samples.randomElement() ?? "commit", hash: String(UUID().uuidString.prefix(7)).lowercased(), insertions: Int.random(in: 1...600), deletions: Int.random(in: 0...80), files: Int.random(in: 1...12), commitsToday: git.commitsToday, pushesToday: git.pushesToday))
     }
 
     @objc private func pretendPush() {
-        deliverGitEvent(GitEvent(kind: "push", repo: "demo", branch: "main", message: "", hash: ""))
+        git.recordPretend(pushes: 1)
+        deliverGitEvent(GitEvent(kind: "push", repo: "demo", branch: "main", message: "", hash: "", commitsToday: git.commitsToday, pushesToday: git.pushesToday))
     }
 
     @objc private func toggleClaudeHooks() {
@@ -1184,7 +1234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard !floating else { return }
         guard !dragging, !airborne, flight == .none, walkRemaining <= 0, window.isVisible else { return }
         let visible = screenForWindow().visibleFrame
-        let distance = CGFloat.random(in: 80...200)
+        let distance: CGFloat = 96
         var dir = direction
         let target = window.frame.minX + dir * distance
         if target < visible.minX || target + petWindowSize.width > visible.maxX { dir = -dir }
@@ -1244,7 +1294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             case .hovering:
                 if tickCount % 12 == 0 { js("petNative.flightVec(0, 0)") }
                 hoverT += dt
-                frame.origin = NSPoint(x: hoverBase.x + sin(hoverT * 0.9) * 8, y: hoverBase.y + sin(hoverT * 2.1) * 5)
+                frame.origin = hoverBase
                 window.setFrameOrigin(frame.origin)
             case .landing:
                 frame.origin.y -= 230 * dt

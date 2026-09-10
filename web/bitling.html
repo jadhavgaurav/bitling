@@ -2150,53 +2150,13 @@
     // 3. Near limbs in front of body
     drawShenronLimbsFront(mesh);
 
-    // 5. Head and dynamic whiskers
+    // 5. Head
     const headPose = shenronHeadPose();
-    const whiskTime = shenron.time * 2.0;
     ctx.save();
     ctx.translate(headPose.x, headPose.y + headPose.bob);
     ctx.rotate(headPose.rotation);
     ctx.scale(headPose.flip, 1);
-
-    // The head sprite draws first so the whiskers below can be painted on top of it: the
-    // bushy mane art is opaque right where the upper whisker starts, so drawing the head
-    // afterward (as before) buried that whisker under the fur almost entirely and only the
-    // lower one, which crosses open background, ever read as visible - "both on one side".
     ctx.drawImage(shenronHead, -pose.width * 0.5, -pose.height * 0.64, pose.width, pose.height);
-
-    // Both whiskers start together at the mouth corner (matches shenronMouth()'s local
-    // coordinates) and every control point moves further in -X than the last, so neither
-    // one bulges forward over the snout. `sideY` is the fork: the two started close enough
-    // together in Y (a small fraction of `radius`) that they read as one bundled stroke
-    // both trailing to the same side, so it now grows fast enough to clearly split one
-    // whisker up along the cheek from one down along the jaw.
-    for (const [sideY, phase] of [[-1, 0], [1, 1.4]]) {
-      const startX = pose.width * 0.1;
-      const startY = pose.height * 0.16 + sideY * radius * 0.12;
-      const wave1 = Math.sin(whiskTime + phase) * radius * 0.16;
-      const wave2 = Math.cos(whiskTime * 0.9 + phase) * radius * 0.22;
-      const cp1X = startX - radius * 0.9;
-      const cp1Y = startY + sideY * radius * 0.9 + wave1;
-      const cp2X = startX - radius * 2.0;
-      const cp2Y = startY + sideY * radius * 1.7 + wave2;
-      const endX = startX - radius * 3.6;
-      const endY = startY + sideY * radius * 2.3 + wave1 * 0.5;
-
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, endX, endY);
-      ctx.strokeStyle = '#275e18';
-      ctx.lineWidth = Math.max(2.5, radius * 0.08);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, endX, endY);
-      ctx.strokeStyle = '#8ee533';
-      ctx.lineWidth = Math.max(1.5, radius * 0.045);
-      ctx.stroke();
-    }
-
     ctx.restore();
 
     if ((state.asleep || pet.blink > 0.05) && !state.asleep) {

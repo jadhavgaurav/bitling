@@ -2158,17 +2158,22 @@
     ctx.rotate(headPose.rotation);
     ctx.scale(headPose.flip, 1);
 
+    // Anchored by the mouth corner (matches shenronMouth()'s local coordinates), each
+    // whisker sweeps strictly backward from there: every control point moves further in
+    // -X than the last. The previous curve bulged its first control point *forward*
+    // (+X) before sweeping back, which for the upper whisker looped up and over the
+    // snout instead of trailing behind it - not a stray line, a genuinely wrong path.
     for (const [sideY, phase] of [[-1, 0], [1, 1.4]]) {
-      const startX = pose.width * 0.17;
-      const startY = pose.height * 0.03 + sideY * radius * 0.18;
-      const wave1 = Math.sin(whiskTime + phase) * radius * 0.22;
-      const wave2 = Math.cos(whiskTime * 0.9 + phase) * radius * 0.32;
-      const cp1X = startX + radius * 0.55;
-      const cp1Y = startY + sideY * radius * 0.45 + wave1;
-      const cp2X = startX - radius * 0.75;
-      const cp2Y = startY + sideY * radius * 0.95 + wave2;
-      const endX = startX - radius * 2.1;
-      const endY = startY + sideY * radius * 1.35 + wave1 * 1.3;
+      const startX = pose.width * 0.1;
+      const startY = pose.height * 0.16 + sideY * radius * 0.22;
+      const wave1 = Math.sin(whiskTime + phase) * radius * 0.16;
+      const wave2 = Math.cos(whiskTime * 0.9 + phase) * radius * 0.22;
+      const cp1X = startX - radius * 1.1;
+      const cp1Y = startY + sideY * radius * 0.32 + wave1;
+      const cp2X = startX - radius * 2.3;
+      const cp2Y = startY + sideY * radius * 0.5 + wave2;
+      const endX = startX - radius * 3.6;
+      const endY = startY + sideY * radius * 0.62 + wave1 * 0.5;
 
       ctx.beginPath();
       ctx.moveTo(startX, startY);

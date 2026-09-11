@@ -4780,6 +4780,42 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
   }
 
 
+  // ---------------------------------------------------------------- sprite pose blending
+  // Sprite-based species swap between wholly different frames (idle, run, charge, fire,
+  // carried, asleep, ...) keyed on state, and that state flips in a single frame (pet.zap
+  // is a plain countdown that hits exactly 0), so drawing the new frame at full opacity the
+  // instant it changes is a hard cut: one frame is the old pose, the next is a completely
+  // different picture with a different anchor. A brief cross-dissolve between the outgoing
+  // and incoming frame, each kept at its own last-known size and offset, reads as a
+  // transition instead of a slide-show flip. Steady state, by far the common case, still
+  // costs exactly one drawImage, same as before.
+  const spritePoseBlend = new Map();
+  const SPRITE_BLEND_DUR = 0.1;
+  function drawPosedSprite(key, sprite, x, y, w, h) {
+    if (!sprite || !sprite.complete || !sprite.naturalWidth) return;
+    let bs = spritePoseBlend.get(key);
+    if (!bs) { bs = {}; spritePoseBlend.set(key, bs); }
+    if (bs.sprite && bs.sprite !== sprite) {
+      bs.prevSprite = bs.sprite;
+      bs.prevX = bs.x; bs.prevY = bs.y; bs.prevW = bs.w; bs.prevH = bs.h;
+      bs.blendStart = pet.t;
+    }
+    bs.sprite = sprite; bs.x = x; bs.y = y; bs.w = w; bs.h = h;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const p = bs.blendStart === undefined ? 1 : clamp((pet.t - bs.blendStart) / SPRITE_BLEND_DUR, 0, 1);
+    if (p < 1 && bs.prevSprite && bs.prevSprite.complete) {
+      ctx.save();
+      ctx.globalAlpha = 1 - p;
+      ctx.drawImage(bs.prevSprite, bs.prevX, bs.prevY, bs.prevW, bs.prevH);
+      ctx.globalAlpha = p;
+      ctx.drawImage(sprite, x, y, w, h);
+      ctx.restore();
+    } else {
+      ctx.drawImage(sprite, x, y, w, h);
+    }
+  }
+
   function drawRobot() {
     const st = stageOf(state);
     const r = petR();
@@ -5267,16 +5303,12 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
 
       // -------------------------------------------------------- Sprite Rendering
       if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-        ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
         const sw = sprite.naturalWidth;
         const sh = sprite.naturalHeight;
 
         const targetW = r * scaleMult;
         const targetH = targetW * (sh / sw);
-        ctx.drawImage(sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
-        ctx.restore();
+        drawPosedSprite('goku', sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
       } else {
         // Vector fallback
         ctx.fillStyle = '#fed732';
@@ -5932,14 +5964,10 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
 
       // -------------------------------------------------------- High-Definition Sprite Rendering
       if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-        ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
         const sw = sprite.naturalWidth;
         const sh = sprite.naturalHeight;
         const targetW = targetH * (sw / sh);
-        ctx.drawImage(sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
-        ctx.restore();
+        drawPosedSprite('pikachu', sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
       } else {
         // Vector fallback
         ctx.fillStyle = '#ffdd00';
@@ -6482,9 +6510,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         const drawX = -drawW * (isThrowing ? 0.40 : 0.50);
         const drawY = -targetH * 0.98;
 
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(sprite, drawX, drawY, drawW, targetH);
+        drawPosedSprite('mario', sprite, drawX, drawY, drawW, targetH);
       }
 
       ctx.restore();
@@ -6793,9 +6819,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       const drawX = -drawW * (sprite === ronaldoImgRun ? 0.52 : 0.48);
       const drawY = -targetH * 0.98;
 
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(sprite, drawX, drawY, drawW, targetH);
+      drawPosedSprite('ronaldo', sprite, drawX, drawY, drawW, targetH);
       ctx.restore();
     });
 
@@ -6980,9 +7004,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         const drawX = -targetW * (sprite === narutoImgRun ? 0.52 : (sprite === narutoImgCharge ? 0.48 : 0.46));
         const drawY = -targetH * yAlign;
 
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(sprite, drawX, drawY, targetW, targetH);
+        drawPosedSprite('naruto', sprite, drawX, drawY, targetW, targetH);
       }
 
       if (pet.walking && Math.random() < 0.35) {
@@ -7406,9 +7428,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       }
 
       // -------------------------------------------------------- Draw High-Definition Character Sprite
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
+      drawPosedSprite('ironman', sprite, drawX, drawY, drawW, drawH);
 
       // -------------------------------------------------------- Boot Repulsor Thruster Exhaust (front-view hover & side stances)
       if (!asleep && !isFlying) {
@@ -7844,8 +7864,8 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
 
   function drawThor() {
     const asleep = state.asleep;
-    const charging = (pet.zapCharge > 0 || (pet.attacking > 0 && pet.attacking < 0.45)) && !asleep;
-    const firing = (pet.zap > 0 || pet.attacking >= 0.45) && !asleep;
+    const charging = pet.zapCharge > 0 && !asleep;
+    const firing = pet.zap > 0 && !asleep;
     const isBoss = pet.zapBoss || false;
     const isThrow = (pet.zapStyle === 'weaponThrow') || isBoss;
 
@@ -7987,14 +8007,10 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       }
 
       if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-        ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
         const sw = sprite.naturalWidth;
         const sh = sprite.naturalHeight;
         const targetW = targetH * (sw / sh);
-        ctx.drawImage(sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
-        ctx.restore();
+        drawPosedSprite('thor', sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
       } else {
         // Fallback placeholder while image initializes
         ctx.fillStyle = '#1c2029';
@@ -8903,9 +8919,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         const drawX = -drawW * 0.5;
         const drawY = -drawH * yOffset;
 
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
+        drawPosedSprite('spiderman', sprite, drawX, drawY, drawW, drawH);
       }
 
       // Spider-Sense Ditko Lightning Halo Waves

@@ -305,6 +305,13 @@
         <div><span class="stat-k">Commits:</span> <span class="stat-v" id="gCommits">0</span></div>
         <div><span class="stat-k">Progress:</span> <span class="stat-v" id="gFormProgress">0%</span></div>
       </div>
+      <div class="rule" style="padding:0;margin:8px 0 8px;color:#ffb84d">Combat</div>
+      <div class="goku-stats">
+        <div><span class="stat-k">Enemy Pack:</span> <span class="stat-v" id="gEnemyPack">Goku Combat</span></div>
+        <div><span class="stat-k">Current Enemy:</span> <span class="stat-v" id="gCurrentEnemy">None</span></div>
+        <div><span class="stat-k">Defeated Today:</span> <span class="stat-v" id="gEnemiesDefeated">0</span></div>
+        <div><span class="stat-k">Boss:</span> <span class="stat-v" id="gBossState">None</span></div>
+      </div>
       <div class="goku-control"><label for="gokuSize">Goku size</label><input id="gokuSize" data-goku="size" type="range" min="0.6" max="1.6" step="0.05"><output></output></div>
       <div class="goku-control"><label for="gokuAnim">Animation</label><input id="gokuAnim" data-goku="animIntensity" type="range" min="0.5" max="2.0" step="0.05"><output></output></div>
       <div class="goku-control"><label for="gokuAura">Aura boost</label><input id="gokuAura" data-goku="auraIntensity" type="range" min="0.0" max="2.5" step="0.05"><output></output></div>
@@ -327,6 +334,17 @@
           <output id="gokuSimOutput">0</output>
         </div>
         <button type="button" class="goku-reset-btn" id="gokuResetSim">Reset to Real Commits</button>
+      </div>
+
+      <div class="goku-sim">
+        <div class="goku-sim-title">Dev: Spawn Enemy</div>
+        <div class="goku-presets">
+          <button type="button" class="goku-preset" data-spawn="fighter">Scrapper</button>
+          <button type="button" class="goku-preset" data-spawn="flying">Wisp</button>
+          <button type="button" class="goku-preset" data-spawn="fast">Dasher</button>
+          <button type="button" class="goku-preset" data-spawn="elite">Brute</button>
+          <button type="button" class="goku-preset" data-spawn="boss">Warlord (Boss)</button>
+        </div>
       </div>
     </div>
     <div class="thor-controls" id="thorControls" hidden>
@@ -870,11 +888,15 @@
     if (gokuControls) {
       gokuControls.hidden = p.species !== 'goku';
       const goku = p.goku || {};
+      // getGokuSnapshot() (bitling.html) is the source of truth for these field names -
+      // currentForm/formProgress already lined up, but power/commitsToday/simulated were
+      // being read under names (overallPower/effectiveCommits/isSimulated) the snapshot
+      // never actually sends, so Power and Commits always showed their fallback values.
       const gForm = goku.currentForm || 'Kid Goku';
-      const gPower = goku.overallPower || 1;
-      const gCommits = goku.effectiveCommits ?? 0;
-      const gProgress = Math.round((goku.formProgress || 0) * 100);
-      const isSim = !!goku.isSimulated;
+      const gPower = (goku.power || 0) / 100;
+      const gCommits = goku.commitsToday ?? 0;
+      const gProgress = Math.round(goku.formProgress || 0);
+      const isSim = !!goku.simulated;
 
       const fNameEl = $('#gFormName');
       if (fNameEl) fNameEl.textContent = gForm;
@@ -884,6 +906,14 @@
       if (fCommitsEl) fCommitsEl.textContent = `${gCommits}${isSim ? ' (sim)' : ''}`;
       const fProgressEl = $('#gFormProgress');
       if (fProgressEl) fProgressEl.textContent = `${gProgress}%`;
+      const fEnemyPackEl = $('#gEnemyPack');
+      if (fEnemyPackEl) fEnemyPackEl.textContent = goku.enemyPack || 'Goku Combat';
+      const fCurrentEnemyEl = $('#gCurrentEnemy');
+      if (fCurrentEnemyEl) fCurrentEnemyEl.textContent = goku.currentEnemy || 'None';
+      const fDefeatedEl = $('#gEnemiesDefeated');
+      if (fDefeatedEl) fDefeatedEl.textContent = String(goku.enemiesDefeated ?? 0);
+      const fBossEl = $('#gBossState');
+      if (fBossEl) fBossEl.textContent = goku.bossState || 'None';
 
       const gSettings = goku.settings || {};
       for (const input of document.querySelectorAll('[data-goku]')) {
@@ -968,6 +998,11 @@
     }
     if (e.target.closest('#gokuResetSim')) {
       send('action', 'goku:simulate:reset');
+      return;
+    }
+    const spawnPreset = e.target.closest('[data-spawn]');
+    if (spawnPreset) {
+      send('action', `goku:spawn:${spawnPreset.dataset.spawn}`);
       return;
     }
     const tPreset = e.target.closest('[data-thorsim]');

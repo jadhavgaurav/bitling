@@ -758,6 +758,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     } else if let n = Int(val) {
                         js("petNative.gokuSimulate(\(n))")
                     }
+                } else if sub == "spawn" {
+                    // Dev-only control room button: spawn one specific enemy from Goku's
+                    // pack (fighter/flying/fast/elite/boss) instead of the weighted
+                    // random pick, mirroring "simulate" above.
+                    js("petNative.gokuSpawnEnemy(\(jsString(val)))")
                 } else if let d = Double(val), d.isFinite {
                     js("petNative.gokuSetting(\(jsString(sub)), \(d))")
                 }

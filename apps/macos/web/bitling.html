@@ -2406,8 +2406,6 @@
   // ---------------------------------------------------------------- Shenron
   // A long procedural spine gives the head, body and tail separate timing. The detailed
   // head is an isolated asset; body geometry remains free to bend instead of sliding as one image.
-  const shenronImage = new Image();
-  shenronImage.src = 'assets/shenron.png'; // picker portrait
   const shenronHead = new Image();
   shenronHead.src = 'assets/shenron-head.png';
   const shenronBody = new Image();
@@ -9749,7 +9747,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
   const PET_ROSTER = [
     { id: 'mario', name: 'Mario', tag: 'Nintendo', icon: 'avatars/mario.png', accent: '#e52521', bg: 'linear-gradient(135deg, #3d0606 0%, #170000 100%)', border: 'rgba(255,215,0,0.45)', special: '🍄 Super Mushroom / Fireball' },
     { id: 'robot', name: 'Bitling', tag: 'Machine', icon: 'avatars/robot.png', accent: '#7ee7d7', bg: 'linear-gradient(135deg, #132225 0%, #091316 100%)', border: 'rgba(126,231,215,0.35)', special: '⚡ Overclock Laser' },
-    { id: 'dragon', name: 'Shenron', tag: 'Eternal Dragon', icon: shenronImage.src, accent: '#83ce46', bg: 'linear-gradient(135deg, #173b20 0%, #06130e 100%)', border: 'rgba(131,206,70,0.4)', special: '🐉 Dragon Breath' },
+    { id: 'dragon', name: 'Shenron', tag: 'Eternal Dragon', icon: 'avatars/dragon.png', accent: '#83ce46', bg: 'linear-gradient(135deg, #173b20 0%, #06130e 100%)', border: 'rgba(131,206,70,0.4)', special: '🐉 Dragon Breath' },
     { id: 'goku', name: 'Goku', tag: 'Saiyan', icon: 'avatars/goku.png', accent: '#fbbf24', bg: 'linear-gradient(135deg, #3d1b06 0%, #170900 100%)', border: 'rgba(251,191,36,0.4)', special: '⚡ Kamehameha' },
     { id: 'pikachu', name: 'Pikachu', tag: 'Electric', icon: 'avatars/pikachu.png', accent: '#eab308', bg: 'linear-gradient(135deg, #2e2600 0%, #131000 100%)', border: 'rgba(250,204,21,0.4)', special: '⚡ Thunderbolt' },
     { id: 'ironman', name: 'Iron Man', tag: 'Avenger', icon: 'avatars/ironman.png', accent: '#ef4444', bg: 'linear-gradient(135deg, #260a0a 0%, #100303 100%)', border: 'rgba(239,68,68,0.35)', special: '⚡ Unibeam' },

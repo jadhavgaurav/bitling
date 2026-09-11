@@ -981,9 +981,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             failure.runModal()
             return
         }
+        // The code only ever appears in this alert, which is gone the moment the button is
+        // clicked - if the user glances at the browser tab instead of this dialog, or it's
+        // simply covered by the window GitHub opens, the code is unrecoverable without
+        // cancelling and starting over. Put it on the clipboard so it's still available to
+        // paste into GitHub's boxes even after this alert has closed.
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code.userCode, forType: .string)
         let prompt = NSAlert()
         prompt.messageText = "Enter this code on GitHub"
-        prompt.informativeText = "\(code.userCode)\n\nBitling opens github.com/login/device; paste the code there to finish connecting."
+        prompt.informativeText = "\(code.userCode)\n\nAlready copied to your clipboard - paste it (⌘V) into the boxes on github.com/login/device, which Bitling opens next."
         prompt.addButton(withTitle: "Open GitHub")
         prompt.addButton(withTitle: "Cancel")
         guard prompt.runModal() == .alertFirstButtonReturn else { return }

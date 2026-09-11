@@ -4243,38 +4243,6 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
       return;
     }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
-    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
-      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
-      return;
-    }
     // Small expressions preserve personality without relocating or demanding attention.
     if (pet.t % 3 < 1) pet.stretchT = 1.6;
     else { pet.wander.x = (pet.facing || 1) * 0.25; pet.wander.y = 0; }
@@ -6825,6 +6793,8 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       const drawX = -drawW * (sprite === ronaldoImgRun ? 0.52 : 0.48);
       const drawY = -targetH * 0.98;
 
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(sprite, drawX, drawY, drawW, targetH);
       ctx.restore();
     });
@@ -7436,6 +7406,8 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       }
 
       // -------------------------------------------------------- Draw High-Definition Character Sprite
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
 
       // -------------------------------------------------------- Boot Repulsor Thruster Exhaust (front-view hover & side stances)
@@ -8931,6 +8903,8 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         const drawX = -drawW * 0.5;
         const drawY = -drawH * yOffset;
 
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
       }
 

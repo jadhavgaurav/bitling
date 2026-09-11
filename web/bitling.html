@@ -4273,6 +4273,10 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
       return;
     }
+    if (state.species === 'spiderman' && DESKTOP && W >= 600) {
+      if (typeof triggerSpideySwing === 'function') triggerSpideySwing();
+      return;
+    }
     // Small expressions preserve personality without relocating or demanding attention.
     if (pet.t % 3 < 1) pet.stretchT = 1.6;
     else { pet.wander.x = (pet.facing || 1) * 0.25; pet.wander.y = 0; }
@@ -9747,13 +9751,13 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     { id: 'robot', name: 'Bitling', tag: 'Machine', icon: 'avatars/robot.png', accent: '#7ee7d7', bg: 'linear-gradient(135deg, #132225 0%, #091316 100%)', border: 'rgba(126,231,215,0.35)', special: '⚡ Overclock Laser' },
     { id: 'dragon', name: 'Shenron', tag: 'Eternal Dragon', icon: shenronImage.src, accent: '#83ce46', bg: 'linear-gradient(135deg, #173b20 0%, #06130e 100%)', border: 'rgba(131,206,70,0.4)', special: '🐉 Dragon Breath' },
     { id: 'goku', name: 'Goku', tag: 'Saiyan', icon: 'avatars/goku.png', accent: '#fbbf24', bg: 'linear-gradient(135deg, #3d1b06 0%, #170900 100%)', border: 'rgba(251,191,36,0.4)', special: '⚡ Kamehameha' },
-    { id: 'rider', name: 'Rider', tag: 'Hero', icon: 'avatars/rider.png', accent: '#ffd166', bg: 'linear-gradient(135deg, #241d10 0%, #120e06 100%)', border: 'rgba(255,209,102,0.3)', special: '⚡ Rider Beam' },
     { id: 'pikachu', name: 'Pikachu', tag: 'Electric', icon: 'avatars/pikachu.png', accent: '#eab308', bg: 'linear-gradient(135deg, #2e2600 0%, #131000 100%)', border: 'rgba(250,204,21,0.4)', special: '⚡ Thunderbolt' },
     { id: 'ironman', name: 'Iron Man', tag: 'Avenger', icon: 'avatars/ironman.png', accent: '#ef4444', bg: 'linear-gradient(135deg, #260a0a 0%, #100303 100%)', border: 'rgba(239,68,68,0.35)', special: '⚡ Unibeam' },
     { id: 'kaiju', name: 'Godzilla', tag: 'Titan', icon: 'avatars/kaiju.png', accent: '#00f0ff', bg: 'linear-gradient(135deg, #091d24 0%, #040e13 100%)', border: 'rgba(0,240,255,0.35)', special: '☢️ Atomic Breath' },
     { id: 'ronaldo', name: 'CR7', tag: 'Striker', icon: 'avatars/ronaldo.png', accent: '#00e676', bg: 'linear-gradient(135deg, #072a10 0%, #031407 100%)', border: 'rgba(0,230,118,0.45)', special: '⚽ SIUUUU!' },
     { id: 'naruto', name: 'Naruto', tag: 'Ninja', icon: 'avatars/naruto.png', accent: '#ff7700', bg: 'linear-gradient(135deg, #2b1604 0%, #170c02 100%)', border: 'rgba(255,119,0,0.4)', special: '🌀 Rasenshuriken' },
     { id: 'thor', name: 'Thor', tag: 'Asgardian', icon: 'avatars/thor.png', accent: '#70b5ff', bg: 'linear-gradient(135deg, #0d1b2a 0%, #050b14 100%)', border: 'rgba(112,181,255,0.45)', special: '⚡ God of Thunder' },
+    { id: 'spiderman', name: 'Spider-Man', tag: 'Hero', icon: 'avatars/spiderman.png', accent: '#e23636', bg: 'linear-gradient(135deg, #2b0c0c 0%, #0c1833 100%)', border: 'rgba(226,54,54,0.45)', special: '🕸️ Web Thwip' },
   ];
 
   function updateSpecialBtn() {
@@ -9777,7 +9781,6 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         pikachu: 'TEAM ROCKET',
         kaiju: 'KING GHIDORAH',
         dragon: 'ICE WYRM (BOSS)',
-        rider: 'SHOCKER BOSS',
         robot: 'KERNEL PANIC',
         thor: 'LOKI / HELA (BOSS)',
       };
@@ -9901,9 +9904,6 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       } else if (speciesId === 'dragon') {
         audio.whoosh();
         say('I am Shenron. State your wish.', 2200);
-      } else if (speciesId === 'rider') {
-        audio.ok();
-        say('Henshin! Rider justice will protect this code!', 2200);
       } else {
         audio.squeak();
         say('Beep boop! Bitling initialized!', 2200);
@@ -9943,7 +9943,15 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
 
   // The GitHub Pages demo sets window.__demoControls so visitors can fire the real
   // developer events by hand. The app and the plain page never show this strip.
-  if (window.__demoControls) {
+  // When ?embedded=1 is in the URL the page is hosted inside the index.html iframe,
+  // which already provides its own pet switcher and event triggers — skip the inner ones.
+  const __embedded = new URLSearchParams(location.search).has('embedded');
+  if (__embedded) {
+    // Hide the feed/debug/sleep dock — the outer page provides equivalent controls.
+    const dock = $('#dock');
+    if (dock) dock.hidden = true;
+  }
+  if (window.__demoControls && !__embedded) {
     const petBar = $('#petBar');
     if (petBar) {
       petBar.hidden = false;

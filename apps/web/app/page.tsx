@@ -445,7 +445,7 @@ export default function Home() {
                 >
                   💬 Voice Quote
                 </button>
-                <a href="/demo.html" target="_blank" className="sim-trigger-btn" style={{ borderColor: "#38BDF8", color: "#38BDF8", textDecoration: "none" }}>
+                <a href="/demo" target="_blank" className="sim-trigger-btn" style={{ borderColor: "#38BDF8", color: "#38BDF8", textDecoration: "none" }}>
                   ⤢ Fullscreen
                 </a>
               </div>
@@ -788,7 +788,7 @@ defineSpecies({
             <div className="footer-col">
               <h4>Resources</h4>
               <ul>
-                <li><a href="/demo.html" target="_blank">Full Demo Stage</a></li>
+                <li><a href="/demo" target="_blank">Full Demo Stage</a></li>
                 <li><a href="https://github.com/jadhavgaurav/bitling" target="_blank">GitHub Repository</a></li>
                 <li><a href="https://github.com/jadhavgaurav/bitling/releases" target="_blank">Release Notes</a></li>
                 <li><a href="https://github.com/jadhavgaurav/bitling/blob/main/LICENSE" target="_blank">MIT License</a></li>

@@ -2,11 +2,14 @@
   "name": "bitling",
   "private": true,
   "engines": { "node": ">=22.13.0" },
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "lint": "node Tools/lint.mjs",
+    "lint": "node tools/lint.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check:bubbles": "node Tools/check_bubble_gap.mjs",
-    "build": "INSTALL=0 NATIVE=1 ./build.sh"
+    "check:bubbles": "node tools/check_bubble_gap.mjs",
+    "build:macos": "INSTALL=0 NATIVE=1 ./apps/macos/build.sh",
+    "dev:web": "npm run dev --workspace=@bitling/web",
+    "build:web": "npm run build --workspace=@bitling/web"
   },
   "devDependencies": {
     "eslint": "^10.10.0",

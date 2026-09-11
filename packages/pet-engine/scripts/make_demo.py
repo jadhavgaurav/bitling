@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Wrap the shared creature page into docs/index.html for the GitHub Pages demo."""
+"""Wrap the shared creature page into a standalone demo page.
+
+Defaults to docs/demo.html (the GitHub Pages demo); pass --out to write it
+somewhere else, e.g. apps/web's prebuild step writes apps/web/public/demo.html.
+"""
 from pathlib import Path
+import argparse
 import base64
 
-ROOT = Path(__file__).resolve().parent.parent
-body = (ROOT / "web" / "bitling.html").read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parent.parent.parent.parent
+MACOS = ROOT / "apps" / "macos"
+body = (MACOS / "web" / "bitling.html").read_text(encoding="utf-8")
 for filename in ("shenron.png", "shenron-head.png", "shenron-body.png", "shenron-limb.png"):
-    sprite = "data:image/png;base64," + base64.b64encode((ROOT / "web/assets" / filename).read_bytes()).decode("ascii")
+    sprite = "data:image/png;base64," + base64.b64encode((MACOS / "web/assets" / filename).read_bytes()).decode("ascii")
     body = body.replace(f"assets/{filename}", sprite)
 
 page = f"""<!doctype html>
@@ -28,6 +34,10 @@ page = f"""<!doctype html>
 </body>
 </html>
 """
-out = ROOT / "docs" / "index.html"
+parser = argparse.ArgumentParser()
+parser.add_argument("--out", type=Path, default=ROOT / "docs" / "demo.html")
+args = parser.parse_args()
+out = args.out if args.out.is_absolute() else Path.cwd() / args.out
+out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(page, encoding="utf-8")
 print(f"wrote {out} ({len(page)} bytes)")

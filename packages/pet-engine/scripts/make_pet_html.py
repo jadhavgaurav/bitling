@@ -23,7 +23,7 @@ def patch(src: str, old: str, new: str) -> str:
 
 def build(source: Path, target: Path) -> None:
     s = source.read_text(encoding="utf-8")
-    asset_root = Path(__file__).resolve().parent.parent / "web/assets"
+    asset_root = Path(__file__).resolve().parent.parent.parent.parent / "apps/macos/web/assets"
     for filename in ("shenron.png", "shenron-head.png", "shenron-body.png", "shenron-limb.png"):
         asset = asset_root / filename
         sprite = "data:image/png;base64," + base64.b64encode(asset.read_bytes()).decode("ascii")

@@ -1,5 +1,7 @@
 build/
-Resources/pet.html
+apps/macos/Resources/pet.html
+apps/web/public/demo.html
+apps/web/.next/
 .DS_Store
 node_modules/
 artifacts/

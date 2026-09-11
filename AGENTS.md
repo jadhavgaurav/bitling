@@ -1,9 +1,17 @@
 # Working on Bitling
 
-One HTML canvas page (`web/bitling.html`) draws the creature. A Swift host renders it in a
-borderless transparent window and supplies what a web page cannot do. `Resources/pet.html`
-and `docs/index.html` are **generated** from that page by `Tools/make_pet_html.py` and
-`Tools/make_demo.py`; never edit them by hand, your change will be overwritten on the next
+This is an npm-workspaces monorepo. `apps/macos/` is the Swift menubar app. `apps/web/` is
+the Next.js 16 marketing site. `packages/pet-engine/` holds the build tooling shared by both
+(see its README for why the engine's source stays one hand-edited file rather than being
+split into per-species modules). `tools/` holds the remaining scripts the build/test/lint
+pipeline calls directly, with everything else from past one-off feature migrations moved to
+`tools/legacy/` for reference.
+
+One HTML canvas page (`apps/macos/web/bitling.html`) draws the creature. A Swift host renders
+it in a borderless transparent window and supplies what a web page cannot do.
+`apps/macos/Resources/pet.html` and `docs/demo.html` / `apps/web/public/demo.html` are
+**generated** from that page by `packages/pet-engine/scripts/make_pet_html.py` and
+`.../make_demo.py`; never edit them by hand, your change will be overwritten on the next
 build.
 
 This file is read by whatever coding agent is working in this repo (Claude Code, Codex,
@@ -15,11 +23,11 @@ same time — see "Working alongside other agents" below before touching a share
 ```bash
 npm run lint                      # JavaScript in the pet page, the panel and the tools
 npm test                          # species, rendering, walk cycle, host bridge
-node Tools/check_bubble_gap.mjs   # speech bubble clearance for every pet
-./build.sh                        # universal binary, installs to /Applications
+node tools/check_bubble_gap.mjs   # speech bubble clearance for every pet
+./apps/macos/build.sh             # universal binary, installs to /Applications
 ```
 
-**Watch for the launch race.** `build.sh` quits the app, writes the bundle, and only then is
+**Watch for the launch race.** `apps/macos/build.sh` quits the app, writes the bundle, and only then is
 it safe to reopen. Launching in the same second means the running app loaded the *previous*
 `pet.html`, and your change will look like it did nothing. If something seems not to have
 landed, compare these before debugging the code:
@@ -32,7 +40,8 @@ stat -f "%Sm" /Applications/Bitling.app/Contents/Resources/pet.html
 ## Working alongside other agents
 
 This repository is worked on by several agents concurrently, sometimes in the same minute.
-Before editing a shared file (`web/bitling.html`, `Sources/*.swift`, `web/panel.html`):
+Before editing a shared file (`apps/macos/web/bitling.html`, `apps/macos/Sources/*.swift`,
+`apps/macos/web/panel.html`):
 
 - Check the file's mtime and give it a quiet moment if it changed very recently; another
   agent may still be mid-edit.
@@ -48,7 +57,7 @@ Before editing a shared file (`web/bitling.html`, `Sources/*.swift`, `web/panel.
 
 A species owns its look, proportions, movement, voice and attack. Everything else, the
 needs and growth and events and speech bubbles, is shared. Register it in `SPECIES` in
-`web/bitling.html`.
+`apps/macos/web/bitling.html`.
 
 ```js
 defineSpecies({
@@ -75,7 +84,7 @@ These two numbers are the whole contract between a drawing and the code around i
 places the speech bubble; `half` keeps the creature inside its window. Both have been wrong
 on every pet at least once, and neither is visible from reading the code.
 
-Run `node Tools/check_bubble_gap.mjs` after any change to a pet's art, proportions or
+Run `node tools/check_bubble_gap.mjs` after any change to a pet's art, proportions or
 growth stages. It renders each species, shows it a short line and a long one, and compares
 the topmost painted pixel with the bottom of the bubble's tail across a whole animation.
 The gap must land between 8 and 24 pixels. Each species gets its own fresh page: measuring
@@ -128,8 +137,8 @@ starts saying the electric mouse's lines.
 Screen capture is blocked on this machine, so drive the page directly instead. `petNative`
 exposes `advance(seconds)` to step the simulation deterministically, `place(x)`,
 `setSpecies(id)`, `flight(state)`, `flightVec(x, y)` and `debug()` for a state snapshot.
-Serve `Resources/pet.html` over http with a stub `window.webkit` and a seeded
-`window.__petSavedState`, then read pixels back off the canvas. `Tools/check_bubble_gap.mjs`
+Serve `apps/macos/Resources/pet.html` over http with a stub `window.webkit` and a seeded
+`window.__petSavedState`, then read pixels back off the canvas. `tools/check_bubble_gap.mjs`
 is a worked example.
 
 Measure the thing the user can see. Several checks have passed while the bug was plainly
@@ -151,9 +160,10 @@ an edge case.
 
 - The device flow needs a real GitHub OAuth App (Settings → Developer settings → OAuth Apps,
   "Enable Device Flow" checked) to get a client ID. Client IDs are public identifiers, safe to
-  commit; this one lives in `Sources/GitHubAuth.swift`. No client secret is needed or stored.
+  commit; this one lives in `apps/macos/Sources/GitHubAuth.swift`. No client secret is needed
+  or stored.
 - The token lives in the Keychain (service `app.bitling.pet.github`), not in UserDefaults.
-- Rebuilding via `./build.sh` re-signs the app ad hoc, which changes its code identity, so a
+- Rebuilding via `./apps/macos/build.sh` re-signs the app ad hoc, which changes its code identity, so a
   Keychain item written by yesterday's build can prompt for access again after a rebuild. Not
   a bug: it goes away with a real Developer ID signature.
 - Both transports return the same REST JSON shapes (`repos/{slug}/actions/runs`,

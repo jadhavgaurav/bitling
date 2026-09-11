@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Cristiano Ronaldo species definition, dual attacks, and soccer audio synth', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-ronaldo-test-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
 
   // Verify registration in HTML
@@ -33,7 +33,7 @@ test('desktop Ronaldo renders every sprite pose without errors, switches species
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__ronaldoTest = { pet, state, draw, drawRonaldo, drawRonaldoAttack, ctx, canvas, petR, species, SPECIES, updatePet };
@@ -146,7 +146,7 @@ test('free soccer ball physics, interactive kicking, bug striking, and theatrica
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__ronaldoTest = { pet, state, draw, drawRonaldo, ronaldoBall, ronaldoGoal, scoreRonaldoGoal, updateRonaldoBall, bugs, groundY, W };

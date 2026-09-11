@@ -1,28 +1,28 @@
 # Graph Report - Bitling  (2026-09-11)
 
 ## Corpus Check
-- 116 files · ~767,572 words
+- 117 files · ~773,154 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 853 nodes · 1598 edges · 128 communities (87 shown, 41 thin omitted)
+- 868 nodes · 1629 edges · 129 communities (88 shown, 41 thin omitted)
 - Extraction: 89% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 167 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b6c296e4`
+- Built from commit: `e16c62a4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - OverlayView
 - CIWatcher
-- ClaudeWatcher
+- GitEvent
 - GitWatcher
 - web/bitling.html (Bitling Pet Renderer)
 - package.json
 - Path
-- PetWindow
+- .userContentController
 - Clean Pikachu Charge Sprite (White/Gray Pass 2)
 - build.sh
 - Pet Species Roster Table
@@ -92,11 +92,12 @@
 - petting-reactions.test.mjs
 - AppDelegate
 - String
-- GitHubAuth
-- .menuNeedsUpdate
+- PetWindow
+- .js
 - verify_spiderman_sleep_visuals.mjs
 - spiderman_sleep.test.mjs
 - .buildWebView
+- app.js
 
 ## God Nodes (most connected - your core abstractions)
 1. `AppDelegate` - 92 edges
@@ -149,23 +150,23 @@
 - **Float-kind species (hover in place)** — web_bitling_species_dragon, web_bitling_species_rider, web_bitling_species_goku, web_bitling_species_ironman [INFERRED 0.70]
 - **Pop-culture licensed character species** — web_bitling_species_goku, web_bitling_species_pikachu, web_bitling_species_ironman, web_bitling_species_ronaldo, web_bitling_species_naruto, web_bitling_species_mario [INFERRED 0.60]
 
-## Communities (128 total, 41 thin omitted)
+## Communities (129 total, 41 thin omitted)
 
 ### Community 0 - "OverlayView"
-Cohesion: 0.12
-Nodes (28): CGContext, CGPoint, NSColor, NSView, WKScriptMessage, WKUserContentController, Beam, Beetle (+20 more)
+Cohesion: 0.13
+Nodes (26): CGContext, CGPoint, NSColor, NSView, Beam, Beetle, .alive, .size (+18 more)
 
 ### Community 1 - "CIWatcher"
 Cohesion: 0.08
-Nodes (25): AppKit, Foundation, CIWatcher, Any, Bool, Data, Date, Set (+17 more)
+Nodes (28): Foundation, LocalizedError, Security, CIWatcher, Any, Bool, Data, Date (+20 more)
 
-### Community 2 - "ClaudeWatcher"
-Cohesion: 0.18
-Nodes (13): ISO8601DateFormatter, ClaudeWatcher, .activeSessionCount, Session, Any, Bool, Date, Int (+5 more)
+### Community 2 - "GitEvent"
+Cohesion: 0.09
+Nodes (26): AppKit, ISO8601DateFormatter, ClaudeWatcher, .activeSessionCount, Session, Any, Bool, Date (+18 more)
 
 ### Community 3 - "GitWatcher"
-Cohesion: 0.13
-Nodes (16): GitStatus, .asDictionary, GitWatcher, .repositoryCount, .roots, ReflogLine, Date, Int (+8 more)
+Cohesion: 0.12
+Nodes (17): GitStatus, .asDictionary, GitWatcher, .repositoryCount, .roots, ReflogLine, Date, Int (+9 more)
 
 ### Community 4 - "web/bitling.html (Bitling Pet Renderer)"
 Cohesion: 0.09
@@ -179,9 +180,9 @@ Nodes (16): eslint, globals, devDependencies, eslint, globals, playwright, engin
 Cohesion: 0.08
 Nodes (17): Path, run_fix(), main(), main(), get_b64_resized(), main(), chroma_key(), main() (+9 more)
 
-### Community 7 - "PetWindow"
-Cohesion: 0.13
-Nodes (12): NSEvent, NSWindow, PetWindow, .canBecomeKey, .canBecomeMain, CGFloat, NSPoint, NSRect (+4 more)
+### Community 7 - ".userContentController"
+Cohesion: 0.16
+Nodes (4): NSApplication, Bool, CGFloat, WKScriptMessage
 
 ### Community 8 - "Clean Pikachu Charge Sprite (White/Gray Pass 2)"
 Cohesion: 0.29
@@ -296,24 +297,28 @@ Cohesion: 0.67
 Nodes (3): Goku on Flying Nimbus Animated Demo, Goku Demo Background Landscape, Goku/Dragon Ball themed pet skin or Easter egg
 
 ### Community 103 - "ControlPanel"
-Cohesion: 0.12
-Nodes (14): NSApplication, NSObject, NSSize, ControlPanel, .isOpen, Bool, NSWindow, Void (+6 more)
+Cohesion: 0.13
+Nodes (13): NSObject, NSSize, ControlPanel, .isOpen, Bool, NSWindow, Void, WKNavigation (+5 more)
 
 ### Community 121 - "AppDelegate"
-Cohesion: 0.14
-Nodes (7): Notification, NSApplicationDelegate, NSMenuDelegate, NSStatusItem, AppDelegate, Date, Timer
+Cohesion: 0.12
+Nodes (10): Notification, NSApplicationDelegate, NSMenu, NSMenuDelegate, NSMenuItem, NSStatusItem, AppDelegate, Date (+2 more)
 
 ### Community 122 - "String"
-Cohesion: 0.14
-Nodes (14): Double, ServiceManagement, ClaudeHooks, .command, .settingsURL, GitHooks, .directory, HooksError (+6 more)
+Cohesion: 0.18
+Nodes (12): Double, ClaudeHooks, .command, .settingsURL, GitHooks, .directory, HooksError, .errorDescription (+4 more)
 
-### Community 123 - "GitHubAuth"
+### Community 123 - "PetWindow"
 Cohesion: 0.14
-Nodes (17): LocalizedError, Security, AuthError, denied, .errorDescription, expired, network, notConfigured (+9 more)
+Nodes (11): NSEvent, NSWindow, ServiceManagement, PetWindow, .canBecomeKey, .canBecomeMain, NSPoint, NSRect (+3 more)
 
-### Community 124 - ".menuNeedsUpdate"
-Cohesion: 0.32
-Nodes (3): NSMenu, NSMenuItem, Int
+### Community 127 - ".buildWebView"
+Cohesion: 0.40
+Nodes (3): WKNavigation, WKUserContentController, WKWebView
+
+### Community 128 - "app.js"
+Cohesion: 0.30
+Nodes (11): copyToClipboard(), fallbackCopy(), openPetModal(), PETS_DATA, renderPetGallery(), setupCopyButtons(), setupFilterListeners(), setupSimulatorBridge() (+3 more)
 
 ## Ambiguous Edges - Review These
 - `Apply Goku Combat Animations` → `Apply HD Goku Sprites`  [AMBIGUOUS]
@@ -345,7 +350,7 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `frame()/update()/draw() main loop` and `HOST native/webkit message bridge`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `AppDelegate` connect `AppDelegate` to `OverlayView`, `CIWatcher`, `ClaudeWatcher`, `GitWatcher`, `Flight`, `ControlPanel`, `PetWindow`, `build.sh`, `String`, `GitHubAuth`, `.menuNeedsUpdate`, `.buildWebView`?**
-  _High betweenness centrality (0.159) - this node is a cross-community bridge._
+- **Why does `AppDelegate` connect `AppDelegate` to `OverlayView`, `CIWatcher`, `GitEvent`, `GitWatcher`, `Flight`, `ControlPanel`, `.userContentController`, `build.sh`, `String`, `PetWindow`, `.js`, `.buildWebView`?**
+  _High betweenness centrality (0.153) - this node is a cross-community bridge._
 - **Why does `Bitling README Overview` connect `Bitling README Overview` to `build.sh`, `Pet Species Roster Table`, `web/bitling.html (shared creature page)`, `Working on Bitling (AGENTS.md)`, `Bitling Control Room Page`?**
-  _High betweenness centrality (0.083) - this node is a cross-community bridge._
+  _High betweenness centrality (0.080) - this node is a cross-community bridge._

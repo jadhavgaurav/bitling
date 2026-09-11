@@ -17,19 +17,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build universal app and disk image
-        run: ./release.sh
+        run: ./apps/macos/release.sh
 
       - name: Check the binary carries both architectures
         run: |
-          lipo -archs build/Bitling.app/Contents/MacOS/Bitling | tee /dev/stderr | grep -q arm64
-          lipo -archs build/Bitling.app/Contents/MacOS/Bitling | grep -q x86_64
+          lipo -archs apps/macos/build/Bitling.app/Contents/MacOS/Bitling | tee /dev/stderr | grep -q arm64
+          lipo -archs apps/macos/build/Bitling.app/Contents/MacOS/Bitling | grep -q x86_64
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-          gh release create "${GITHUB_REF_NAME}" "build/Bitling-${VERSION}.dmg" \
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' apps/macos/Resources/Info.plist)"
+          gh release create "${GITHUB_REF_NAME}" "apps/macos/build/Bitling-${VERSION}.dmg" \
             --title "Bitling ${VERSION}" \
             --notes-file .github/RELEASE_NOTES.md \
-            || gh release upload "${GITHUB_REF_NAME}" "build/Bitling-${VERSION}.dmg" --clobber
+            || gh release upload "${GITHUB_REF_NAME}" "apps/macos/build/Bitling-${VERSION}.dmg" --clobber

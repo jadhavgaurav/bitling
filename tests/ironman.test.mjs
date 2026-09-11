@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Iron Man species definition, arcade audio buffers, dual attacks, and Jarvis voice lines', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-ironman-test-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
 
   // Verify registration in HTML
@@ -33,7 +33,7 @@ test('desktop Iron Man renders every pose without errors, switches species via h
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__ironmanTest = { pet, state, draw, drawIronMan, ctx, canvas, petR, species, SPECIES, updatePet };

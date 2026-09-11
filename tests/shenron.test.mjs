@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Shenron uses a large transparent animated stage, sleeps in air and preserves existing species', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-shenron-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {

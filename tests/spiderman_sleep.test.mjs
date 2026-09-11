@@ -5,7 +5,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PAGE = resolve(HERE, '..', 'Resources', 'pet.html');
+const PAGE = resolve(HERE, '..', 'apps', 'macos', 'Resources', 'pet.html');
 
 test('Spider-Man upside-down hanging sleep mode, elastic web dragging, bungee physics, and somersault wake', async () => {
   try {

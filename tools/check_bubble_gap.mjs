@@ -14,9 +14,9 @@
  * per species removes that as a variable entirely, rather than guessing at which timer
  * was responsible.
  *
- *   node Tools/check_bubble_gap.mjs            # all species
- *   node Tools/check_bubble_gap.mjs kaiju      # one
- *   node Tools/check_bubble_gap.mjs --debug    # print every sampled frame
+ *   node tools/check_bubble_gap.mjs            # all species
+ *   node tools/check_bubble_gap.mjs kaiju      # one
+ *   node tools/check_bubble_gap.mjs --debug    # print every sampled frame
  *
  * Fixing a failure: gap changes by r * delta-reach, so if a pet is 20px too generous and
  * its radius is 40, subtract 0.5 from its reach. Re-run to confirm.
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PAGE = resolve(HERE, '..', 'Resources', 'pet.html');
+const PAGE = resolve(HERE, '..', 'apps', 'macos', 'Resources', 'pet.html');
 const MIN = 8;      // any less and the bubble crowds the head
 const MAX = 24;     // any more and there is a visible hole under it
 

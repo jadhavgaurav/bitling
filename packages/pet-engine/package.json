@@ -1,0 +1,6 @@
+{
+  "name": "@bitling/pet-engine",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Build tooling that turns apps/macos/web/bitling.html into the desktop pet.html and the web demo.html used by apps/macos and apps/web."
+}

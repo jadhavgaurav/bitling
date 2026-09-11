@@ -8,9 +8,9 @@ import test from 'node:test';
 
 const run = promisify(execFile);
 test('the actual desktop attack renderer produces cyan atomic breath', async () => {
-  const html = await readFile('web/bitling.html', 'utf8');
+  const html = await readFile('apps/macos/web/bitling.html', 'utf8');
   const style = html.slice(html.indexOf("id: 'kaiju'")).match(/style: '([^']+)'/)[1];
-  const overlay = await readFile('Sources/Overlay.swift', 'utf8');
+  const overlay = await readFile('apps/macos/Sources/Overlay.swift', 'utf8');
   const directory = await mkdtemp(join(tmpdir(), 'bitling-native-test-'));
   try {
     const probe = `

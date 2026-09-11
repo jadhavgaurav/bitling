@@ -13,7 +13,7 @@ test('each species has a distinct petting reaction profile and visual state', as
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace('  // ---------------------------------------------------------------- boot',
       `window.__petting = { pet, state, petTap, update, SPECIES };
   // ---------------------------------------------------------------- boot`);

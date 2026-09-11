@@ -14,7 +14,7 @@ test('every pet rests, takes one bounded trip, and rests again', async () => {
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace('  // ---------------------------------------------------------------- boot',
       `window.__calm = { pet, state, update, doIdle, handleFlight, release, SPECIES, shenron, ronaldoBall, snack };
   // ---------------------------------------------------------------- boot`);
@@ -68,7 +68,7 @@ test('placement, species switching, busy states and reduced motion preserve quie
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace('  // ---------------------------------------------------------------- boot',
       `window.__calm = { pet, state, updateAmbientMovement, updatePet, doIdle, comeDown, snack, SPECIES };
   // ---------------------------------------------------------------- boot`);
@@ -129,7 +129,7 @@ test('placement, species switching, busy states and reduced motion preserve quie
 test('browser pets finish a nearby trip and remain parked, including floating species', async () => {
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
-    const html = (await readFile('web/bitling.html', 'utf8')).replace('  // ---------------------------------------------------------------- boot',
+    const html = (await readFile('apps/macos/web/bitling.html', 'utf8')).replace('  // ---------------------------------------------------------------- boot',
       `window.__calm = { pet, state, update, selectSpecies, SPECIES };
   // ---------------------------------------------------------------- boot`);
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

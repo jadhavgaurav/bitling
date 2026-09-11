@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Kid Goku on Flying Nimbus species definition, dual attacks, and voice lines', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-goku-test-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
 
   // Verify registration in HTML
@@ -27,7 +27,7 @@ test('desktop Kid Goku renders every pose without errors, switches species via h
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__gokuTest = { pet, state, draw, drawGoku, ctx, canvas, petR, species, SPECIES, updatePet };
@@ -137,7 +137,7 @@ test('Goku Git-powered training arc: 6 forms, continuous scaling, dev simulation
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__gokuTest = { pet, state, draw, drawGoku, ctx, canvas, petR, species, SPECIES, getGokuSnapshot, getGokuPower, gokuState };

@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/jadhavgaurav/bitling/main/install.s
 ```
 
 That downloads the latest release, installs it to `/Applications`, links the `bitling`
-command and opens it. Nothing to click through. ([Read the script first](install.sh) if you
+command and opens it. Nothing to click through. ([Read the script first](apps/macos/install.sh) if you
 would rather see what it does.)
 
 Bitling puts an icon in the Dock: click it to open the control room. There is also a
@@ -82,16 +82,17 @@ and with it how it moves, what it says and how it deals with a bug.
 
 | Avatar | Pet | Type | Moves | Deals with bugs |
 |:---:|---|---|---|---|
-| <img src="web/avatars/robot.png" width="48" height="48" alt="Bitling"> | **Bitling**<br><sub>The Little Machine</sub> | Walker | Stands on your dock, walks along the bottom edge of your screen | Twin cyan laser beams from its eyes |
-| <img src="web/avatars/dragon.png" width="48" height="48" alt="Ember"> | **Ember**<br><sub>Baby Dragon</sub> | Floater | Floats in mid-air, flaps its wings, and stays wherever you let go of it | Streams of dragon fire |
-| <img src="web/avatars/rider.png" width="48" height="48" alt="Nimbo"> | **Nimbo**<br><sub>Cloud Fighter</sub> | Floater | Sits cross-legged on a small golden cloud | Two-handed charging energy blast |
-| <img src="web/avatars/goku.png" width="48" height="48" alt="Goku"> | **Goku**<br><sub>Kid Goku</sub> | Floater | Rides the Flying Nimbus (Kintoun) with Power Pole and Turtle School Gi | Rapid Ki Blasts for small bugs; Kamehameha wave for bosses |
-| <img src="web/avatars/pikachu.png" width="48" height="48" alt="Pikachu"> | **Pikachu**<br><sub>Electric Mouse</sub> | Walker | Four-legged scamper, walks your screen, cute scruff-drag with dangling paws | Crackling Electro Balls for small bugs; 100,000-Volt sky Thunderbolts for bosses |
-| <img src="web/avatars/ironman.png" width="48" height="48" alt="Iron Man"> | **Iron Man**<br><sub>Armored Avenger</sub> | Floater | Hovers with active pulse repulsor boot thrusters in classic Mark III armor | Palm Repulsor Blasts for small bugs; chest Arc Reactor Unibeam for bosses |
-| <img src="web/avatars/kaiju.png" width="48" height="48" alt="Rumble"> | **Rumble**<br><sub>Atomic Titan</sub> | Walker | Heavy planted footsteps, sweeping tail, and luminous cyan dorsal plates | Stomps nearby bugs; fires cyan atomic breath |
-| <img src="web/avatars/naruto.png" width="48" height="48" alt="Naruto"> | **Naruto**<br><sub>Ninja of the Leaf</sub> | Walker | Low-profile ninja sprint with arms swept back, Konoha headband and orange jumpsuit | Spinning Chakra Shurikens for small bugs; spiraling Fuuton Rasenshuriken for bosses |
-| <img src="web/avatars/ronaldo.png" width="48" height="48" alt="CR7"> | **CR7**<br><sub>Cristiano Ronaldo</sub> | Walker | High-definition real CR7 likeness with free unattached soccer ball physics, dynamic dribbles, juggling, and interactive kicking | Kicks the free soccer ball with knuckleball/SIUUU strikes to smash and kill bugs; blasts top bins into a stadium goal net on git push |
-| <img src="web/avatars/mario.png" width="48" height="48" alt="Mario"> | **Mario**<br><sub>Super Mario</sub> | Walker | High-definition 3D animated character likeness (Disney / Illumination movie style) with commit-based evolution (Small &rarr; Super &rarr; Fire &rarr; Star Mario) | Jump stomps bugs with dynamic bounce; hurls 3D blazing fireballs; headbutts 3D `?` blocks for Super Mushrooms/spinning coins and leaps into 3D green Warp Pipes |
+| <img src="apps/macos/web/avatars/robot.png" width="48" height="48" alt="Bitling"> | **Bitling**<br><sub>The Little Machine</sub> | Walker | Stands on your dock, walks along the bottom edge of your screen | Twin cyan laser beams from its eyes |
+| <img src="apps/macos/web/avatars/dragon.png" width="48" height="48" alt="Ember"> | **Ember**<br><sub>Baby Dragon</sub> | Floater | Floats in mid-air, flaps its wings, and stays wherever you let go of it | Streams of dragon fire |
+| <img src="apps/macos/web/avatars/spiderman.png" width="48" height="48" alt="Spider-Man"> | **Spider-Man**<br><sub>Friendly Neighborhood Hero</sub> | Walker | 3D suit, skyline swinging, expressive eye shutters, and Spidey-Sense warnings | Web Thwip & Slingshot dive attacks |
+| <img src="apps/macos/web/avatars/thor.png" width="48" height="48" alt="Thor"> | **Thor**<br><sub>God of Thunder</sub> | Floater | Wields Mjolnir, commands lightning storms, and forges Stormbreaker at 25+ commits | Divine Thunder & Mjolnir hammer spin |
+| <img src="apps/macos/web/avatars/goku.png" width="48" height="48" alt="Goku"> | **Goku**<br><sub>Kid Goku</sub> | Floater | Rides the Flying Nimbus (Kintoun) with Power Pole and Turtle School Gi | Rapid Ki Blasts for small bugs; Kamehameha wave for bosses |
+| <img src="apps/macos/web/avatars/pikachu.png" width="48" height="48" alt="Pikachu"> | **Pikachu**<br><sub>Electric Mouse</sub> | Walker | Four-legged scamper, walks your screen, cute scruff-drag with dangling paws | Crackling Electro Balls for small bugs; 100,000-Volt sky Thunderbolts for bosses |
+| <img src="apps/macos/web/avatars/ironman.png" width="48" height="48" alt="Iron Man"> | **Iron Man**<br><sub>Armored Avenger</sub> | Floater | Hovers with active pulse repulsor boot thrusters in classic Mark III armor | Palm Repulsor Blasts for small bugs; chest Arc Reactor Unibeam for bosses |
+| <img src="apps/macos/web/avatars/kaiju.png" width="48" height="48" alt="Rumble"> | **Rumble**<br><sub>Atomic Titan</sub> | Walker | Heavy planted footsteps, sweeping tail, and luminous cyan dorsal plates | Stomps nearby bugs; fires cyan atomic breath |
+| <img src="apps/macos/web/avatars/naruto.png" width="48" height="48" alt="Naruto"> | **Naruto**<br><sub>Ninja of the Leaf</sub> | Walker | Low-profile ninja sprint with arms swept back, Konoha headband and orange jumpsuit | Spinning Chakra Shurikens for small bugs; spiraling Fuuton Rasenshuriken for bosses |
+| <img src="apps/macos/web/avatars/ronaldo.png" width="48" height="48" alt="CR7"> | **CR7**<br><sub>Cristiano Ronaldo</sub> | Walker | High-definition real CR7 likeness with free unattached soccer ball physics, dynamic dribbles, juggling, and interactive kicking | Kicks the free soccer ball with knuckleball/SIUUU strikes to smash and kill bugs; blasts top bins into a stadium goal net on git push |
+| <img src="apps/macos/web/avatars/mario.png" width="48" height="48" alt="Mario"> | **Mario**<br><sub>Super Mario</sub> | Walker | High-definition 3D animated character likeness (Disney / Illumination movie style) with commit-based evolution (Small &rarr; Super &rarr; Fire &rarr; Star Mario) | Jump stomps bugs with dynamic bounce; hurls 3D blazing fireballs; headbutts 3D `?` blocks for Super Mushrooms/spinning coins and leaps into 3D green Warp Pipes |
 
 - **Mario** (Super Mario) delivers an animated 3D movie-quality experience (Illumination / Disney style) powered by your git activity. Mario starts as Small Mario (0 commits), leaping up to punch floating 3D `?` Question Mark blocks on commits to spawn 3D Super Mushrooms and spinning gold coins. With more commits, he levels up and grows into full-height **Super Mario** (1.35&times; height), **Fire Mario** (classic white-and-red fire suit, hurling blazing 3D fireballs that incinerate bugs), and **Star Mario** (orbiting 3D Super Star and rainbow-cycling invincibility). Failing test suites trigger a power-down shrink penalty, and code deployments (`git push`) summon a 3D green Warp Pipe with the nostalgic *Course Clear!* flagpole victory fanfare and fireworks.
 - **Rumble** takes off the way Godzilla did in *Godzilla vs. Hedorah* (1971), the one film where he flies: it points its jaw at the ground and rides its own breath.
@@ -110,11 +111,11 @@ A **walker** stands on the bottom edge of the screen, wanders, and opens a parac
 throw it. A **floater** never touches the ground: it hangs in mid air, drifts somewhere new
 now and then, and when you drag it and let go it stays exactly where you left it.
 
-From a shell: `bitling pet mario`, `bitling pet ronaldo`, `bitling pet naruto`, `bitling pet ironman`, `bitling pet pikachu`, `bitling pet goku`, `bitling pet kaiju`, `bitling pet dragon`, `bitling pet rider`, or `bitling pet robot`.
+From a shell: `bitling pet mario`, `bitling pet ronaldo`, `bitling pet naruto`, `bitling pet spiderman`, `bitling pet thor`, `bitling pet ironman`, `bitling pet pikachu`, `bitling pet goku`, `bitling pet kaiju`, `bitling pet dragon`, or `bitling pet robot`.
 
 Adding one is a drawing and a voice, not a fork. A species declares its look, its
 proportions, how it gets around, the phrases it replaces, and how it attacks; the needs,
-growth, events and speech bubbles are shared. See `SPECIES` in `web/bitling.html`.
+growth, events and speech bubbles are shared. See `SPECIES` in `apps/macos/web/bitling.html`.
 
 ## Meet Bitling
 
@@ -350,12 +351,12 @@ Requires macOS 13 or newer and the Xcode Command Line Tools (`xcode-select --ins
 ```bash
 git clone https://github.com/jadhavgaurav/bitling.git
 cd bitling
-./build.sh
+./apps/macos/build.sh
 ```
 
 That derives the pet page, compiles a universal binary, draws the icon, ad-hoc signs the
 bundle, installs `/Applications/Bitling.app`, and links the `bitling` command. Use
-`INSTALL=0 ./build.sh` to build without installing, or `NATIVE=1` to skip the second
+`INSTALL=0 ./apps/macos/build.sh` to build without installing, or `NATIVE=1` to skip the second
 architecture while developing.
 
 To check changes on macOS, use Node.js 22.13+ and Google Chrome:
@@ -364,7 +365,7 @@ To check changes on macOS, use Node.js 22.13+ and Google Chrome:
 npm ci
 npm run lint
 npm test
-npm run build              # host architecture, without installing
+npm run build:macos        # host architecture, without installing
 ```
 
 The tests cover foot contact, desktop animation bounds and bridge actions, and render the
@@ -372,14 +373,14 @@ native atomic breath to check its color. Set `BITLING_BROWSER_CHANNEL=chromium` 
 Playwright Chromium installation instead of Chrome.
 
 ```bash
-./release.sh              # build/Bitling-<version>.dmg
-./release.sh --publish    # tag, push and create the GitHub release
+./apps/macos/release.sh              # apps/macos/build/Bitling-<version>.dmg
+./apps/macos/release.sh --publish    # tag, push and create the GitHub release
 ```
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which rebuilds on a macOS runner and
 attaches the disk image to the release. To ship a build with no Gatekeeper warning you need an
 Apple Developer Program membership: set `SIGN_ID` to your Developer ID Application certificate
-and `NOTARY_PROFILE` to a `notarytool` keychain profile, and `release.sh` signs, notarizes and
+and `NOTARY_PROFILE` to a `notarytool` keychain profile, and `apps/macos/release.sh` signs, notarizes and
 staples it.
 
 ## How it works
@@ -399,15 +400,15 @@ whatever is behind it. If the page ever stops reporting, the host stops swallowi
 rather than trapping your cursor in an invisible box.
 
 ```
-Sources/main.swift          window, drag and physics, menu bar, bridge, bitling:// scheme
-Sources/GitWatcher.swift    repository discovery and reflog tailing
-Sources/CIWatcher.swift     gh runs and deployments, pytest caches
-Sources/ClaudeWatcher.swift Claude Code transcript tailing
-Sources/ControlPanel.swift  the control room window and the activity log
-web/panel.html              the control room UI
-web/bitling.html            the creature: drawing, animation, personality
-Tools/make_pet_html.py      derives the desktop page from the web page
-build.sh, release.sh        build, sign, package, publish
+apps/macos/Sources/main.swift          window, drag and physics, menu bar, bridge, bitling:// scheme
+apps/macos/Sources/GitWatcher.swift    repository discovery and reflog tailing
+apps/macos/Sources/CIWatcher.swift     gh runs and deployments, pytest caches
+apps/macos/Sources/ClaudeWatcher.swift Claude Code transcript tailing
+apps/macos/Sources/ControlPanel.swift  the control room window and the activity log
+apps/macos/web/panel.html              the control room UI
+apps/macos/web/bitling.html            the creature: drawing, animation, personality
+packages/pet-engine/scripts/make_pet_html.py  derives the desktop page from the web page
+apps/macos/build.sh, apps/macos/release.sh  build, sign, package, publish
 ```
 
 State lives in `~/Library/Preferences/app.bitling.pet.plist`.

@@ -19,8 +19,8 @@ rm -rf build
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "-> deriving desktop page from $WEB_SOURCE"
-python3 Tools/make_pet_html.py "$WEB_SOURCE" Resources/pet.html
-python3 Tools/make_demo.py
+python3 ../../packages/pet-engine/scripts/make_pet_html.py "$WEB_SOURCE" Resources/pet.html
+python3 ../../packages/pet-engine/scripts/make_demo.py
 
 SOURCES=(Sources/main.swift Sources/GitWatcher.swift Sources/CIWatcher.swift Sources/ClaudeWatcher.swift Sources/Overlay.swift Sources/ControlPanel.swift Sources/GitHubAuth.swift)
 compile() {  # compile <arch> <output>
@@ -42,7 +42,7 @@ else
 fi
 
 echo "-> drawing icon"
-swiftc -O -swift-version 5 -framework Cocoa -o build/makeicon Tools/makeicon.swift
+swiftc -O -swift-version 5 -framework Cocoa -o build/makeicon ../../tools/makeicon.swift
 build/makeicon build/Bitling.iconset >/dev/null
 iconutil -c icns build/Bitling.iconset -o "$APP/Contents/Resources/Bitling.icns"
 

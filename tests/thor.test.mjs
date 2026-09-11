@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Thor species definition, dual weapons, attacks, audio synthesis, and voice lines', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-thor-test-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
 
   // Verify species registration
@@ -38,7 +38,7 @@ test('desktop Thor renders every pose without errors, switches species via host 
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__thorTest = { pet, state, draw, drawThor, ctx, canvas, petR, species, SPECIES, updatePet, getThorSnapshot, getThorPower, thorState };
@@ -125,7 +125,7 @@ test('Thor Git-powered progression, dual weapon unlocking, dev simulation, and s
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__thorProg = { pet, state, draw, drawThor, ctx, canvas, petR, species, SPECIES, getThorSnapshot, getThorPower, thorState };

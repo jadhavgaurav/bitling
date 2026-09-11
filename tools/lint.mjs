@@ -17,13 +17,13 @@ const eslint = new ESLint({
   }],
 });
 const results = [];
-for (const file of ['web/bitling.html', 'web/panel.html']) {
+for (const file of ['apps/macos/web/bitling.html', 'apps/macos/web/panel.html']) {
   const html = await readFile(file, 'utf8');
   for (const [index, match] of [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].entries()) {
     results.push(...await eslint.lintText(match[1], { filePath: `${file}.${index}.js` }));
   }
 }
-results.push(...await eslint.lintFiles(['Tools/*.mjs', 'tests/*.mjs']));
+results.push(...await eslint.lintFiles(['tools/*.mjs', 'tools/legacy/*.mjs', 'tests/*.mjs']));
 const formatter = await eslint.loadFormatter('stylish');
 process.stdout.write(formatter.format(results));
 const errors = results.reduce((sum, result) => sum + result.errorCount, 0);

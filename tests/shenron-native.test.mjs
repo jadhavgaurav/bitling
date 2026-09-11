@@ -10,7 +10,7 @@ const run = promisify(execFile);
 test('native Shenron stage fills the display, stays fixed and restores floating and walking pets', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-shenron-native-'));
   try {
-    const source = await readFile('Sources/main.swift', 'utf8');
+    const source = await readFile('apps/macos/Sources/main.swift', 'utf8');
     const start = source.lastIndexOf('\nlet app = NSApplication.shared');
     assert.ok(start > 0);
     const probe = `
@@ -56,7 +56,7 @@ delegate.verifyShenronStage()
     await writeFile(sourcePath, source.slice(0, start) + probe);
     await run('swiftc', ['-swift-version', '5', '-framework', 'Cocoa', '-framework', 'WebKit',
       '-framework', 'ServiceManagement', '-framework', 'Security', sourcePath,
-      ...['GitWatcher', 'CIWatcher', 'ClaudeWatcher', 'Overlay', 'ControlPanel', 'GitHubAuth'].map(n => `Sources/${n}.swift`), '-o', executable]);
+      ...['GitWatcher', 'CIWatcher', 'ClaudeWatcher', 'Overlay', 'ControlPanel', 'GitHubAuth'].map(n => `apps/macos/Sources/${n}.swift`), '-o', executable]);
     const { stdout } = await run(executable);
     assert.match(stdout, /click-through passed/);
   } finally { await rm(directory, { recursive: true, force: true }); }

@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Super Mario species definition, audio synths, and evolution mechanics', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-mario-test-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
 
   // Verify registration in HTML
@@ -40,7 +40,7 @@ test('desktop Mario renders sprite poses across all stages, sizes and attacks in
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__marioTest = { pet, state, marioState, triggerMarioCommitPowerUp, scoreMarioWarpPipe, updateMarioSimulation, drawMario, drawMarioAttack, ctx, canvas, petR, species, SPECIES, updatePet };

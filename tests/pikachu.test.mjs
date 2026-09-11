@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Pikachu species definition, electric audio synthesis, dual attacks, and voice lines', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-pika-test-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
 
   // Verify registration in HTML
@@ -31,7 +31,7 @@ test('desktop Pikachu renders every pose without errors, switches species via ho
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__pikaTest = { pet, state, draw, drawPikachu, ctx, canvas, petR, species, SPECIES, updatePet };

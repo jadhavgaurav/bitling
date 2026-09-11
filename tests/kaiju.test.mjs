@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
-const source = await readFile(new URL('../web/bitling.html', import.meta.url), 'utf8');
+const source = await readFile(new URL('../apps/macos/web/bitling.html', import.meta.url), 'utf8');
 function footPose(phase) {
   const match = source.match(/  function kaijuFootPose\(phase\) \{[\s\S]*?\n  \}/);
   assert.ok(match, 'Godzilla needs an explicit stance/swing cycle to prevent foot skating');

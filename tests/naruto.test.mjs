@@ -12,7 +12,7 @@ const run = promisify(execFile);
 test('Naruto Uzumaki species definition, dual attacks, and ninja sound synth', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bitling-naruto-test-'));
   const generated = join(directory, 'pet.html');
-  await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+  await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
   const html = await readFile(generated, 'utf8');
 
   // Verify registration in HTML
@@ -32,7 +32,7 @@ test('desktop Naruto renders every sprite pose without errors, switches species 
   const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
   try {
     const generated = join(directory, 'pet.html');
-    await run('python3', ['Tools/make_pet_html.py', 'web/bitling.html', generated]);
+    await run('python3', ['packages/pet-engine/scripts/make_pet_html.py', 'apps/macos/web/bitling.html', generated]);
     const html = (await readFile(generated, 'utf8')).replace(
       '  // ---------------------------------------------------------------- boot',
       `window.__narutoTest = { pet, state, draw, drawNaruto, drawNarutoAttack, ctx, canvas, petR, species, SPECIES, updatePet };

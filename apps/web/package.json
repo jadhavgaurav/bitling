@@ -1,0 +1,26 @@
+{
+  "name": "@bitling/web",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "predev": "python3 ../../packages/pet-engine/scripts/make_demo.py --out public/demo.html",
+    "dev": "next dev",
+    "prebuild": "python3 ../../packages/pet-engine/scripts/make_demo.py --out public/demo.html",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "16.3.4",
+    "typescript": "^5.7.0"
+  }
+}

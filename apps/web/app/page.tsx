@@ -95,17 +95,48 @@ const SIM_ACTION_MESSAGES: Record<string, string> = {
   pat: "Patted pet! (Hearts & purr)",
 };
 
-const SIM_ACTION_FNS: Record<string, string> = {
-  commit: "testCommit",
-  push: "testPush",
-  fail: "testFail",
-  pass: "testPass",
-  boss: "testBoss",
-  pat: "patPet",
-};
+const DEMO_COMMITS = [
+  "fix: stop the widget eating cookies",
+  "feat: add parafoil physics",
+  "wip",
+  "typo in the README",
+  "refactor the whole rendering pipeline",
+];
+
+const DEMO_TESTS = ["test_webhook_signature", "test_invoice_total", "test_retry_backoff", "test_login_redirect", "test_cache_expiry"];
 
 function pickRandomQuote(pet: Pet): string {
   return pet.quotes[Math.floor(Math.random() * pet.quotes.length)];
+}
+
+function pickOne<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function makeRandomCommitEvent() {
+  return {
+    kind: "commit",
+    message: pickOne(DEMO_COMMITS),
+    hash: Math.random().toString(16).slice(2, 9),
+    insertions: Math.floor(Math.random() * 500) + 5,
+    deletions: Math.floor(Math.random() * 60),
+  };
+}
+
+function makeRandomFailEvent() {
+  const n = Math.floor(Math.random() * 3) + 2;
+  return { kind: "test-failed", count: n, name: "api", tests: DEMO_TESTS.slice(0, n) };
+}
+
+// The engine (apps/macos/web/bitling.html) always exposes this on window, regardless of
+// desktop/demo mode — it's the same handle the test suite and screenshot tooling use, so
+// it's the one stable way to drive the embedded iframe from this same-origin outer page.
+interface BitlingEngine {
+  selectSpecies: (id: string) => void;
+  event: (ev: Record<string, unknown>) => void;
+  act: (name: "pat" | "feed" | "play" | "sleep" | "reset") => void;
+  spawnBoss: (label?: string) => void;
+  triggerSpecial: () => void;
 }
 
 export default function Home() {
@@ -150,30 +181,54 @@ export default function Home() {
     showToast(successMsg ?? "Copied to clipboard!");
   }
 
+  function getEngine(): BitlingEngine | null {
+    const win = iframeRef.current?.contentWindow as (Window & { __bitling?: BitlingEngine }) | undefined;
+    return win?.__bitling ?? null;
+  }
+
   function switchSimulatorPet(id: string) {
     setActivePetId(id);
     const pet = PETS_DATA.find((p) => p.id === id);
     if (!pet) return;
-    const win = iframeRef.current?.contentWindow as (Window & { petNative?: { setSpecies?: (id: string) => void } }) | undefined;
-    try {
-      if (win?.petNative?.setSpecies) win.petNative.setSpecies(id);
-      else win?.postMessage({ type: "setSpecies", species: id }, "*");
-    } catch {
-      // cross-origin or not-ready iframe, ignore
-    }
+    getEngine()?.selectSpecies(id);
     showToast(`Switched active companion to ${pet.name}!`);
   }
 
   function triggerSimulatorAction(action: string) {
-    const win = iframeRef.current?.contentWindow as (Window & Record<string, unknown>) | undefined;
-    if (!win) return;
     if (action === "voice") {
       showToast(`"${pickRandomQuote(activePet)}"`);
       return;
     }
-    const fn = win[SIM_ACTION_FNS[action]];
-    if (typeof fn === "function") (fn as () => void)();
-    if (SIM_ACTION_MESSAGES[action]) showToast(SIM_ACTION_MESSAGES[action]);
+    const engine = getEngine();
+    if (!engine) return;
+    switch (action) {
+      case "commit":
+        engine.event(makeRandomCommitEvent());
+        showToast(SIM_ACTION_MESSAGES.commit);
+        break;
+      case "push":
+        engine.event({ kind: "push", branch: "main" });
+        showToast(SIM_ACTION_MESSAGES.push);
+        break;
+      case "fail":
+        engine.event(makeRandomFailEvent());
+        showToast(SIM_ACTION_MESSAGES.fail);
+        break;
+      case "pass":
+        engine.event({ kind: "test-passed", name: "api" });
+        showToast(SIM_ACTION_MESSAGES.pass);
+        break;
+      case "boss":
+        engine.spawnBoss("BOSS BUG");
+        showToast(SIM_ACTION_MESSAGES.boss);
+        break;
+      case "pat":
+        engine.act("pat");
+        showToast(SIM_ACTION_MESSAGES.pat);
+        break;
+      default:
+        break;
+    }
   }
 
   function goToSimulator() {

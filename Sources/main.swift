@@ -134,6 +134,7 @@ struct PetSnapshot {
     var attack = "beam"
     var shenronSettings: [String: Double] = [:]
     var goku: [String: Any] = [:]
+    var thor: [String: Any] = [:]
 
     init() {}
 
@@ -162,6 +163,9 @@ struct PetSnapshot {
         }
         if let values = message["goku"] as? [String: Any] {
             goku = values
+        }
+        if let values = message["thor"] as? [String: Any] {
+            thor = values
         }
     }
 }
@@ -507,7 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "state":
             if let snap = PetSnapshot(message: body) {
                 snapshot = snap
-                applyDesktopStage(snap.species == "dragon" && snap.hatched)
+                applyDesktopStage((snap.species == "dragon" || snap.species == "spiderman") && snap.hatched)
                 applyLocomotion(snap.locomotion == "float")
             }
         case "walk":
@@ -694,6 +698,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "sound": snapshot.sound, "species": snapshot.species,
                 "shenron": snapshot.shenronSettings,
                 "goku": snapshot.goku,
+                "thor": snapshot.thor,
             ],
             "today": [
                 "commits": git.commitsToday, "pushes": git.pushesToday,
@@ -755,6 +760,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     }
                 } else if let d = Double(val), d.isFinite {
                     js("petNative.gokuSetting(\(jsString(sub)), \(d))")
+                }
+            }
+        case _ where action.hasPrefix("thor:"):
+            let parts = action.split(separator: ":", omittingEmptySubsequences: false)
+            if parts.count >= 3 {
+                let sub = String(parts[1])
+                let val = String(parts[2])
+                if sub == "simulate" {
+                    if val == "off" || val == "clear" || val == "reset" {
+                        js("petNative.thorSimulate(null)")
+                    } else if let n = Int(val) {
+                        js("petNative.thorSimulate(\(n))")
+                    }
+                } else if let d = Double(val), d.isFinite {
+                    js("petNative.thorSetting(\(jsString(sub)), \(d))")
                 }
             }
         case "rename": renameAction()
@@ -1076,6 +1096,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             window.ignoresMouseEvents = true
             window.setFrame(visible, display: true)
             js("petNative.stageSize(\(Double(petSizeScale)))")
+            if snapshot.species == "spiderman" { sendSpideyRooftops() }
         } else {
             window.onStageDrag = nil
             let previous = ordinaryPetFrame ?? NSRect(origin: visible.origin, size: petWindowSize)
@@ -1259,9 +1280,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         airborne = true
     }
 
+    private func sendSpideyRooftops() {
+        guard snapshot.species == "spiderman",
+              let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return }
+        var rooftops: [[String: Any]] = []
+        let screenH = NSScreen.main?.frame.height ?? 1080
+        let winFrame = window.frame
+        for win in windowList {
+            guard let layer = win[kCGWindowLayer as String] as? Int, layer == 0,
+                  let bounds = win[kCGWindowBounds as String] as? [String: CGFloat],
+                  let w = bounds["Width"], let h = bounds["Height"],
+                  let x = bounds["X"], let y = bounds["Y"],
+                  w > 180, h > 120 else { continue }
+            if abs(x - winFrame.minX) < 10 && abs(w - winFrame.width) < 10 { continue }
+            let localX = x - winFrame.minX
+            let localY = y - (screenH - winFrame.maxY)
+            let owner = win[kCGWindowOwnerName as String] as? String ?? "Window"
+            rooftops.append([
+                "x": Double(localX),
+                "y": Double(localY),
+                "w": Double(w),
+                "h": Double(h),
+                "title": owner
+            ])
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: rooftops),
+           let jsonStr = String(data: data, encoding: .utf8) {
+            js("petNative.setWindowRooftops(\(jsonStr))")
+        }
+    }
+
     private func tick() {
         tickCount += 1
         if tickCount % 30 == 0 { panel.refresh() }
+        if snapshot.species == "spiderman" {
+            if tickCount % 30 == 0 {
+                let idle = CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: CGEventType(rawValue: ~0)!)
+                js("petNative.setUserActive(\(idle < 4.0 ? "true" : "false"))")
+            }
+            if tickCount % 60 == 0 {
+                sendSpideyRooftops()
+            }
+        }
         guard !dragging else { return }
         let dt: CGFloat = 1.0 / 60.0
         let visible = screenForWindow().visibleFrame

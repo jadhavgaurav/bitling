@@ -1,46 +1,46 @@
-# Graph Report - Bitling  (2026-09-10)
+# Graph Report - Bitling  (2026-09-11)
 
 ## Corpus Check
-- 103 files · ~721,129 words
+- 116 files · ~767,572 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 826 nodes · 1579 edges · 116 communities (81 shown, 35 thin omitted)
-- Extraction: 89% EXTRACTED · 11% INFERRED · 0% AMBIGUOUS · INFERRED: 167 edges (avg confidence: 0.77)
+- 853 nodes · 1598 edges · 128 communities (87 shown, 41 thin omitted)
+- Extraction: 89% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 167 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1fda0bfc`
+- Built from commit: `b6c296e4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - OverlayView
 - CIWatcher
-- GitEvent
+- ClaudeWatcher
 - GitWatcher
 - web/bitling.html (Bitling Pet Renderer)
 - package.json
 - Path
-- .userContentController
+- PetWindow
 - Clean Pikachu Charge Sprite (White/Gray Pass 2)
-- String
+- build.sh
 - Pet Species Roster Table
 - web/bitling.html (shared creature page)
 - drawPet() species draw dispatch
 - Bitling README Overview
 - Working on Bitling (AGENTS.md)
-- Extract Pikachu Sprites
+- Bitling Control Room Page
 - kaiju-browser.test.mjs
 - mario.test.mjs
 - rules/graphify.md
 - ronaldo.test.mjs
 - workflows/graphify.md
-- Bool
+- GitHub Without the gh CLI
 - render
-- Godzilla Reference and Motion Implementation Plan
+- Godzilla Plan Verification Results
 - 2026-09-09-shenron.md
-- .menuNeedsUpdate
+- verify_spiderman_visuals.mjs
 - check_bubble_gap.mjs
 - ironman.test.mjs
 - naruto.test.mjs
@@ -86,13 +86,20 @@
 - test_all_goku_visuals.mjs
 - 2026-09-10-calm-movement.md
 - calm-movement.test.mjs
-- AppDelegate
-- Working Alongside Other Agents
-- .buildWebView
+- spiderman.test.mjs
+- verify_thor_visuals.mjs
+- thor.test.mjs
 - petting-reactions.test.mjs
+- AppDelegate
+- String
+- GitHubAuth
+- .menuNeedsUpdate
+- verify_spiderman_sleep_visuals.mjs
+- spiderman_sleep.test.mjs
+- .buildWebView
 
 ## God Nodes (most connected - your core abstractions)
-1. `AppDelegate` - 91 edges
+1. `AppDelegate` - 92 edges
 2. `GitWatcher` - 48 edges
 3. `OverlayView` - 41 edges
 4. `CIWatcher` - 32 edges
@@ -142,23 +149,23 @@
 - **Float-kind species (hover in place)** — web_bitling_species_dragon, web_bitling_species_rider, web_bitling_species_goku, web_bitling_species_ironman [INFERRED 0.70]
 - **Pop-culture licensed character species** — web_bitling_species_goku, web_bitling_species_pikachu, web_bitling_species_ironman, web_bitling_species_ronaldo, web_bitling_species_naruto, web_bitling_species_mario [INFERRED 0.60]
 
-## Communities (116 total, 35 thin omitted)
+## Communities (128 total, 41 thin omitted)
 
 ### Community 0 - "OverlayView"
-Cohesion: 0.13
-Nodes (26): CGContext, CGPoint, NSColor, NSView, Beam, Beetle, .alive, .size (+18 more)
+Cohesion: 0.12
+Nodes (28): CGContext, CGPoint, NSColor, NSView, WKScriptMessage, WKUserContentController, Beam, Beetle (+20 more)
 
 ### Community 1 - "CIWatcher"
 Cohesion: 0.08
-Nodes (28): Foundation, LocalizedError, Security, CIWatcher, Any, Bool, Data, Date (+20 more)
+Nodes (25): AppKit, Foundation, CIWatcher, Any, Bool, Data, Date, Set (+17 more)
 
-### Community 2 - "GitEvent"
-Cohesion: 0.16
-Nodes (16): ISO8601DateFormatter, ClaudeWatcher, .activeSessionCount, Session, Any, Bool, Date, Int (+8 more)
+### Community 2 - "ClaudeWatcher"
+Cohesion: 0.18
+Nodes (13): ISO8601DateFormatter, ClaudeWatcher, .activeSessionCount, Session, Any, Bool, Date, Int (+5 more)
 
 ### Community 3 - "GitWatcher"
-Cohesion: 0.12
-Nodes (17): GitStatus, .asDictionary, GitWatcher, .repositoryCount, .roots, ReflogLine, Date, Int (+9 more)
+Cohesion: 0.13
+Nodes (16): GitStatus, .asDictionary, GitWatcher, .repositoryCount, .roots, ReflogLine, Date, Int (+8 more)
 
 ### Community 4 - "web/bitling.html (Bitling Pet Renderer)"
 Cohesion: 0.09
@@ -172,41 +179,41 @@ Nodes (16): eslint, globals, devDependencies, eslint, globals, playwright, engin
 Cohesion: 0.08
 Nodes (17): Path, run_fix(), main(), main(), get_b64_resized(), main(), chroma_key(), main() (+9 more)
 
-### Community 7 - ".userContentController"
-Cohesion: 0.12
+### Community 7 - "PetWindow"
+Cohesion: 0.13
 Nodes (12): NSEvent, NSWindow, PetWindow, .canBecomeKey, .canBecomeMain, CGFloat, NSPoint, NSRect (+4 more)
 
 ### Community 8 - "Clean Pikachu Charge Sprite (White/Gray Pass 2)"
 Cohesion: 0.29
 Nodes (7): Clean Pikachu Charge Sprite (White/Gray Pass 2), Clean Pikachu Charge Sprite (Platform Pass), Clean Pikachu Charge Sprite (Final Coordinate Pass), Clean Pikachu Charge Sprite (Pure White Removal), Clean Gap Between Pikachu Feet, Clean All Pikachu Sprite Set, Clean Stray Pikachu Sprite Pixels
 
-### Community 9 - "String"
-Cohesion: 0.16
-Nodes (13): Double, ServiceManagement, ClaudeHooks, .command, .settingsURL, GitHooks, .directory, HooksError (+5 more)
+### Community 9 - "build.sh"
+Cohesion: 0.18
+Nodes (11): compile(), build.sh script, Release Notes Template, Universal Binary arch Check (lipo), Release GitHub Actions Workflow, install.sh script, Goku pet config, Pikachu pet config (+3 more)
 
 ### Community 10 - "Pet Species Roster Table"
-Cohesion: 0.18
-Nodes (13): line(key) Shuffle Bag Keyed by Species+Phrase, Bitling (The Little Machine), CR7 (Cristiano Ronaldo), Ember (Baby Dragon), Goku (Kid Goku), Iron Man (Armored Avenger), Mario (Super Mario), Naruto (Ninja of the Leaf) (+5 more)
+Cohesion: 0.11
+Nodes (21): Anything Derived From the Art Must Be Measured Off the Art, kaijuPose() function, Kaiju Breath Mispositioned From Hard-Coded Constant, Non-Unique String-Replace Corruption Bug, line(key) Shuffle Bag Keyed by Species+Phrase, Working Alongside Other Agents, Concurrent Goku Attack Renderer Edit (preserved), Reference Illustration Audit (color/shape mismatches) (+13 more)
 
 ### Community 11 - "web/bitling.html (shared creature page)"
-Cohesion: 0.18
-Nodes (15): Adding a Pet (SPECIES registration), defineSpecies() function, resize() Runs Before Late Species Definitions, docs/index.html (GitHub Pages demo), Make GitHub Pages Demo, Make README GIF, Make App Icon, Mario 3D Cinema Sprite Bundle (+7 more)
+Cohesion: 0.13
+Nodes (24): Adding a Pet (SPECIES registration), defineSpecies() function, resize() Runs Before Late Species Definitions, Antigravity Brain artifact directory (raw AI sprite source), docs/index.html (GitHub Pages demo), /tmp/ironman_data.json (Iron Man asset bundle), Extract Authentic Mario Assets, Extract Pikachu Sprites (+16 more)
 
 ### Community 12 - "drawPet() species draw dispatch"
 Cohesion: 0.26
 Nodes (21): Attack/combat resolution (species().attack), Bug spawn/release system (spawnBug/releaseBugs), window.__bitling verification harness, drawPet() species draw dispatch, frame()/update()/draw() main loop, handleGitEvent() dev-signal reactions, HOST native/webkit message bridge, resize() canvas/layout subsystem (+13 more)
 
 ### Community 13 - "Bitling README Overview"
-Cohesion: 0.06
-Nodes (35): apiData(_:) function, GitHub OAuth Device-Flow Fallback, GitHub Without the gh CLI, Ad-Hoc Re-Signing Invalidates Keychain Access, compile(), build.sh script, Release Notes Template, Universal Binary arch Check (lipo) (+27 more)
+Cohesion: 0.15
+Nodes (11): apiData(_:) function, bitling CLI command, Bug and Boss Hunting System, Three CI/Deploy Data Sources, Optional Claude Code Hooks, Claude Code Session Reactions, What Connects to Where (privacy/network), Screen-Wide Desktop Bug Overlay (+3 more)
 
 ### Community 14 - "Working on Bitling (AGENTS.md)"
 Cohesion: 0.14
 Nodes (15): Assets and Likeness Policy, Before You Say It Works (verification gate), canFire Grounded Gate, Floater Can Hit the Ceiling, Generated Files Must Not Be Hand-Edited, The Launch Race (build.sh timing bug), Movement Rules (limb hinge, trail, canFire), Working on Bitling (AGENTS.md) (+7 more)
 
-### Community 15 - "Extract Pikachu Sprites"
-Cohesion: 0.31
-Nodes (9): Antigravity Brain artifact directory (raw AI sprite source), /tmp/ironman_data.json (Iron Man asset bundle), Extract Authentic Mario Assets, Extract Pikachu Sprites, Mario NES/SNES Sprite Bundle, Patch: Add Goku Species, Process Iron Man Assets, Patch: Add Iron Man Species (+1 more)
+### Community 15 - "Bitling Control Room Page"
+Cohesion: 0.20
+Nodes (10): Control Room UI Description, Lint Entry Point, all:unset Resets box-sizing Gotcha, Bitling Control Room Page, drawPortrait() function, drawTimeline() function, frame(now) animation loop, web/panel.html (control panel) (+2 more)
 
 ### Community 16 - "kaiju-browser.test.mjs"
 Cohesion: 0.17
@@ -220,17 +227,17 @@ Nodes (12): Invariant: triggerMarioCommitPowerUp() activates marioState.qblockAc
 Cohesion: 0.17
 Nodes (11): Invariant: the free ronaldoBall obeys gravity/velocity physics, kills bugs on strike with a pop-up rebound, and scoreRonaldoGoal() drives a shot that bulges the net, run, drawRonaldo() render function, drawRonaldoAttack() projectile attack render function, knuckleball attack style (Ronaldo small-bug), Ronaldo species definition (SPECIES.ronaldo, kind:'ground'), ronaldoBall (free soccer-ball physics object), ronaldoGoal (goal-celebration state object) (+3 more)
 
+### Community 21 - "GitHub Without the gh CLI"
+Cohesion: 0.50
+Nodes (3): GitHub OAuth Device-Flow Fallback, GitHub Without the gh CLI, Ad-Hoc Re-Signing Invalidates Keychain Access
+
 ### Community 22 - "render"
 Cohesion: 0.29
 Nodes (9): Cocoa, NSBezierPath, render(), rgb(), rounded(), CGFloat, Data, Int (+1 more)
 
-### Community 23 - "Godzilla Reference and Motion Implementation Plan"
-Cohesion: 0.20
-Nodes (10): Anything Derived From the Art Must Be Measured Off the Art, kaijuPose() function, Kaiju Breath Mispositioned From Hard-Coded Constant, Measure the Thing the User Can See, Hovering-Shadow Regression Fixed, Native Orange-Fire Renderer Regression Fixed, Reference Illustration Audit (color/shape mismatches), Godzilla Reference and Motion Implementation Plan (+2 more)
-
-### Community 25 - ".menuNeedsUpdate"
-Cohesion: 0.32
-Nodes (3): NSMenu, NSMenuItem, Int
+### Community 23 - "Godzilla Plan Verification Results"
+Cohesion: 0.40
+Nodes (5): Measure the Thing the User Can See, Hovering-Shadow Regression Fixed, Native Orange-Fire Renderer Regression Fixed, Inflated Throw Bounds Fixed, Godzilla Plan Verification Results
 
 ### Community 26 - "check_bubble_gap.mjs"
 Cohesion: 0.25
@@ -289,20 +296,24 @@ Cohesion: 0.67
 Nodes (3): Goku on Flying Nimbus Animated Demo, Goku Demo Background Landscape, Goku/Dragon Ball themed pet skin or Easter egg
 
 ### Community 103 - "ControlPanel"
-Cohesion: 0.09
-Nodes (23): AppKit, NSObject, NSSize, ActivityEntry, .asDictionary, ActivityLine, ActivityLog, .asJSON (+15 more)
+Cohesion: 0.12
+Nodes (14): NSApplication, NSObject, NSSize, ControlPanel, .isOpen, Bool, NSWindow, Void (+6 more)
 
-### Community 112 - "AppDelegate"
+### Community 121 - "AppDelegate"
 Cohesion: 0.14
-Nodes (8): Notification, NSApplicationDelegate, NSMenuDelegate, NSStatusItem, AppDelegate, Date, NSScreen, Timer
+Nodes (7): Notification, NSApplicationDelegate, NSMenuDelegate, NSStatusItem, AppDelegate, Date, Timer
 
-### Community 113 - "Working Alongside Other Agents"
-Cohesion: 0.67
-Nodes (3): Non-Unique String-Replace Corruption Bug, Working Alongside Other Agents, Concurrent Goku Attack Renderer Edit (preserved)
+### Community 122 - "String"
+Cohesion: 0.14
+Nodes (14): Double, ServiceManagement, ClaudeHooks, .command, .settingsURL, GitHooks, .directory, HooksError (+6 more)
 
-### Community 116 - ".buildWebView"
-Cohesion: 0.40
-Nodes (3): WKNavigation, WKUserContentController, WKWebView
+### Community 123 - "GitHubAuth"
+Cohesion: 0.14
+Nodes (17): LocalizedError, Security, AuthError, denied, .errorDescription, expired, network, notConfigured (+9 more)
+
+### Community 124 - ".menuNeedsUpdate"
+Cohesion: 0.32
+Nodes (3): NSMenu, NSMenuItem, Int
 
 ## Ambiguous Edges - Review These
 - `Apply Goku Combat Animations` → `Apply HD Goku Sprites`  [AMBIGUOUS]
@@ -317,9 +328,9 @@ Nodes (3): WKNavigation, WKUserContentController, WKWebView
   web/bitling.html · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **202 isolated node(s):** `.activeSessionCount`, `AppKit`, `.asDictionary`, `.asJSON`, `.isOpen` (+197 more)
+- **212 isolated node(s):** `.activeSessionCount`, `AppKit`, `.asDictionary`, `.asJSON`, `.isOpen` (+207 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **35 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **41 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -334,7 +345,7 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `frame()/update()/draw() main loop` and `HOST native/webkit message bridge`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `AppDelegate` connect `AppDelegate` to `OverlayView`, `CIWatcher`, `GitEvent`, `GitWatcher`, `Flight`, `ControlPanel`, `.userContentController`, `String`, `Bitling README Overview`, `.buildWebView`, `Bool`, `.menuNeedsUpdate`?**
-  _High betweenness centrality (0.168) - this node is a cross-community bridge._
-- **Why does `Bitling README Overview` connect `Bitling README Overview` to `Pet Species Roster Table`, `web/bitling.html (shared creature page)`, `Working on Bitling (AGENTS.md)`?**
-  _High betweenness centrality (0.088) - this node is a cross-community bridge._
+- **Why does `AppDelegate` connect `AppDelegate` to `OverlayView`, `CIWatcher`, `ClaudeWatcher`, `GitWatcher`, `Flight`, `ControlPanel`, `PetWindow`, `build.sh`, `String`, `GitHubAuth`, `.menuNeedsUpdate`, `.buildWebView`?**
+  _High betweenness centrality (0.159) - this node is a cross-community bridge._
+- **Why does `Bitling README Overview` connect `Bitling README Overview` to `build.sh`, `Pet Species Roster Table`, `web/bitling.html (shared creature page)`, `Working on Bitling (AGENTS.md)`, `Bitling Control Room Page`?**
+  _High betweenness centrality (0.083) - this node is a cross-community bridge._

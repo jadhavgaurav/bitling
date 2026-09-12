@@ -238,6 +238,15 @@ public partial class PetWindow : Window
     public void SetName(string name) => Js($"petNative.setName({JsInterop.EncodeString(name)})");
     public void SetSpecies(string id) => Js($"petNative.setSpecies({JsInterop.EncodeString(id)})");
 
+    // Per-species control-room sliders and dev tools. Thin wrappers over the same
+    // petNative methods the macOS control panel calls (see main.swift's action dispatch).
+    public void ShenronSetting(string key, double value) => Js($"petNative.shenronSetting({JsInterop.EncodeString(key)}, {JsInterop.EncodeNumber(value)})");
+    public void GokuSetting(string key, double value) => Js($"petNative.gokuSetting({JsInterop.EncodeString(key)}, {JsInterop.EncodeNumber(value)})");
+    public void GokuSimulate(int? commits) => Js(commits.HasValue ? $"petNative.gokuSimulate({commits.Value})" : "petNative.gokuSimulate(null)");
+    public void GokuSpawnEnemy(string kind) => Js($"petNative.gokuSpawnEnemy({JsInterop.EncodeString(kind)})");
+    public void ThorSetting(string key, double value) => Js($"petNative.thorSetting({JsInterop.EncodeString(key)}, {JsInterop.EncodeNumber(value)})");
+    public void ThorSimulate(int? commits) => Js(commits.HasValue ? $"petNative.thorSimulate({commits.Value})" : "petNative.thorSimulate(null)");
+
     public void DeliverGitEvent(GitEvent e) => Js($"petNative.gitEvent({e.ToJson().ToJsonString()})");
     public void DeliverGitStatus(GitStatus s) => Js($"petNative.gitStatus({s.ToJson().ToJsonString()})");
 

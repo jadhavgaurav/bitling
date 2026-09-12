@@ -50,12 +50,16 @@ test('Goku is registered with his own enemy pack, distinct from the shared beetl
     const api = window.__gokuEnemyTest;
     return {
       enemyPack: api.SPECIES.goku.enemyPack,
-      otherPacksUndefined: ['robot', 'mario', 'thor', 'spiderman', 'dragon'].every((id) => api.SPECIES[id].enemyPack === undefined),
+      // Mario has since earned his own pack too (see mario-enemies.test.mjs) - only species
+      // that still fight the shared beetle belong in this list.
+      otherPacksUndefined: ['robot', 'thor', 'spiderman', 'dragon'].every((id) => api.SPECIES[id].enemyPack === undefined),
+      marioHasOwnDistinctPack: api.SPECIES.mario.enemyPack === 'mario',
       classIds: Object.keys(api.GOKU_ENEMIES).sort(),
     };
   });
   assert.equal(result.enemyPack, 'goku');
   assert.ok(result.otherPacksUndefined, 'no other species should have picked up an enemy pack');
+  assert.ok(result.marioHasOwnDistinctPack, "Mario's pack must be its own, not Goku's");
   assert.deepEqual(result.classIds, ['boss', 'elite', 'fast', 'fighter', 'flying']);
 });
 

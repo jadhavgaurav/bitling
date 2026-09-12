@@ -135,6 +135,7 @@ struct PetSnapshot {
     var shenronSettings: [String: Double] = [:]
     var goku: [String: Any] = [:]
     var thor: [String: Any] = [:]
+    var mario: [String: Any] = [:]
 
     init() {}
 
@@ -166,6 +167,9 @@ struct PetSnapshot {
         }
         if let values = message["thor"] as? [String: Any] {
             thor = values
+        }
+        if let values = message["mario"] as? [String: Any] {
+            mario = values
         }
     }
 }
@@ -699,6 +703,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "shenron": snapshot.shenronSettings,
                 "goku": snapshot.goku,
                 "thor": snapshot.thor,
+                "mario": snapshot.mario,
             ],
             "today": [
                 "commits": git.commitsToday, "pushes": git.pushesToday,
@@ -780,6 +785,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     }
                 } else if let d = Double(val), d.isFinite {
                     js("petNative.thorSetting(\(jsString(sub)), \(d))")
+                }
+            }
+        case _ where action.hasPrefix("mario:"):
+            let parts = action.split(separator: ":", omittingEmptySubsequences: false)
+            if parts.count >= 3 {
+                let sub = String(parts[1])
+                let val = String(parts[2])
+                if sub == "spawn" {
+                    // Dev-only control room button: spawn one specific enemy from Mario's
+                    // pack (walker/shell/flying/jumping/ambush/elite/boss).
+                    js("petNative.marioSpawnEnemy(\(jsString(val)))")
+                } else if sub == "stage", let n = Int(val) {
+                    // Dev-only control room button: jump straight to a stage (0 Small ..
+                    // 3 Star) without waiting on real qblock hits/commits.
+                    js("petNative.marioForceStage(\(n))")
                 }
             }
         case "rename": renameAction()

@@ -1604,7 +1604,7 @@
           const d = Math.abs(b.x - pet.x);
           if (d < bestD) { bestD = d; nearest = b; }
         }
-        const def = nearest.enemyId ? gokuEnemyClass(nearest.enemyId) : null;
+        const def = (nearest.enemyId && nearest.pack === 'goku') ? gokuEnemyClass(nearest.enemyId) : null;
         const name = def ? def.name : (nearest.label || 'Bug');
         currentEnemy = activeBugs.length > 1 ? `${name} (+${activeBugs.length - 1})` : name;
       }
@@ -2342,6 +2342,138 @@
     },
   });
 
+  // ---------------------------------------------------------------- Mario's enemy pack
+  // Mario fights a small cast of original platformer-archetype creatures instead of the
+  // shared beetle - a walker, a shell, a flier, a jumper, an ambusher, an elite and a boss.
+  // Same rule as Goku's pack above: this is the one place that knows what these creatures
+  // are, and the shared bug engine (spawnBug/updateBugs/squashBug/drawBugs) only ever asks
+  // `species().enemyPack` for a name and looks the class up here, plus the small `b.pack`
+  // tag on each bug so the two packs' same-named classes (both have an 'elite' and a
+  // 'boss') never get looked up in the wrong registry.
+  const MARIO_ENEMIES = Object.freeze({
+    walker: {
+      id: 'walker', name: 'Stomper', weight: 42, grounded: true, minStageForSpawn: 0,
+      hp: 1, speed: 38, sizeMul: 1.0, hitStagger: 0.22, knockback: 90, deathAnim: 'flatten',
+    },
+    jumping: {
+      id: 'jumping', name: 'Hopper', weight: 22, grounded: true, minStageForSpawn: 0,
+      hp: 1, speed: 32, sizeMul: 0.92, hitStagger: 0.22, knockback: 90, deathAnim: 'flip',
+      jumpImpulse: 260, jumpGravity: 780, jumpInterval: [1.0, 2.0],
+    },
+    shell: {
+      id: 'shell', name: 'Shellback', weight: 15, grounded: true, minStageForSpawn: 1,
+      hp: 1, speed: 26, sizeMul: 1.05, hitStagger: 0.2, knockback: 70, deathAnim: 'shellspin',
+      shellDelay: 1.4, slideSpeed: 320,
+    },
+    flying: {
+      id: 'flying', name: 'Buzzer', weight: 13, grounded: false, minStageForSpawn: 1,
+      hp: 1, speed: 44, sizeMul: 0.82, hitStagger: 0.24, knockback: 80, deathAnim: 'airspin',
+      altitudeRange: [70, 150],
+    },
+    ambush: {
+      id: 'ambush', name: 'Lurker', weight: 11, grounded: true, minStageForSpawn: 1,
+      hp: 1, speed: 130, sizeMul: 0.9, hitStagger: 0.2, knockback: 85, deathAnim: 'flatten',
+    },
+    elite: {
+      id: 'elite', name: 'Ironshell', weight: 8, grounded: true, minStageForSpawn: 2,
+      hp: 3, speed: 48, sizeMul: 1.55, hitStagger: 0.4, knockback: 60, deathAnim: 'collapse',
+    },
+    boss: {
+      id: 'boss', name: 'King Koopa', grounded: true, minStageForSpawn: 0,
+      hp: 7, speed: 24, sizeMul: 2.8, hitStagger: 0.5, knockback: 45, deathAnim: 'bossdown',
+    },
+  });
+  // Mario grows through Small -> Super -> Fire -> Star, and the world should grow richer
+  // with him, not harder to survive: higher stages unlock the shell/flying/ambush/elite
+  // classes and a small stat bump, but he must stay able to clear anything that spawns.
+  function marioEnemyPool() {
+    const stage = marioState.stage;
+    return Object.values(MARIO_ENEMIES).filter((e) => e.id !== 'boss' && stage >= e.minStageForSpawn);
+  }
+  function pickMarioEnemyClass() {
+    const pool = marioEnemyPool();
+    const total = pool.reduce((sum, e) => sum + e.weight, 0);
+    let roll = Math.random() * total;
+    for (const e of pool) { roll -= e.weight; if (roll <= 0) return e; }
+    return pool[pool.length - 1];
+  }
+  function marioEnemyClass(id) { return MARIO_ENEMIES[id] || MARIO_ENEMIES.walker; }
+  function marioScaledStats(def) {
+    const stage = marioState.stage;
+    const growth = 1 + stage * 0.12;
+    const hp = def.id === 'elite' ? Math.min(4, def.hp + Math.floor(stage / 2))
+      : def.id === 'boss' ? Math.min(9, def.hp + stage)
+      : def.hp;
+    const speed = def.speed * growth * (0.85 + Math.random() * 0.3);
+    return { hp, speed };
+  }
+  // A themed death for each Mario class, built from the same shared particle vocabulary
+  // ('spark'/'flame'/'check') the rest of the game already uses - no new effect system.
+  function playMarioDeathAnim(b, def) {
+    const by = groundY - 9 * scale - (b.altitude || 0);
+    const hue = def.id === 'flying' ? 200 : def.id === 'shell' ? 130 : def.id === 'elite' ? 12
+      : def.id === 'boss' ? 42 : 95;
+    audio.pop();
+    if (def.deathAnim === 'airspin') {
+      spawn('spark', b.x, by, 8, { spread: 10, vx: 90, vy: -70, size: 8, hue, dur: 0.5 });
+      spawn('flame', b.x, by, 4, { spread: 8, vx: 60, vy: -50, size: 7, hue, dur: 0.4 });
+    } else if (def.deathAnim === 'shellspin') {
+      spawn('spark', b.x, by, 10, { spread: 16, vx: 130, vy: -60, size: 8, hue, dur: 0.5 });
+      spawn('check', b.x, by, 2, { spread: 6, vx: 30, vy: -70, size: 10, dur: 0.7 });
+    } else if (def.deathAnim === 'collapse') {
+      spawn('spark', b.x, by, 10, { spread: 14, vx: 100, vy: -90, size: 10, hue, dur: 0.7 });
+      spawn('flame', b.x, by, 8, { spread: 12, vx: 80, vy: -70, size: 11, hue, dur: 0.65 });
+      setTimeout(() => spawn('flame', b.x, by, 6, { spread: 16, vx: 100, vy: -60, size: 13, hue: hue + 20, dur: 0.5 }), 90);
+    } else if (def.deathAnim === 'bossdown') {
+      pet.shake = Math.max(pet.shake, 0.4);
+      spawn('spark', b.x, by, 16, { spread: 22, vx: 150, vy: -120, size: 12, hue, dur: 0.9 });
+      spawn('flame', b.x, by, 12, { spread: 20, vx: 120, vy: -100, size: 16, hue, dur: 0.85 });
+      setTimeout(() => spawn('flame', b.x, by, 10, { spread: 26, vx: 140, vy: -80, size: 18, hue: 45, dur: 0.8 }), 110);
+      setTimeout(() => spawn('spark', b.x, by, 12, { spread: 30, vx: 160, vy: -90, size: 14, hue: 52, dur: 0.9 }), 220);
+    } else if (def.deathAnim === 'flip') {
+      spawn('spark', b.x, by, 6, { spread: 8, vx: 70, vy: -100, size: 8, hue, dur: 0.5 });
+      spawn('dust', b.x, by, 4, { spread: 10, vx: 30, vy: -20, size: 6, dur: 0.4 });
+    } else {
+      spawn('spark', b.x, by, 6, { spread: 8, vx: 90, vy: -80, size: 8, hue, dur: 0.5 });
+      spawn('flame', b.x, by, 3, { spread: 6, vx: 60, vy: -60, size: 8, hue, dur: 0.4 });
+    }
+    say(line(b.boss ? 'bossDown' : (def.id === 'elite' ? 'zapped' : 'squash')), 1200);
+  }
+  const MARIO_STAGE_NAMES = ['Small Mario', 'Super Mario', 'Fire Mario', 'Star Mario'];
+  function getMarioSnapshot() {
+    const m = marioState;
+    // Control-room combat readout, same shape as getGokuSnapshot() above. Screen-wide
+    // swarm mode still hands Mario the host's plain beetles (the native overlay doesn't
+    // know about enemy packs), so this only reports pack-flavored names for bugs actually
+    // spawned by spawnBug here - matching the accepted limitation Goku's pack already has.
+    let currentEnemy = 'None', bossState = 'None';
+    if (state.species === 'mario') {
+      const activeBugs = swarmOn() ? hostBugs : bugs.filter((b) => b.alive);
+      if (activeBugs.length) {
+        let nearest = activeBugs[0], bestD = Infinity;
+        for (const b of activeBugs) {
+          const d = Math.abs(b.x - pet.x);
+          if (d < bestD) { bestD = d; nearest = b; }
+        }
+        const def = nearest.enemyId && nearest.pack === 'mario' ? marioEnemyClass(nearest.enemyId) : null;
+        const name = def ? def.name : (nearest.label || 'Bug');
+        currentEnemy = activeBugs.length > 1 ? `${name} (+${activeBugs.length - 1})` : name;
+      }
+      const boss = bugs.find((b) => b.alive && b.boss);
+      if (boss) bossState = `Engaged: ${boss.label || 'King Koopa'} (${boss.hp}/${boss.maxHp})`;
+    }
+    return {
+      stage: m.stage,
+      currentForm: MARIO_STAGE_NAMES[m.stage] || 'Small Mario',
+      power: Math.round(clamp((m.stage / 3) * 100, 0, 100)),
+      coins: m.coins || 0,
+      enemyPack: 'Mario World',
+      currentEnemy,
+      enemiesDefeated: state.marioKillsToday || 0,
+      bossState,
+    };
+  }
+
   defineSpecies({
     id: 'mario', name: 'Mario', kind: 'ground',
     blurb: 'The legendary Mushroom Kingdom plumber! Levels up from Small Mario to Super Mario and Fire Mario as you commit code, stomps crawling bugs, hits floating ? blocks, and warps into green pipes on deployment!',
@@ -2351,13 +2483,23 @@
     half: (r) => r * 1.4,
     draw: () => drawMario(),
     trail: null,
+    enemyPack: 'mario',                  // fights his own Mushroom Kingdom cast, not the shared beetle
     attack: {
       style: 'stomp',
       behind: false,
       charge: 0.85,
-      resolve(isBoss) {
+      resolve(isBoss, target) {
+        // A dodging flier earns a snappier throw at every stage that can reach it at all -
+        // waiting out a full charge just to watch it juke away isn't fun.
+        const def = (target && target.pack === 'mario' && target.enemyId) ? marioEnemyClass(target.enemyId) : null;
+        const quick = def && def.id === 'flying';
+        if (marioState.stage >= 3 && !isBoss) {
+          // Star Mario doesn't charge a weapon, he just barrels through - a near-instant,
+          // overwhelming answer to anything still standing.
+          return { style: 'starpower', charge: quick ? 0.1 : 0.14, sound: 'marioFireball' };
+        }
         if (isBoss || marioState.stage >= 2) {
-          return { style: 'fireball', charge: 0.85, sound: 'marioFireball' };
+          return { style: 'fireball', charge: quick ? 0.5 : 0.85, sound: 'marioFireball' };
         }
         return { style: 'stomp', charge: 0.18, sound: 'marioJump' };
       },
@@ -2376,7 +2518,9 @@
       bored: ["No Goombas to stomp?", "Where are the ? blocks?", "Let's find a secret warp pipe!"],
       petted: ["Yahoo!", "Hehehe, thank you so much!", "Oh boy!"],
       eat: ["Delicious!", "Power-up! YAHOO!", "Mushroom power!"],
-      zapped: ["WAHOO! STOMP!", "Fireball! Direct hit!", "Take that, Bowser's minion!"],
+      zapped: ["WAHOO! STOMP!", "Fireball! Direct hit!", "Take that, Bowser's minion!", "Take this!"],
+      enemySpot: ["Here we go!", "Uh-oh, incoming!", "A wild Koopa approaches!"],
+      bossSpawn: ["Let's-a go!", "Here comes the big one!", "It's Bowser time!"],
       play: ["Let's-a jump!", "Triple jump! Yahoo!", "Super Mario leap!"],
       working: ["Hitting blocks...", "Searching for green pipes...", "Almost at the flagpole..."],
       done: ["Course clear!", "World 1-1 completed!", "Stage clear, wahoo!"],
@@ -2386,6 +2530,7 @@
       held: ["Hey! Put-a me down!", "I need to stomp on the ground!"],
       landed: ["Touchdown! Yahoo!"],
       night: ["Star power shining in the night.", "Castle is quiet tonight."],
+      bossDown: ["Let's go! The castle is safe!", "Thank you Mario! ...wait, I'm Mario!", "Bowser's minion, defeated!"],
     },
   });
 
@@ -3182,6 +3327,15 @@
     pet.surprise = Math.max(pet.surprise, 0.4);
     if (Math.random() < 0.5) say(line('enemySpot'), 1200);
   }
+  function triggerMarioAlert() {
+    if (state.species !== 'mario' || state.asleep || pet.held || pet.carried) return;
+    if (pet.reactionT > 0 || pet.zapCharge > 0 || pet.zap > 0) return;
+    if (marioState.transformT > 0) return;
+    pet.reaction = 'alert';
+    pet.reactionT = 1.15;
+    pet.surprise = Math.max(pet.surprise, 0.4);
+    if (Math.random() < 0.5) say(line('enemySpot'), 1200);
+  }
   function petTap() {
     audio.ensure();
     const t = performance.now();
@@ -3280,6 +3434,7 @@
     if (species().enemyPack === 'goku') {
       const def = forceEnemyId ? gokuEnemyClass(forceEnemyId) : (isBoss ? GOKU_ENEMIES.boss : pickGokuEnemyClass());
       const stats = gokuScaledStats(def);
+      bug.pack = 'goku';
       bug.enemyId = def.id;
       bug.boss = def.id === 'boss';
       bug.hp = stats.hp;
@@ -3295,6 +3450,33 @@
       bug.bobPhase = rand(0, Math.PI * 2);
       bug.label = label || def.name;
       triggerGokuAlert();
+    } else if (species().enemyPack === 'mario') {
+      const def = forceEnemyId ? marioEnemyClass(forceEnemyId) : (isBoss ? MARIO_ENEMIES.boss : pickMarioEnemyClass());
+      const stats = marioScaledStats(def);
+      bug.pack = 'mario';
+      bug.enemyId = def.id;
+      bug.boss = def.id === 'boss';
+      bug.hp = stats.hp;
+      bug.maxHp = stats.hp;
+      bug.vx = stats.speed * (Math.random() < 0.5 ? -1 : 1);
+      bug.facing = Math.sign(bug.vx) || 1;
+      bug.altitude = def.grounded ? 0 : rand(def.altitudeRange[0], def.altitudeRange[1]);
+      bug.hurtT = 0;
+      bug.knockVx = 0;
+      bug.bobPhase = rand(0, Math.PI * 2);
+      // Shell state machine: 'walk' (normal) -> 'shelled' (retracted, harmless) ->
+      // 'sliding' (a fast physics object that can chain into other enemies).
+      bug.shellState = 'walk';
+      bug.shellT = 0;
+      bug.shellDir = 1;
+      // Jumping enemy's own gravity arc, independent of the pet's.
+      bug.jumpVy = 0;
+      bug.jumpCd = def.id === 'jumping' ? rand(def.jumpInterval[0], def.jumpInterval[1]) : 0;
+      // Ambush state machine: hides low, then pops up and dashes before retreating.
+      bug.ambushState = 'hidden';
+      bug.ambushT = rand(0.6, 1.6);
+      bug.label = label || def.name;
+      triggerMarioAlert();
     }
     bugs.push(bug);
   }
@@ -3327,7 +3509,7 @@
   }
   function squashBug(b, byPet, byLaser) {
     if (!b.alive) return;
-    if (b.enemyId) {
+    if (b.enemyId && b.pack === 'goku') {
       // Goku's pack: every hit short of the killing one is a stagger + knockback, never
       // an instant kill, regardless of whether it came from a beam (byLaser is always true
       // for Goku's own local shots) - only actual remaining hp decides this.
@@ -3347,6 +3529,52 @@
       b.knockVx = -dir * def.knockback * 1.4;
       countKill(byLaser, b.boss);
       playGokuDeathAnim(b, def);
+      if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
+      return;
+    }
+    if (b.enemyId && b.pack === 'mario') {
+      const def = marioEnemyClass(b.enemyId);
+      const dir = Math.sign(pet.x - b.x) || -(b.facing || 1);
+      // Star Mario barrels straight through the shell gimmick too - nothing survives more
+      // than one hit while he is invincible.
+      const starMode = marioState.stage >= 3 || marioState.invincibleT > 0;
+      if (def.id === 'shell' && !starMode) {
+        if (b.shellState === 'walk') {
+          // First hit just retracts it into its shell - harmless, not a kill yet.
+          b.shellState = 'shelled';
+          b.shellT = def.shellDelay;
+          b.vx = 0;
+          audio.pop();
+          spawn('spark', b.x, groundY - 9 * scale, 4, { spread: 6, vx: 30, vy: -50, size: 7, hue: 130 });
+          return;
+        }
+        if (b.shellState === 'shelled') {
+          // A second hit kicks the shell away immediately, same as a real Koopa shell.
+          b.shellState = 'sliding';
+          b.shellDir = dir < 0 ? 1 : -1;
+          b.vx = b.shellDir * def.slideSpeed;
+          b.shellHitCd = 0;
+          audio.zap();
+          return;
+        }
+        if (!byLaser) return; // walking into an already-sliding shell just bounces off it
+      }
+      // Star Mario doesn't whittle anything down hit by hit (except the boss, who still
+      // needs a real health bar to feel like an encounter) - it recoils hard and is gone.
+      if (b.hp > 1 && !(starMode && !b.boss)) {
+        b.hp -= 1;
+        b.hurtT = def.hitStagger;
+        b.knockVx = -dir * def.knockback;
+        audio.pop();
+        spawn('spark', b.x, groundY - 9 * scale - (b.altitude || 0), 5, { spread: 8, vx: 40, vy: -70, size: 8, hue: 46 });
+        return;
+      }
+      b.alive = false;
+      b.state = 'dying';
+      b.squash = def.deathAnim === 'bossdown' ? 1.3 : def.deathAnim === 'collapse' ? 0.8 : 0.5;
+      b.knockVx = -dir * def.knockback * (starMode ? 2.2 : 1.4);
+      countKill(byLaser, b.boss);
+      playMarioDeathAnim(b, def);
       if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
       return;
     }
@@ -3412,6 +3640,9 @@
       // as bugsToday just above.
       if (state.gokuKillsDay !== today) { state.gokuKillsDay = today; state.gokuKillsToday = 0; }
       state.gokuKillsToday = (state.gokuKillsToday || 0) + 1;
+    } else if (state.species === 'mario') {
+      if (state.marioKillsDay !== today) { state.marioKillsDay = today; state.marioKillsToday = 0; }
+      state.marioKillsToday = (state.marioKillsToday || 0) + 1;
     }
     saveState();
   }
@@ -4173,6 +4404,132 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried && pet.grounded;
     if (def.grounded && canStomp && Math.abs(b.x - pet.x) < r * 0.62) squashBug(b, true);
   }
+  // Movement, physics and light chain-reaction combat for Mario's own enemy pack. Kept
+  // entirely in this one function for the same reason as updateGokuEnemy above: the shared
+  // per-bug loop only ever asks `b.pack` and dispatches here, so no other species' bugs
+  // ever take this path and lifecycle stays owned by updateBugs itself.
+  function updateMarioEnemy(b, dt, r) {
+    if (b.hurtT > 0) {
+      b.hurtT = Math.max(0, b.hurtT - dt);
+      b.x += b.knockVx * dt;
+      b.knockVx *= Math.pow(0.02, dt);
+    }
+    const def = marioEnemyClass(b.enemyId);
+    const edge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
+    const stunned = b.hurtT > 0;
+
+    if (def.id === 'shell') {
+      if (b.shellState === 'shelled') {
+        b.shellT -= dt;
+        if (b.shellT <= 0) {
+          // Auto-slide once the delay runs out, even without a second stomp kicking it.
+          b.shellState = 'sliding';
+          b.shellDir = pet.x > b.x ? -1 : 1;
+          b.vx = b.shellDir * def.slideSpeed;
+          b.shellHitCd = 0;
+          audio.pop();
+        }
+      } else if (b.shellState === 'sliding') {
+        b.shellHitCd = Math.max(0, (b.shellHitCd || 0) - dt);
+        b.spinAngle = (b.spinAngle || 0) + Math.abs(b.vx) * dt * 0.05;
+        b.x += b.vx * dt;
+        if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx); }
+        if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx); }
+        // Chain reaction: a sliding shell wipes out the next enemy in its path. Bounded to
+        // one hit per short cooldown so it cannot cascade into a same-frame runaway loop.
+        if (b.shellHitCd <= 0) {
+          for (const other of bugs) {
+            if (other === b || !other.alive || !other.enemyId) continue;
+            if (Math.abs(other.x - b.x) < 16 * scale) {
+              squashBug(other, false, true);
+              b.shellHitCd = 0.2;
+              spawn('dust', b.x, groundY - 9 * scale, 3, { spread: 8, vx: 20, vy: -20, size: 6, dur: 0.3 });
+              break;
+            }
+          }
+        }
+      } else if (!stunned) {
+        b.x += b.vx * dt;
+        if (Math.random() < 0.01) b.vx *= -1;
+      }
+    } else if (def.id === 'flying') {
+      b.bobPhase += dt * 2.2;
+      b.altitude = clamp(b.altitude + Math.sin(b.bobPhase) * 7 * dt, def.altitudeRange[0], def.altitudeRange[1]);
+      if (!stunned) {
+        b.x += b.vx * dt;
+        // Duck away from a charging shot rather than just sitting still for it.
+        if (pet.zapCharge > 0 && Math.abs(b.x - pet.x) < r * 3 && Math.random() < 0.03) {
+          b.vx = -Math.sign(b.vx || 1) * def.speed * 1.7;
+        } else if (Math.random() < 0.01) {
+          b.vx *= -1;
+        }
+      }
+    } else if (def.id === 'jumping') {
+      const inAir = b.altitude > 0 || b.jumpVy !== 0;
+      if (inAir) {
+        b.altitude -= b.jumpVy * dt;
+        b.jumpVy += def.jumpGravity * dt;
+        if (b.altitude <= 0) {
+          b.altitude = 0; b.jumpVy = 0; b.squashT = 0.18;
+          b.jumpCd = rand(def.jumpInterval[0], def.jumpInterval[1]);
+          spawn('dust', b.x, groundY - 2, 3, { spread: 8, vx: 20, vy: -10, size: 6, dur: 0.3 });
+        }
+        if (!stunned) b.x += b.vx * dt;
+      } else {
+        b.jumpCd -= dt;
+        if (b.squashT > 0) b.squashT = Math.max(0, b.squashT - dt);
+        if (!stunned) {
+          b.x += b.vx * 0.35 * dt;
+          if (b.jumpCd <= 0) {
+            b.jumpVy = -def.jumpImpulse;
+            audio.pop();
+            if (Math.random() < 0.35) b.vx = -b.vx;
+          }
+        }
+      }
+    } else if (def.id === 'ambush') {
+      b.ambushT -= dt;
+      if (b.ambushState === 'hidden' && b.ambushT <= 0) {
+        b.ambushState = 'active'; b.ambushT = rand(0.5, 0.9);
+        b.vx = (Math.sign(pet.x - b.x) || 1) * def.speed;
+        audio.pop();
+      } else if (b.ambushState === 'active' && b.ambushT <= 0) {
+        b.ambushState = 'retreating'; b.ambushT = rand(0.4, 0.7);
+        b.vx = -Math.sign(b.vx || 1) * def.speed * 0.7;
+      } else if (b.ambushState === 'retreating' && b.ambushT <= 0) {
+        b.ambushState = 'hidden'; b.ambushT = rand(0.8, 1.8);
+        b.vx = 0;
+      }
+      if (!stunned && b.ambushState !== 'hidden') b.x += b.vx * dt;
+    } else {
+      // walker / elite: a walk cycle with an occasional stop-and-look pause, plus a
+      // stronger, more frequent dodge-hop for the elite so it reads as tougher, not just bigger.
+      b.lookT = Math.max(0, (b.lookT || 0) - dt);
+      if (!stunned && b.lookT <= 0) {
+        b.x += b.vx * dt;
+        if (Math.random() < (def.id === 'elite' ? 0.006 : 0.01)) b.vx *= -1;
+        if (Math.random() < 0.003) b.lookT = rand(0.5, 1.2);
+        const away = b.x - pet.x;
+        if (Math.abs(away) < r * (def.id === 'elite' ? 2.2 : 1.8) && Math.random() < (def.id === 'elite' ? 0.03 : 0.015)) {
+          b.vx = Math.sign(away || 1) * def.speed * (Math.random() < 0.5 ? -1.6 : 1.2);
+        }
+      }
+    }
+
+    if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx); }
+    if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx); }
+    b.facing = Math.sign(b.vx) || b.facing || 1;
+
+    const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried && pet.grounded;
+    if (def.grounded && canStomp && Math.abs(b.x - pet.x) < r * 0.62) squashBug(b, true);
+    // A flier can't just be walked into - but Mario landing on top of it mid-jump should
+    // still count as a stomp, the same "jump on it" fantasy the ground shortcut skips.
+    if (!def.grounded && state.hatched && !state.asleep && !pet.held && !pet.carried && !pet.grounded
+      && Math.abs(b.x - pet.x) < r * 0.7) {
+      const by = groundY - 9 * scale - (b.altitude || 0);
+      if (Math.abs((pet.y - r * 1.6) - by) < r * 0.9) squashBug(b, true);
+    }
+  }
   function updateBugs(dt) {
     const r = petR();
     const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried;
@@ -4190,7 +4547,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         if (b.squash <= 0) bugs.splice(i, 1);
         continue;
       }
-      if (b.enemyId) { updateGokuEnemy(b, dt, r); continue; }
+      if (b.enemyId) { (b.pack === 'mario' ? updateMarioEnemy : updateGokuEnemy)(b, dt, r); continue; }
       b.dart -= dt;
       if (b.dart <= 0) {
         b.dart = rand(0.4, 1.8);
@@ -6503,14 +6860,14 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         fb.bounces = (fb.bounces || 0) + 1;
       }
 
-      // Smoke trail
+      // Smoke trail - a star-powered throw leaves a rainbow streak instead of embers
       if (Math.random() < 0.6) {
         spawn('spark', fb.x, fb.y, 1, {
           spread: 3,
           vx: -fb.vx * 0.1,
           vy: -30,
-          size: 5,
-          hue: pick([28, 45, 12]),
+          size: fb.star ? 7 : 5,
+          hue: fb.star ? (pet.t * 420) % 360 : pick([28, 45, 12]),
           dur: 0.25
         });
       }
@@ -6519,7 +6876,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       let hit = false;
       for (const bug of bugs) {
         if (!bug.alive) continue;
-        const bugY = groundY - 9 * scale;
+        const bugY = groundY - 9 * scale - (bug.altitude || 0);
         if (Math.hypot(fb.x - bug.x, fb.y - bugY) < 22) {
           hit = true;
           squashBug(bug, false, true);
@@ -6530,14 +6887,15 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       if (hit || fb.bounces > 4 || fb.x < 0 || fb.x > W) {
         m.fireballs.splice(i, 1);
         audio.splat();
-        for (let s = 0; s < 8; s++) {
+        const burst = fb.star ? 14 : 8;
+        for (let s = 0; s < burst; s++) {
           spawn('spark', fb.x, fb.y, 1, {
-            spread: 8,
-            vx: rand(-90, 90),
-            vy: rand(-120, -20),
+            spread: fb.star ? 14 : 8,
+            vx: rand(-90, 90) * (fb.star ? 1.4 : 1),
+            vy: rand(-120, -20) * (fb.star ? 1.3 : 1),
             size: rand(5, 9),
-            hue: 35,
-            dur: 0.4
+            hue: fb.star ? (pet.t * 500 + s * 40) % 360 : 35,
+            dur: fb.star ? 0.6 : 0.4
           });
         }
       }
@@ -6705,9 +7063,13 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     for (const fb of m.fireballs) {
       if (marioImgFireball && marioImgFireball.complete) {
         ctx.save();
-        const fw = r * 1.2, fh = r * 1.2;
+        const fw = r * (fb.star ? 1.6 : 1.2), fh = r * (fb.star ? 1.6 : 1.2);
         ctx.translate(fb.x, fb.y);
         ctx.rotate(pet.t * 16);
+        if (fb.star) {
+          ctx.fillStyle = `hsla(${(pet.t * 460) % 360}, 100%, 70%, 0.55)`;
+          ctx.beginPath(); ctx.arc(0, 0, fw * 0.95, 0, Math.PI * 2); ctx.fill();
+        }
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(marioImgFireball, -fw / 2, -fh / 2, fw, fh);
@@ -6774,21 +7136,23 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
   }
 
   function drawMarioAttack(r, k, isBoss, style) {
-    // Stomp or Fireball
-    if (style === 'fireball' || marioState.stage >= 2 || isBoss) {
+    // Stomp, Fireball, or Star Mario's overwhelming star-power throw
+    if (style === 'fireball' || style === 'starpower' || marioState.stage >= 2 || isBoss) {
       // Fireball blast
+      const star = style === 'starpower';
       const ox = pet.x + pet.facing * r * 0.5, oy = groundY - 14;
       const targetX = Number.isFinite(pet.zapX) ? pet.zapX : (ox + pet.facing * 140);
       const targetY = Number.isFinite(pet.zapY) ? pet.zapY : (groundY - 10);
       const bdx = targetX - ox, bdy = targetY - oy;
       const dist = Math.max(1, Math.hypot(bdx, bdy));
-      const spd = 520;
+      const spd = star ? 680 : 520;
       marioState.fireballs.push({
         x: ox,
         y: oy,
         vx: (bdx / dist) * spd,
         vy: (bdy / dist) * spd - 60,
-        bounces: 0
+        bounces: 0,
+        star,
       });
       audio.marioFireball();
     } else {
@@ -9639,9 +10003,210 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     ctx.restore();
   }
 
+  // ---------------------------------------------------------------- Mario's enemy pack: art
+  // Original platformer-archetype silhouettes - a mushroom-capped walker, a domed shell, a
+  // winged buzzer, a spring-legged hopper, a crouching lurker, an armored elite and a horned
+  // boss. All state (shellState/shellT/jumpVy/ambushState/spinAngle/squashT/hurtT/knockVx) is
+  // written by spawnBug/updateMarioEnemy/squashBug above; this only ever reads it.
+  function marioEnemyPalette(id) {
+    switch (id) {
+      case 'shell': return { body: '#3ba55c', dark: '#1c5c31', glow: '#c6f6d5', belly: '#f2d9a0' };
+      case 'flying': return { body: '#7c5cff', dark: '#3a2680', glow: '#e0d4ff', belly: '#f2d9a0' };
+      case 'jumping': return { body: '#7a4a2b', dark: '#3d2412', glow: '#ffd98e', belly: '#f2d9a0' };
+      case 'ambush': return { body: '#2d8f8f', dark: '#154848', glow: '#a6f3f3', belly: '#f2d9a0' };
+      case 'elite': return { body: '#b91c1c', dark: '#4a0a0a', glow: '#ff9f43', belly: '#2a2a2a' };
+      case 'boss': return { body: '#2f7d32', dark: '#123813', glow: '#ffe066', belly: '#f2d9a0' };
+      default: return { body: '#c9743a', dark: '#6b3818', glow: '#ffe4b8', belly: '#f2d9a0' };
+    }
+  }
+  function drawMarioEnemy(b) {
+    const def = marioEnemyClass(b.enemyId);
+    const u = 8 * def.sizeMul * scale;
+    const pal = marioEnemyPalette(def.id);
+    ctx.save();
+    ctx.translate(b.x, groundY - 1 - (b.altitude || 0));
+
+    if (!b.alive) {
+      const total = def.deathAnim === 'bossdown' ? 1.3 : def.deathAnim === 'collapse' ? 0.8 : 0.5;
+      const k = clamp(b.squash / total, 0, 1);
+      if (def.deathAnim === 'flatten') {
+        ctx.globalAlpha = k;
+        ctx.fillStyle = pal.dark;
+        ctx.beginPath(); ctx.ellipse(0, -u * 0.15, u * (1.3 + (1 - k) * 0.5), u * 0.3 * k, 0, 0, Math.PI * 2); ctx.fill();
+      } else if (def.deathAnim === 'shellspin' || def.deathAnim === 'flip') {
+        ctx.rotate((b.deathSpin || 0) * 1.4);
+        ctx.globalAlpha = k;
+        ctx.fillStyle = pal.body;
+        ctx.beginPath(); ctx.ellipse(0, -u * 0.8, u * 0.9 * k, u * 0.9 * k, 0, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.rotate((b.deathSpin || 0) * (def.id === 'flying' ? 1 : 0.6));
+        ctx.globalAlpha = k;
+        ctx.fillStyle = pal.glow;
+        ctx.beginPath(); ctx.arc(0, -u * 0.9, u * (1.1 + (1 - k) * 0.6), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = k * 0.7;
+        ctx.fillStyle = pal.body;
+        ctx.beginPath(); ctx.ellipse(0, -u * 0.9, u * 0.8 * k, u * 1.1 * k, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
+
+    if (def.id === 'boss') {
+      const bw = 90, bh = 6;
+      ctx.fillStyle = 'rgba(18, 20, 26, 0.85)';
+      ctx.fillRect(-bw / 2 - 1, -u * 3.8 - 1, bw + 2, bh + 2);
+      ctx.fillStyle = '#ef4444';
+      const hpPct = clamp((b.hp || 1) / (b.maxHp || 1), 0, 1);
+      ctx.fillRect(-bw / 2, -u * 3.8, bw * hpPct, bh);
+      ctx.font = 'bold 9px ui-monospace, Menlo, monospace';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.label || def.name, 0, -u * 3.8 - 5);
+    }
+
+    ctx.scale(b.facing || 1, 1);
+    const flash = b.hurtT > 0 ? clamp(b.hurtT / def.hitStagger, 0, 1) : 0;
+    if (flash > 0) ctx.translate(Math.sin(pet.t * 60) * u * 0.15 * flash, 0);
+    const ink = (fallback) => (flash > 0 ? '#ffffff' : fallback);
+
+    if (def.id === 'shell') {
+      const spinning = b.shellState === 'sliding';
+      ctx.save();
+      if (spinning) ctx.rotate(b.spinAngle || 0);
+      if (!spinning && b.shellState === 'walk') {
+        // little feet peeking out from under the shell while it still walks around
+        ctx.fillStyle = ink(pal.dark);
+        const stride = Math.sin(pet.t * 10) * u * 0.2;
+        ctx.beginPath(); ctx.ellipse(-u * 0.35, -u * 0.05, u * 0.28, u * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(u * 0.35 + stride, -u * 0.05, u * 0.28, u * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = ink(pal.body);
+      ctx.beginPath(); ctx.ellipse(0, -u * 0.95, u * 1.05, u * 0.95, 0, Math.PI, 0); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, -u * 0.7, u * 1.05, u * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = ink(pal.dark);
+      ctx.lineWidth = Math.max(1, u * 0.09);
+      for (const sx of [-0.5, 0, 0.5]) {
+        ctx.beginPath(); ctx.moveTo(sx * u, -u * 1.5); ctx.lineTo(sx * u * 1.3, -u * 0.3); ctx.stroke();
+      }
+      if (!spinning) {
+        ctx.fillStyle = pal.belly;
+        ctx.beginPath(); ctx.ellipse(0, -u * 0.15, u * 0.5, u * 0.3, 0, 0, Math.PI); ctx.fill();
+      }
+      ctx.restore();
+    } else if (def.id === 'flying') {
+      const bob = Math.sin(b.bobPhase || 0) * u * 0.15;
+      const flap = Math.sin(pet.t * 16) * 0.5 + 0.5;
+      ctx.save();
+      ctx.translate(0, bob);
+      ctx.fillStyle = ink(pal.glow);
+      ctx.globalAlpha = 0.4 + flap * 0.3;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(s * u * 0.9, -u * 1.15, u * 0.75, u * 0.32 * (0.4 + flap * 0.6), s * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = ink(pal.body);
+      ctx.beginPath(); ctx.arc(0, -u * 1.1, u * 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = ink(pal.dark);
+      ctx.beginPath(); ctx.moveTo(u * 0.7, -u * 1.1); ctx.lineTo(u * 1.25, -u * 1.0); ctx.lineTo(u * 0.7, -u * 0.9); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(-u * 0.2, -u * 1.25, u * 0.18, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else if (def.id === 'jumping') {
+      const squashK = b.squashT > 0 ? b.squashT / 0.18 : 0;
+      const jumping = b.altitude > 0.5;
+      ctx.save();
+      ctx.scale(1 + squashK * 0.35, 1 - squashK * 0.35 - (jumping ? 0.12 : 0));
+      // a coiled spring for a leg
+      ctx.strokeStyle = ink(pal.dark);
+      ctx.lineWidth = Math.max(1, u * 0.16);
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const yy = -i * u * 0.22;
+        ctx.moveTo(-u * 0.3, yy); ctx.lineTo(u * 0.3, yy - u * 0.14);
+      }
+      ctx.stroke();
+      ctx.fillStyle = ink(pal.body);
+      ctx.beginPath(); ctx.arc(0, -u * 1.35, u * 0.85, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(u * 0.28, -u * 1.5, u * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(u * 0.34, -u * 1.5, u * 0.09, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else if (def.id === 'ambush') {
+      const active = b.ambushState !== 'hidden';
+      const crouch = b.ambushState === 'hidden' ? 0.55 : b.ambushState === 'retreating' ? 0.8 : 1;
+      ctx.save();
+      ctx.scale(1, crouch);
+      ctx.fillStyle = ink(pal.dark);
+      ctx.beginPath(); ctx.roundRect(-u * 0.75, -u * 1.3, u * 1.5, u * 1.3, u * 0.35); ctx.fill();
+      ctx.fillStyle = ink(pal.body);
+      ctx.beginPath(); ctx.arc(0, -u * 1.45, u * 0.62, 0, Math.PI * 2); ctx.fill();
+      if (active) {
+        ctx.fillStyle = pal.glow;
+        ctx.beginPath(); ctx.arc(-u * 0.22, -u * 1.5, u * 0.16, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(u * 0.22, -u * 1.5, u * 0.16, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    } else if (def.id === 'elite') {
+      ctx.fillStyle = ink(pal.dark);
+      ctx.beginPath(); ctx.roundRect(-u * 0.95, -u * 1.9, u * 1.9, u * 1.9, u * 0.4); ctx.fill();
+      ctx.fillStyle = ink(pal.body);
+      ctx.beginPath(); ctx.arc(0, -u * 2.15, u * 0.78, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = ink(pal.dark);
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * u * 0.5, -u * 2.6); ctx.lineTo(s * u * 0.85, -u * 3.15); ctx.lineTo(s * u * 0.2, -u * 2.75);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.save();
+      ctx.shadowColor = pal.glow;
+      ctx.shadowBlur = u * (0.5 + Math.sin(pet.t * 6) * 0.15);
+      ctx.fillStyle = pal.glow;
+      ctx.beginPath(); ctx.arc(0, -u * 1.05, u * 0.32, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else if (def.id === 'boss') {
+      ctx.fillStyle = ink(pal.dark);
+      ctx.beginPath(); ctx.roundRect(-u * 1.5, -u * 2.8, u * 3, u * 2.8, u * 0.5); ctx.fill();
+      ctx.fillStyle = ink(pal.body);
+      ctx.beginPath(); ctx.arc(0, -u * 3.0, u * 1.1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pal.glow;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * u * 0.5, -u * 3.6); ctx.lineTo(s * u * 1.0, -u * 4.4); ctx.lineTo(s * u * 0.15, -u * 3.7);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#fff';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * u * 0.42, -u * 3.05, u * 0.16, 0, Math.PI * 2); ctx.fill(); }
+      ctx.strokeStyle = pal.glow;
+      ctx.globalAlpha = 0.5 + Math.sin(pet.t * 4) * 0.2;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -u * 1.4, u * 2.1, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else {
+      // walker: a little mushroom-capped stomper, the common enemy
+      const stride = b.lookT > 0 ? 0 : Math.sin(pet.t * 12) * u * 0.22;
+      ctx.save();
+      ctx.fillStyle = ink(pal.dark);
+      ctx.beginPath(); ctx.ellipse(-u * 0.35, -u * 0.1, u * 0.3, u * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(u * 0.35 + stride, -u * 0.1, u * 0.3, u * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = ink(pal.body);
+      ctx.beginPath(); ctx.ellipse(0, -u * 0.95, u * 1.0, u * 0.85, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = pal.belly;
+      ctx.beginPath(); ctx.ellipse(0, -u * 0.55, u * 0.7, u * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1a1a1a';
+      const lookDx = b.lookT > 0 ? Math.sin(pet.t * 3) * u * 0.15 : 0;
+      ctx.beginPath(); ctx.arc(-u * 0.25 + lookDx, -u * 0.55, u * 0.11, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(u * 0.25 + lookDx, -u * 0.55, u * 0.11, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   function drawBugs() {
     for (const b of bugs) {
-      if (b.enemyId) { drawGokuEnemy(b); continue; }
+      if (b.enemyId) { (b.pack === 'mario' ? drawMarioEnemy : drawGokuEnemy)(b); continue; }
       const u = (b.boss ? 11 : 6.5) * scale;
       ctx.save();
       ctx.translate(b.x, groundY - 1);
@@ -10150,6 +10715,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     if (!targetBug) {
       const targetX = pet.x > W / 2 ? rand(30, W * 0.35) : rand(W * 0.65, W - 30);
       const bossLabels = {
+        mario: 'KING KOOPA (BOSS)',
         goku: 'CELL (BOSS)',
         ironman: 'ULTRON (BOSS)',
         pikachu: 'TEAM ROCKET',
@@ -10441,6 +11007,24 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     gokuForceForm(idx) {
       const i = clamp(Math.round(Number(idx) || 0), 0, GOKU_CONFIG.forms.length - 1);
       setGokuSimulatedCommits(GOKU_CONFIG.forms[i].minCommits);
+    },
+    // Dev/test only: spawn a specific Mario enemy class instead of leaving it to the
+    // weighted random pick, so the whole pack can be exercised without waiting on real
+    // commits. No-op for every other species.
+    marioSpawnEnemy(kind) {
+      if (state.species !== 'mario') return;
+      const valid = ['walker', 'shell', 'flying', 'jumping', 'ambush', 'elite', 'boss'];
+      const id = valid.includes(kind) ? kind : 'walker';
+      const targetX = pet.x > W / 2 ? rand(30, W * 0.35) : rand(W * 0.65, W - 30);
+      spawnBug(targetX, id === 'boss', undefined, id);
+    },
+    // Dev/test only: jump straight to a stage (0 Small .. 3 Star) without waiting on real
+    // qblock hits/commits.
+    marioForceStage(idx) {
+      const i = clamp(Math.round(Number(idx) || 0), 0, MARIO_STAGE_NAMES.length - 1);
+      marioState.stage = i;
+      marioState.invincibleT = i === 3 ? 15 : 0;
+      marioState.transformT = 0.8;
     },
   };
 

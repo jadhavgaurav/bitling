@@ -187,6 +187,18 @@
   .thor-control label{font-size:11px;color:var(--dim)}
   .thor-control output{font:400 10px/1 var(--mono);text-align:right;color:#38bdf8}
   .thor-control input{width:100%;accent-color:#38bdf8}
+  .mario-controls{margin:0 16px 18px;padding:12px;border:1px solid rgba(229,37,33,.3);
+    border-radius:10px;background:rgba(229,37,33,.07)}
+  .mario-controls[hidden]{display:none}
+  .mario-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-bottom:10px;padding:8px 10px;background:rgba(0,0,0,.2);border-radius:6px;font:400 11px/1.4 var(--sans)}
+  .mario-stats .stat-k{color:var(--dim)}
+  .mario-stats .stat-v{font-weight:600;color:#ff6b5e;float:right;font-family:var(--mono)}
+  .mario-sim{margin-top:10px;padding-top:10px;border-top:1px solid rgba(229,37,33,.2)}
+  .mario-sim-title{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px}
+  .mario-presets{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+  .mario-preset{background:rgba(229,37,33,.15);border:1px solid rgba(229,37,33,.35);color:#ff6b5e;border-radius:4px;padding:4px 6px;font:500 10px/1 var(--sans);cursor:pointer}
+  .mario-preset:hover{background:rgba(229,37,33,.3);color:#fff}
+  .mario-preset.active{background:#e52521;color:#fff;font-weight:700}
   .thor-sim{margin-top:10px;padding-top:10px;border-top:1px solid rgba(56,189,248,.2)}
   .thor-sim-title{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px}
   .thor-presets{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
@@ -378,6 +390,44 @@
           <output id="thorSimOutput">0</output>
         </div>
         <button type="button" class="thor-reset-btn" id="thorResetSim">Reset to Real Commits</button>
+      </div>
+    </div>
+    <div class="mario-controls" id="marioControls" hidden>
+      <div class="rule" style="padding:0;margin:0 0 8px;color:#ff6b5e">Mario · Mushroom Kingdom</div>
+      <div class="mario-stats">
+        <div><span class="stat-k">Form:</span> <span class="stat-v" id="mFormName">Small Mario</span></div>
+        <div><span class="stat-k">Coins:</span> <span class="stat-v" id="mCoins">0</span></div>
+        <div><span class="stat-k">Power:</span> <span class="stat-v" id="mPower">0%</span></div>
+      </div>
+      <div class="rule" style="padding:0;margin:8px 0 8px;color:#ff6b5e">Combat</div>
+      <div class="mario-stats">
+        <div><span class="stat-k">Enemy World:</span> <span class="stat-v" id="mEnemyPack">Mario World</span></div>
+        <div><span class="stat-k">Current Enemy:</span> <span class="stat-v" id="mCurrentEnemy">None</span></div>
+        <div><span class="stat-k">Defeated Today:</span> <span class="stat-v" id="mEnemiesDefeated">0</span></div>
+        <div><span class="stat-k">Boss:</span> <span class="stat-v" id="mBossState">None</span></div>
+      </div>
+
+      <div class="mario-sim">
+        <div class="mario-sim-title">Simulate Form</div>
+        <div class="mario-presets">
+          <button type="button" class="mario-preset" data-mariostage="0">Small</button>
+          <button type="button" class="mario-preset" data-mariostage="1">Super</button>
+          <button type="button" class="mario-preset" data-mariostage="2">Fire</button>
+          <button type="button" class="mario-preset" data-mariostage="3">Star</button>
+        </div>
+      </div>
+
+      <div class="mario-sim">
+        <div class="mario-sim-title">Dev: Spawn Enemy</div>
+        <div class="mario-presets">
+          <button type="button" class="mario-preset" data-mariospawn="walker">Stomper</button>
+          <button type="button" class="mario-preset" data-mariospawn="shell">Shellback</button>
+          <button type="button" class="mario-preset" data-mariospawn="flying">Buzzer</button>
+          <button type="button" class="mario-preset" data-mariospawn="jumping">Hopper</button>
+          <button type="button" class="mario-preset" data-mariospawn="ambush">Lurker</button>
+          <button type="button" class="mario-preset" data-mariospawn="elite">Ironshell</button>
+          <button type="button" class="mario-preset" data-mariospawn="boss">King Koopa (Boss)</button>
+        </div>
       </div>
     </div>
   </section>
@@ -969,6 +1019,29 @@
         btn.classList.toggle('active', isSim && String(tCommits) === btn.dataset.thorsim);
       }
     }
+
+    const marioControls = $('#marioControls');
+    if (marioControls) {
+      marioControls.hidden = p.species !== 'mario';
+      const mario = p.mario || {};
+      const mFormEl = $('#mFormName');
+      if (mFormEl) mFormEl.textContent = mario.currentForm || 'Small Mario';
+      const mCoinsEl = $('#mCoins');
+      if (mCoinsEl) mCoinsEl.textContent = String(mario.coins ?? 0);
+      const mPowerEl = $('#mPower');
+      if (mPowerEl) mPowerEl.textContent = `${mario.power ?? 0}%`;
+      const mPackEl = $('#mEnemyPack');
+      if (mPackEl) mPackEl.textContent = mario.enemyPack || 'Mario World';
+      const mEnemyEl = $('#mCurrentEnemy');
+      if (mEnemyEl) mEnemyEl.textContent = mario.currentEnemy || 'None';
+      const mDefeatedEl = $('#mEnemiesDefeated');
+      if (mDefeatedEl) mDefeatedEl.textContent = String(mario.enemiesDefeated ?? 0);
+      const mBossEl = $('#mBossState');
+      if (mBossEl) mBossEl.textContent = mario.bossState || 'None';
+      for (const btn of document.querySelectorAll('[data-mariostage]')) {
+        btn.classList.toggle('active', Number(mario.stage ?? -1) === Number(btn.dataset.mariostage));
+      }
+    }
     renderLog();
     drawTimeline();
   }
@@ -1017,6 +1090,16 @@
     }
     if (e.target.closest('#thorResetSim')) {
       send('action', 'thor:simulate:reset');
+      return;
+    }
+    const marioSpawnPreset = e.target.closest('[data-mariospawn]');
+    if (marioSpawnPreset) {
+      send('action', `mario:spawn:${marioSpawnPreset.dataset.mariospawn}`);
+      return;
+    }
+    const marioStagePreset = e.target.closest('[data-mariostage]');
+    if (marioStagePreset) {
+      send('action', `mario:stage:${marioStagePreset.dataset.mariostage}`);
       return;
     }
     const el = e.target.closest('[data-act]');

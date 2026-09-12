@@ -224,6 +224,12 @@ button {
   height: 64px;
 }
 
+/* Every section is a scroll-anchor target for the nav; without this, the sticky
+   header (64px) covers the top of whatever section a nav link scrolls to. */
+section[id] {
+  scroll-margin-top: 80px;
+}
+
 .brand-group {
   display: flex;
   align-items: center;
@@ -338,17 +344,64 @@ button {
   }
 }
 
+/* The mobile nav drawer floats above the page as a fixed overlay (rather than
+   pushing the sticky header taller) so it never traps page content underneath
+   it while scrolling, and a backdrop gives it a standard click-outside-to-close. */
 .mobile-nav-panel {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem 1.25rem 1.5rem;
   background: #FFFFFF;
   border-bottom: 2px solid var(--border-color);
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  z-index: 150;
+  max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 64px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-8px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.18s ease, visibility 0.18s;
 }
 
 .mobile-nav-panel.open {
-  display: flex;
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@media (min-width: 960px) {
+  .mobile-nav-panel {
+    display: none;
+  }
+}
+
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 64px 0 0 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 140;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, visibility 0.18s;
+}
+
+.mobile-nav-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (min-width: 960px) {
+  .mobile-nav-backdrop {
+    display: none;
+  }
 }
 
 /* ==========================================================================
@@ -514,6 +567,30 @@ button {
 
 .copy-btn.copied {
   background: var(--accent-green);
+}
+
+/* Below ~640px the fixed-width single-line command truncates under the Copy
+   button with no visual hint that more text exists off-screen. Wrapping the
+   full command onto its own line(s), with Copy as a full-width button below
+   it, keeps the install command fully readable without a hidden h-scroll. */
+@media (max-width: 640px) {
+  .terminal-command-box {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.85rem;
+  }
+
+  .command-code {
+    overflow-x: visible;
+    white-space: normal;
+    word-break: break-all;
+    padding-right: 0;
+    margin-bottom: 0.75rem;
+  }
+
+  .copy-btn {
+    width: 100%;
+  }
 }
 
 .hero-trust-row {
@@ -721,7 +798,6 @@ button {
 
 .gallery-section {
   padding: 4rem 0;
-  scroll-margin-top: 80px;
 }
 
 .section-header {
@@ -1442,15 +1518,58 @@ button {
   z-index: 999;
   transform: translateY(120%);
   opacity: 0;
+  /* Purely informational (no buttons inside), and mounted for the whole page
+     lifetime — without this, its off-screen-ish hidden position still leaves
+     an invisible hit-box over the bottom-right corner that swallows clicks
+     meant for whatever sits underneath it. */
+  pointer-events: none;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  max-width: calc(100vw - 32px);
 }
 
 .toast-notice.show {
   transform: translateY(0);
   opacity: 1;
+}
+
+/* ==========================================================================
+   Touch target sizing (mobile only)
+   Buttons sized for a mouse cursor read as ~29-33px tall, under the ~44px
+   minimum recommended for a comfortable tap target. Desktop density is
+   untouched; only touch-width viewports get the larger hit area.
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .sim-trigger-btn,
+  .copy-btn,
+  .quick-pet-btn,
+  .pixel-btn-sm,
+  .filter-btn,
+  .pet-action-btn,
+  .github-btn {
+    min-height: 44px;
+  }
+}
+
+/* ==========================================================================
+   Comparison table scroll hint (mobile)
+   ========================================================================== */
+
+.table-scroll-hint {
+  display: none;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .table-scroll-hint {
+    display: block;
+  }
 }
 
 /* FAQ inline code/command blocks (ported from inline styles in the original static site) */

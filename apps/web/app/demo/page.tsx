@@ -28,7 +28,15 @@ export default function DemoPage() {
         <Link
           href="/"
           className="font-pixel"
-          style={{ color: "#FFFFFF", fontSize: "0.65rem", textTransform: "uppercase" }}
+          style={{
+            color: "#FFFFFF",
+            fontSize: "0.65rem",
+            textTransform: "uppercase",
+            padding: "0.6rem 0.25rem",
+            margin: "-0.6rem -0.25rem",
+            display: "inline-flex",
+            alignItems: "center",
+          }}
         >
           &larr; Bitling
         </Link>

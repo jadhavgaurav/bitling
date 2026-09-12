@@ -161,6 +161,28 @@ export default function Home() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [modalPetId]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileNavOpen]);
+
+  // Lock background scroll while an overlay (mobile nav drawer or pet modal) is open,
+  // so it can't be scrolled behind a fixed/sticky panel on touch devices.
+  useEffect(() => {
+    const shouldLock = mobileNavOpen || modalPetId !== null;
+    if (!shouldLock) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileNavOpen, modalPetId]);
+
   const filteredPets = useMemo(
     () => (filter === "all" ? PETS_DATA : PETS_DATA.filter((p) => p.categories.includes(filter))),
     [filter]
@@ -306,11 +328,18 @@ export default function Home() {
             href="https://github.com/jadhavgaurav/bitling/releases/latest"
             className="pixel-btn pixel-btn-sm"
             style={{ marginTop: "0.5rem", textAlign: "center" }}
+            onClick={() => setMobileNavOpen(false)}
           >
             Download for macOS
           </a>
         </div>
       </header>
+
+      <div
+        className={`mobile-nav-backdrop${mobileNavOpen ? " open" : ""}`}
+        aria-hidden="true"
+        onClick={() => setMobileNavOpen(false)}
+      />
 
       <section className="hero-section" id="hero">
         <div className="container hero-content">
@@ -732,6 +761,7 @@ defineSpecies({
               </tbody>
             </table>
           </div>
+          <p className="table-scroll-hint">&larr; Swipe sideways to see the full comparison &rarr;</p>
         </div>
       </section>
 

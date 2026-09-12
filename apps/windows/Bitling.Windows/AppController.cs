@@ -191,9 +191,65 @@ sealed class AppController : IDisposable
             default:
                 if (action.StartsWith("size:") && double.TryParse(action[5..], out var scale)) _petWindow.ApplyPetSize(scale);
                 else if (action.StartsWith("pet:")) _petWindow.SetSpecies(action[4..]);
+                else if (action.StartsWith("shenron:")) DispatchShenronAction(action);
+                else if (action.StartsWith("goku:")) DispatchGokuAction(action);
+                else if (action.StartsWith("thor:")) DispatchThorAction(action);
                 break;
         }
         _panel.Refresh();
+    }
+
+    // "shenron:<key>:<value>" - one of the sliders in the dragon's control-room section.
+    // Ported from main.swift's `action.hasPrefix("shenron:")` case.
+    private void DispatchShenronAction(string action)
+    {
+        var parts = action.Split(':');
+        var allowed = new HashSet<string> { "size", "length", "speed", "motion", "depth", "opacity" };
+        if (parts.Length == 3 && allowed.Contains(parts[1]) && double.TryParse(parts[2], out var value) && double.IsFinite(value))
+            _petWindow.ShenronSetting(parts[1], value);
+    }
+
+    // "goku:simulate:<n|off|clear>", "goku:spawn:<kind>", or "goku:<setting>:<value>".
+    // Ported from main.swift's `action.hasPrefix("goku:")` case, "spawn" (the enemy-pack
+    // dev buttons) included.
+    private void DispatchGokuAction(string action)
+    {
+        var parts = action.Split(':');
+        if (parts.Length < 3) return;
+        var sub = parts[1];
+        var val = parts[2];
+        if (sub == "simulate")
+        {
+            if (val is "off" or "clear") _petWindow.GokuSimulate(null);
+            else if (int.TryParse(val, out var n)) _petWindow.GokuSimulate(n);
+        }
+        else if (sub == "spawn")
+        {
+            _petWindow.GokuSpawnEnemy(val);
+        }
+        else if (double.TryParse(val, out var value) && double.IsFinite(value))
+        {
+            _petWindow.GokuSetting(sub, value);
+        }
+    }
+
+    // "thor:simulate:<n|off|clear|reset>" or "thor:<setting>:<value>".
+    // Ported from main.swift's `action.hasPrefix("thor:")` case.
+    private void DispatchThorAction(string action)
+    {
+        var parts = action.Split(':');
+        if (parts.Length < 3) return;
+        var sub = parts[1];
+        var val = parts[2];
+        if (sub == "simulate")
+        {
+            if (val is "off" or "clear" or "reset") _petWindow.ThorSimulate(null);
+            else if (int.TryParse(val, out var n)) _petWindow.ThorSimulate(n);
+        }
+        else if (double.TryParse(val, out var value) && double.IsFinite(value))
+        {
+            _petWindow.ThorSetting(sub, value);
+        }
     }
 
     private static void Process_OpenUrl(string url) =>

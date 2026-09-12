@@ -8,6 +8,11 @@ static class JsInterop
     /// jsString(_:) in apps/macos/Sources/main.swift.
     public static string EncodeString(string value) => JsonSerializer.Serialize(value);
 
+    /// JSON-encode a number, which (unlike plain string interpolation of a double) is
+    /// always culture-invariant - a system locale that formats decimals with a comma would
+    /// otherwise turn a value like 0.75 into `0,75`, invalid as a JS argument.
+    public static string EncodeNumber(double value) => JsonSerializer.Serialize(value);
+
     /// The bridge shim injected into both pet.html and panel.html before any page script
     /// runs (WebView2's AddScriptToExecuteOnDocumentCreatedAsync, the equivalent of WKWebView's
     /// WKUserScript at .atDocumentStart). The pages call `window.webkit.messageHandlers.<name>

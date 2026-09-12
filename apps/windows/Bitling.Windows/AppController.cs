@@ -139,6 +139,7 @@ sealed class AppController : IDisposable
                 ["shenron"] = snapshot.ShenronSettings.DeepClone(),
                 ["goku"] = snapshot.Goku.DeepClone(),
                 ["thor"] = snapshot.Thor.DeepClone(),
+                ["mario"] = snapshot.Mario.DeepClone(),
             },
             ["today"] = new JsonObject
             {
@@ -194,6 +195,7 @@ sealed class AppController : IDisposable
                 else if (action.StartsWith("shenron:")) DispatchShenronAction(action);
                 else if (action.StartsWith("goku:")) DispatchGokuAction(action);
                 else if (action.StartsWith("thor:")) DispatchThorAction(action);
+                else if (action.StartsWith("mario:")) DispatchMarioAction(action);
                 break;
         }
         _panel.Refresh();
@@ -249,6 +251,24 @@ sealed class AppController : IDisposable
         else if (double.TryParse(val, out var value) && double.IsFinite(value))
         {
             _petWindow.ThorSetting(sub, value);
+        }
+    }
+
+    // "mario:spawn:<kind>" or "mario:stage:<0-3>". Ported from main.swift's
+    // `action.hasPrefix("mario:")` case.
+    private void DispatchMarioAction(string action)
+    {
+        var parts = action.Split(':');
+        if (parts.Length < 3) return;
+        var sub = parts[1];
+        var val = parts[2];
+        if (sub == "spawn")
+        {
+            _petWindow.MarioSpawnEnemy(val);
+        }
+        else if (sub == "stage" && int.TryParse(val, out var stage))
+        {
+            _petWindow.MarioForceStage(stage);
         }
     }
 

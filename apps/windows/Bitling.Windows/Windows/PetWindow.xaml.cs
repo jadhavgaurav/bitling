@@ -246,6 +246,8 @@ public partial class PetWindow : Window
     public void GokuSpawnEnemy(string kind) => Js($"petNative.gokuSpawnEnemy({JsInterop.EncodeString(kind)})");
     public void ThorSetting(string key, double value) => Js($"petNative.thorSetting({JsInterop.EncodeString(key)}, {JsInterop.EncodeNumber(value)})");
     public void ThorSimulate(int? commits) => Js(commits.HasValue ? $"petNative.thorSimulate({commits.Value})" : "petNative.thorSimulate(null)");
+    public void MarioSpawnEnemy(string kind) => Js($"petNative.marioSpawnEnemy({JsInterop.EncodeString(kind)})");
+    public void MarioForceStage(int stage) => Js($"petNative.marioForceStage({stage})");
 
     public void DeliverGitEvent(GitEvent e) => Js($"petNative.gitEvent({e.ToJson().ToJsonString()})");
     public void DeliverGitStatus(GitStatus s) => Js($"petNative.gitStatus({s.ToJson().ToJsonString()})");

@@ -1122,6 +1122,11 @@
   }
 
   function updateThorSimulation(dt) {
+    // This runs unconditionally every frame regardless of species (see the call site),
+    // so without this guard Thor's day-rollover line/reset fired for whichever species
+    // happened to be active - discovered while spawning Mario's own enemy pack, whose
+    // world would otherwise occasionally announce "A new dawn over Asgard!".
+    if (state.species !== 'thor') return;
     const today = dayStamp();
     if (state.commitsDay !== today) {
       state.commitsDay = today;
@@ -3574,7 +3579,9 @@
         }
         if (!byLaser) return; // walking into an already-sliding shell just bounces off it
       }
-      if (b.hp > 1) {
+      // Star Mario doesn't whittle anything down hit by hit (except the boss, who still
+      // needs a real health bar to feel like an encounter) - it recoils hard and is gone.
+      if (b.hp > 1 && !(starMode && !b.boss)) {
         b.hp -= 1;
         b.hurtT = def.hitStagger;
         b.knockVx = -dir * def.knockback;

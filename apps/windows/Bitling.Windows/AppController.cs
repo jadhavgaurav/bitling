@@ -139,6 +139,7 @@ sealed class AppController : IDisposable
                 ["shenron"] = snapshot.ShenronSettings.DeepClone(),
                 ["goku"] = snapshot.Goku.DeepClone(),
                 ["thor"] = snapshot.Thor.DeepClone(),
+                ["mario"] = snapshot.Mario.DeepClone(),
             },
             ["today"] = new JsonObject
             {

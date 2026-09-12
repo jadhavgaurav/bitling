@@ -27,6 +27,7 @@ public sealed class PetSnapshot
     public JsonObject ShenronSettings { get; set; } = new();
     public JsonObject Goku { get; set; } = new();
     public JsonObject Thor { get; set; } = new();
+    public JsonObject Mario { get; set; } = new();
 
     public static PetSnapshot? FromMessage(JsonObject message)
     {
@@ -56,6 +57,7 @@ public sealed class PetSnapshot
             ShenronSettings = message["shenronSettings"] as JsonObject ?? new JsonObject(),
             Goku = message["goku"] as JsonObject ?? new JsonObject(),
             Thor = message["thor"] as JsonObject ?? new JsonObject(),
+            Mario = message["mario"] as JsonObject ?? new JsonObject(),
         };
     }
 }

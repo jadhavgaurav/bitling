@@ -1107,6 +1107,11 @@
   }
 
   function updateThorSimulation(dt) {
+    // This runs unconditionally every frame regardless of species (see the call site),
+    // so without this guard Thor's day-rollover line/reset fired for whichever species
+    // happened to be active - discovered while spawning Mario's own enemy pack, whose
+    // world would otherwise occasionally announce "A new dawn over Asgard!".
+    if (state.species !== 'thor') return;
     const today = dayStamp();
     if (state.commitsDay !== today) {
       state.commitsDay = today;

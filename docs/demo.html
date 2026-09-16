@@ -971,7 +971,12 @@
     qblockVy: 0,
     coinAnim: null, // { x, y, vy, t }
     mushroomAnim: null, // { x, y, vx, vy, active }
-    fireballs: [], // [ { x, y, vx, vy, bounces } ]
+    fireballs: [], // [ { x, y, vx, vy, bounces, spin, star } ]
+    flashes: [], // fireball impact rings, bounded
+    // In-window hop (stomp attack, ? block, pipe leap): height above his feet and its velocity.
+    jumpH: 0, jumpVy: 0, hopVx: 0, jumpPhase: 'ground', launchT: 0, landT: 0, stompT: 0,
+    // Beats layered on the pose: shoved by an enemy, throw recoil, noticing a spawn, star contact.
+    bumpT: 0, bumpCd: 0, bumpVx: 0, bumpDir: 1, throwT: 0, alertT: 0, alertBug: null, starHitT: 0,
   };
   const ronaldoBall = {
     x: 0,
@@ -1172,6 +1177,7 @@
   let hostSwarm = false;
   let hostBugs = [];
   const particles = [];
+  const MAX_PARTICLES = 400;   // oldest are dropped first; a burst can never grow without bound
   const pointer = { x: 0, y: 0, over: false, lastT: -10, vx: 0, vy: 0, pt: 0 };
   const recentPets = [];
   let zTimer = 0;
@@ -2370,39 +2376,78 @@
   // `species().enemyPack` for a name and looks the class up here, plus the small `b.pack`
   // tag on each bug so the two packs' same-named classes (both have an 'elite' and a
   // 'boss') never get looked up in the wrong registry.
+  //
+  // Every number that tunes a class lives here, not in the renderer or the behaviour:
+  //   hitbox            collision box in enemy units (see marioEnemyUnit): half width and
+  //                     height above the feet. Some classes override it per state
+  //                     (a shell is lower once retracted, a lurker is barely there while
+  //                     hidden) - marioEnemyBounds() is the one place that knows how.
+  //   speed / accel     cruising speed and how fast it may change velocity, px/s and px/s^2,
+  //                     so nothing ever flips direction in a single frame.
+  //   behavior/renderer keys into MARIO_ENEMY_BEHAVIORS / MARIO_ENEMY_RENDERERS below.
+  //   animationProfile  per-class timing so no two classes share an identical cadence.
   const MARIO_ENEMIES = Object.freeze({
     walker: {
-      id: 'walker', name: 'Stomper', weight: 42, grounded: true, minStageForSpawn: 0,
-      hp: 1, speed: 38, sizeMul: 1.0, hitStagger: 0.22, knockback: 90, deathAnim: 'flatten',
+      id: 'walker', name: 'Stomper', spawnWeight: 42, grounded: true, minStageForSpawn: 0,
+      hp: 1, speed: 34, accel: 150, sizeMul: 1.0, hitbox: { halfW: 0.95, h: 2.1 },
+      hitStagger: 0.22, knockback: 90, deathAnim: 'flatten', deathDur: 0.75,
+      behavior: 'walker', renderer: 'walker', attackType: 'contact',
+      animationProfile: { stepLen: 0.95, bob: 0.07, breath: 0.03, rate: 1.0 },
     },
     jumping: {
-      id: 'jumping', name: 'Hopper', weight: 22, grounded: true, minStageForSpawn: 0,
-      hp: 1, speed: 32, sizeMul: 0.92, hitStagger: 0.22, knockback: 90, deathAnim: 'flip',
-      jumpImpulse: 260, jumpGravity: 780, jumpInterval: [1.0, 2.0],
+      id: 'jumping', name: 'Hopper', spawnWeight: 22, grounded: true, minStageForSpawn: 0,
+      hp: 1, speed: 30, accel: 240, sizeMul: 0.92, hitbox: { halfW: 0.85, h: 2.15 },
+      hitStagger: 0.22, knockback: 90, deathAnim: 'flip', deathDur: 0.8,
+      behavior: 'jumping', renderer: 'jumping', attackType: 'pounce',
+      jumpImpulse: 270, jumpGravity: 780, jumpInterval: [1.0, 2.2], anticipation: 0.22, recovery: 0.26,
+      animationProfile: { stepLen: 0.8, bob: 0.04, breath: 0.04, rate: 1.15 },
     },
     shell: {
-      id: 'shell', name: 'Shellback', weight: 15, grounded: true, minStageForSpawn: 1,
-      hp: 1, speed: 26, sizeMul: 1.05, hitStagger: 0.2, knockback: 70, deathAnim: 'shellspin',
-      shellDelay: 1.4, slideSpeed: 320,
+      id: 'shell', name: 'Shellback', spawnWeight: 15, grounded: true, minStageForSpawn: 1,
+      hp: 1, speed: 26, accel: 130, sizeMul: 1.05, hitbox: { halfW: 0.95, h: 2.45, shellH: 1.45 },
+      hitStagger: 0.2, knockback: 70, deathAnim: 'shellspin', deathDur: 0.7,
+      behavior: 'shell', renderer: 'shell', attackType: 'slide',
+      shellDelay: 1.2, slideSpeed: 320, retractTime: 0.24, kickTime: 0.1, bounceTime: 0.16,
+      animationProfile: { stepLen: 1.1, bob: 0.06, breath: 0.03, rate: 0.9 },
     },
     flying: {
-      id: 'flying', name: 'Buzzer', weight: 13, grounded: false, minStageForSpawn: 1,
-      hp: 1, speed: 44, sizeMul: 0.82, hitStagger: 0.24, knockback: 80, deathAnim: 'airspin',
-      altitudeRange: [70, 150],
+      id: 'flying', name: 'Buzzer', spawnWeight: 13, grounded: false, minStageForSpawn: 1,
+      hp: 1, speed: 44, accel: 110, sizeMul: 0.82, hitbox: { halfW: 0.95, h: 2.0 },
+      hitStagger: 0.24, knockback: 80, deathAnim: 'airspin', deathDur: 0.9,
+      behavior: 'flying', renderer: 'flying', attackType: 'dive',
+      altitudeRange: [70, 150], diveInterval: [3.0, 6.0], diveDepth: 48, lift: 26,
+      animationProfile: { flapRate: 11, bob: 0.1, breath: 0.02, rate: 1.3 },
     },
     ambush: {
-      id: 'ambush', name: 'Lurker', weight: 11, grounded: true, minStageForSpawn: 1,
-      hp: 1, speed: 130, sizeMul: 0.9, hitStagger: 0.2, knockback: 85, deathAnim: 'flatten',
+      id: 'ambush', name: 'Lurker', spawnWeight: 11, grounded: true, minStageForSpawn: 1,
+      hp: 1, speed: 120, accel: 900, sizeMul: 0.9, hitbox: { halfW: 0.8, h: 2.35, hiddenH: 0.55 },
+      hitStagger: 0.2, knockback: 85, deathAnim: 'sink', deathDur: 0.7,
+      behavior: 'ambush', renderer: 'ambush', attackType: 'lunge',
+      hiddenTime: [1.0, 2.2], emergeTime: 0.32, activeTime: [0.7, 1.2], attackTime: 0.28, retreatTime: 0.3,
+      animationProfile: { stepLen: 0.7, bob: 0.03, breath: 0.05, rate: 1.4 },
     },
     elite: {
-      id: 'elite', name: 'Ironshell', weight: 8, grounded: true, minStageForSpawn: 2,
-      hp: 3, speed: 48, sizeMul: 1.55, hitStagger: 0.4, knockback: 60, deathAnim: 'collapse',
+      id: 'elite', name: 'Ironshell', spawnWeight: 8, grounded: true, minStageForSpawn: 2,
+      hp: 3, speed: 30, accel: 90, sizeMul: 1.35, hitbox: { halfW: 1.15, h: 2.95 },
+      hitStagger: 0.42, knockback: 60, deathAnim: 'collapse', deathDur: 1.1,
+      behavior: 'elite', renderer: 'elite', attackType: 'charge',
+      stepInterval: [0.55, 0.75], dodgeInterval: [3.0, 6.0],
+      animationProfile: { stepLen: 1.4, bob: 0.05, breath: 0.025, rate: 0.7 },
     },
     boss: {
-      id: 'boss', name: 'King Koopa', grounded: true, minStageForSpawn: 0,
-      hp: 7, speed: 24, sizeMul: 2.8, hitStagger: 0.5, knockback: 45, deathAnim: 'bossdown',
+      id: 'boss', name: 'King Koopa', spawnWeight: 0, grounded: true, minStageForSpawn: 0,
+      hp: 7, speed: 22, accel: 70, sizeMul: 2.0, hitbox: { halfW: 1.45, h: 3.4 },
+      hitStagger: 0.5, knockback: 45, deathAnim: 'bossdown', deathDur: 2.2,
+      behavior: 'boss', renderer: 'boss', attackType: 'charge',
+      chargeInterval: [3.5, 6.0], chargeWindup: 0.5, chargeTime: 0.6, chargeSpeed: 190, lowHealth: 0.4,
+      animationProfile: { stepLen: 1.8, bob: 0.04, breath: 0.035, rate: 0.6 },
     },
   });
+  // Hard ceilings so a burst of git events never fills the window: the boss always gets in,
+  // everything else waits for room. Read by initMarioEnemy() and the control room alike.
+  const MARIO_MAX_ACTIVE = 5;
+  const MARIO_MAX_ACTIVE_WITH_BOSS = 3;
+  const MARIO_MAX_FIREBALLS = 4;
   // Mario grows through Small -> Super -> Fire -> Star, and the world should grow richer
   // with him, not harder to survive: higher stages unlock the shell/flying/ambush/elite
   // classes and a small stat bump, but he must stay able to clear anything that spawns.
@@ -2412,9 +2457,9 @@
   }
   function pickMarioEnemyClass() {
     const pool = marioEnemyPool();
-    const total = pool.reduce((sum, e) => sum + e.weight, 0);
+    const total = pool.reduce((sum, e) => sum + e.spawnWeight, 0);
     let roll = Math.random() * total;
-    for (const e of pool) { roll -= e.weight; if (roll <= 0) return e; }
+    for (const e of pool) { roll -= e.spawnWeight; if (roll <= 0) return e; }
     return pool[pool.length - 1];
   }
   function marioEnemyClass(id) { return MARIO_ENEMIES[id] || MARIO_ENEMIES.walker; }
@@ -2427,37 +2472,303 @@
     const speed = def.speed * growth * (0.85 + Math.random() * 0.3);
     return { hp, speed };
   }
-  // A themed death for each Mario class, built from the same shared particle vocabulary
-  // ('spark'/'flame'/'check') the rest of the game already uses - no new effect system.
-  function playMarioDeathAnim(b, def) {
-    const by = groundY - 9 * scale - (b.altitude || 0);
-    const hue = def.id === 'flying' ? 200 : def.id === 'shell' ? 130 : def.id === 'elite' ? 12
-      : def.id === 'boss' ? 42 : 95;
-    audio.pop();
-    if (def.deathAnim === 'airspin') {
-      spawn('spark', b.x, by, 8, { spread: 10, vx: 90, vy: -70, size: 8, hue, dur: 0.5 });
-      spawn('flame', b.x, by, 4, { spread: 8, vx: 60, vy: -50, size: 7, hue, dur: 0.4 });
-    } else if (def.deathAnim === 'shellspin') {
-      spawn('spark', b.x, by, 10, { spread: 16, vx: 130, vy: -60, size: 8, hue, dur: 0.5 });
-      spawn('check', b.x, by, 2, { spread: 6, vx: 30, vy: -70, size: 10, dur: 0.7 });
-    } else if (def.deathAnim === 'collapse') {
-      spawn('spark', b.x, by, 10, { spread: 14, vx: 100, vy: -90, size: 10, hue, dur: 0.7 });
-      spawn('flame', b.x, by, 8, { spread: 12, vx: 80, vy: -70, size: 11, hue, dur: 0.65 });
-      setTimeout(() => spawn('flame', b.x, by, 6, { spread: 16, vx: 100, vy: -60, size: 13, hue: hue + 20, dur: 0.5 }), 90);
-    } else if (def.deathAnim === 'bossdown') {
-      pet.shake = Math.max(pet.shake, 0.4);
-      spawn('spark', b.x, by, 16, { spread: 22, vx: 150, vy: -120, size: 12, hue, dur: 0.9 });
-      spawn('flame', b.x, by, 12, { spread: 20, vx: 120, vy: -100, size: 16, hue, dur: 0.85 });
-      setTimeout(() => spawn('flame', b.x, by, 10, { spread: 26, vx: 140, vy: -80, size: 18, hue: 45, dur: 0.8 }), 110);
-      setTimeout(() => spawn('spark', b.x, by, 12, { spread: 30, vx: 160, vy: -90, size: 14, hue: 52, dur: 0.9 }), 220);
-    } else if (def.deathAnim === 'flip') {
-      spawn('spark', b.x, by, 6, { spread: 8, vx: 70, vy: -100, size: 8, hue, dur: 0.5 });
-      spawn('dust', b.x, by, 4, { spread: 10, vx: 30, vy: -20, size: 6, dur: 0.4 });
+  // The enemy unit: every creature is drawn and collided in multiples of this, and it is
+  // tied to Mario's own radius so the cast stays in proportion to him at every window size
+  // and growth stage. A walker is ~2.1u tall, which puts it at roughly half of Super Mario.
+  function marioEnemyUnit(def) { return petR() * 0.62 * def.sizeMul; }
+  const marioStarMode = () => marioState.stage >= 3 || marioState.invincibleT > 0;
+  const marioEnemyEdge = () => Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
+  // Collision geometry measured off the drawing, per class and per state, so a stomp lands
+  // on the top of the shell a Koopa actually has and not on one radius shared by everyone.
+  function marioEnemyBounds(b) {
+    const def = marioEnemyClass(b.enemyId);
+    const u = marioEnemyUnit(def);
+    const hb = def.hitbox;
+    let h = hb.h, halfW = hb.halfW;
+    if (def.id === 'shell' && b.shellState !== 'walk') h = hb.shellH;
+    else if (def.id === 'ambush') h = hb.hiddenH + (hb.h - hb.hiddenH) * clamp(b.ambushRise || 0, 0, 1);
+    else if (def.id === 'jumping' && b.jumpPhase === 'anticipation') h *= 0.8;
+    const bottom = groundY - 1 - (b.altitude || 0);
+    const height = h * u, half = halfW * u;
+    return { u, halfW: half, h: height, left: b.x - half, right: b.x + half, top: bottom - height, bottom, cx: b.x, cy: bottom - height * 0.5 };
+  }
+  // Mario's own body box for the same collision pass. Width is measured off the sprites
+  // (Super Mario's idle frame paints ~0.59 of its height wide); his feet leave the ground
+  // through marioState.jumpH, the in-window hop that the stomp attack and the ? block use,
+  // and vertical speed is that hop's or the thrown/dropped pet's, whichever is in effect.
+  function marioBody() {
+    const m = marioState;
+    const h = petR() * (m.stage === 0 ? 1.9 : 2.85);
+    const feet = pet.y - m.jumpH;
+    return { x: pet.x, feet, top: feet - h, h, halfW: h * 0.26, vy: pet.grounded ? m.jumpVy : pet.vy };
+  }
+  function marioActiveEnemies() { return bugs.filter((b) => b.alive && b.pack === 'mario'); }
+  // Fills in a freshly spawned bug as a Mario enemy: the class stats, per-class state and a
+  // sensible spot to appear in. Returns false when the world is already full, in which case
+  // spawnBug() drops the request instead of piling a sixth creature into the window.
+  function initMarioEnemy(bug, isBoss, label, forceEnemyId) {
+    const def = forceEnemyId ? marioEnemyClass(forceEnemyId) : (isBoss ? MARIO_ENEMIES.boss : pickMarioEnemyClass());
+    const active = marioActiveEnemies();
+    const bossOut = active.some((b) => b.boss);
+    if (def.id !== 'boss') {
+      const cap = bossOut ? MARIO_MAX_ACTIVE_WITH_BOSS : MARIO_MAX_ACTIVE;
+      if (active.filter((b) => !b.boss).length >= cap) return false;
+    } else if (bossOut) {
+      return false;
+    }
+    const stats = marioScaledStats(def);
+    const u = marioEnemyUnit(def);
+    bug.pack = 'mario';
+    bug.enemyId = def.id;
+    bug.boss = def.id === 'boss';
+    bug.hp = stats.hp;
+    bug.maxHp = stats.hp;
+    bug.speed = stats.speed;
+    bug.label = label || def.name;
+    // Where it appears: never on Mario, never in the warp pipe, never on another enemy.
+    const edge = marioEnemyEdge();
+    const clear = petR() * (def.id === 'boss' ? 3.2 : 2.2);
+    const spacing = u * def.hitbox.halfW * 2.2;
+    const candidates = [bug.x];
+    for (let i = 0; i < 8; i++) candidates.push(rand(edge, W - edge));
+    let best = null, bestScore = -Infinity;
+    for (const x of candidates) {
+      const cx = clamp(x, edge, W - edge);
+      let score = Math.min(Math.abs(cx - pet.x) - clear, clear);
+      for (const other of active) score = Math.min(score, Math.abs(cx - other.x) - spacing);
+      if (marioState.pipeActive) score = Math.min(score, Math.abs(cx - marioState.pipeX) - petR() * 1.4);
+      if (score > bestScore) { bestScore = score; best = cx; }
+    }
+    bug.x = best;
+    const dir = Math.sign(pet.x - bug.x) || (Math.random() < 0.5 ? -1 : 1);
+    bug.facing = dir;
+    bug.face = dir;            // smoothed facing the renderer turns through, -1..1
+    bug.vx = 0;                // everything accelerates in from a standstill
+    bug.targetVx = dir * stats.speed;
+    bug.hurtT = 0;
+    bug.knockVx = 0;
+    bug.bumpT = 0;
+    bug.squashT = 0;
+    bug.animT = rand(0, 6);    // walk-cycle phase, advanced by distance actually travelled
+    bug.rate = def.animationProfile.rate * rand(0.92, 1.08);
+    bug.bobPhase = rand(0, Math.PI * 2);
+    bug.breathPhase = rand(0, Math.PI * 2);
+    bug.turnT = 0;
+    bug.noticeT = 0;
+    bug.planT = rand(0.8, 2.0);
+    bug.plan = 'walk';
+    if (!def.grounded) {
+      // On screen at every window height: the wing tips must stay under the top edge.
+      const maxAlt = Math.max(def.altitudeRange[0], groundY - 1 - def.hitbox.h * u - 12 * scale);
+      bug.altitude = clamp(rand(def.altitudeRange[0], def.altitudeRange[1]), def.altitudeRange[0], maxAlt);
+      bug.baseAltitude = bug.altitude;
+      bug.altVy = 0;
+      bug.diveCd = rand(def.diveInterval[0], def.diveInterval[1]);
+      bug.flyState = 'patrol';
+      bug.flap = 0;
     } else {
-      spawn('spark', b.x, by, 6, { spread: 8, vx: 90, vy: -80, size: 8, hue, dur: 0.5 });
-      spawn('flame', b.x, by, 3, { spread: 6, vx: 60, vy: -60, size: 8, hue, dur: 0.4 });
+      bug.altitude = 0;
+    }
+    // Shell state machine: walk -> retract -> shelled -> kick -> sliding <-> bouncing, with
+    // 'hit' as a brief beat when a sliding shell strikes something. Physically continuous:
+    // every transition is a velocity or a timer, never a teleport.
+    bug.shellState = 'walk';
+    bug.shellT = 0;
+    bug.shellDir = 1;
+    bug.spinAngle = 0;
+    bug.wobble = 0;
+    // Jumper: real gravity arc with anticipation and recovery beats around it.
+    bug.jumpVy = 0;
+    bug.jumpPhase = 'ground';
+    bug.jumpT = 0;
+    bug.jumpCd = def.id === 'jumping' ? rand(def.jumpInterval[0], def.jumpInterval[1]) : 0;
+    // Lurker: hidden -> emerging -> active -> attacking -> retreating -> hidden.
+    bug.ambushState = 'hidden';
+    bug.ambushRise = 0;
+    bug.ambushT = def.id === 'ambush' ? rand(def.hiddenTime[0], def.hiddenTime[1]) : 0;
+    // Elite: a deliberate stepped walk plus an occasional dodge.
+    bug.stepT = 0;
+    bug.stepCd = def.id === 'elite' ? rand(def.stepInterval[0], def.stepInterval[1]) : 0;
+    bug.dodgeCd = def.id === 'elite' ? rand(def.dodgeInterval[0], def.dodgeInterval[1]) : 0;
+    bug.dodgeT = 0;
+    // Boss: charge attack with a visible wind-up, and a temper that rises as it loses health.
+    bug.bossState = 'stance';
+    bug.bossT = def.id === 'boss' ? rand(def.chargeInterval[0], def.chargeInterval[1]) : 0;
+    bug.rage = 0;
+    bug.deathStage = 0;
+    triggerMarioAlert(bug);
+    return true;
+  }
+  // Where the enemy's centre currently is, for particles and the aim code.
+  function marioEnemyCenter(b) { const eb = marioEnemyBounds(b); return { x: eb.cx, y: eb.cy, top: eb.top, bottom: eb.bottom, u: eb.u }; }
+  // Everything a hit does to a Mario enemy short of removing it from the array, which stays
+  // with updateBugs. Every class reacts in its own way (a shell retracts, an elite staggers,
+  // the boss gets angrier) and only then does the shared hp accounting run.
+  function hitMarioEnemy(b, byPet, byLaser) {
+    const def = marioEnemyClass(b.enemyId);
+    const dir = Math.sign(pet.x - b.x) || -(b.facing || 1);
+    const c = marioEnemyCenter(b);
+    // Star Mario barrels straight through the shell gimmick too - nothing survives more
+    // than one hit while he is invincible.
+    const starMode = marioStarMode();
+    if (def.id === 'shell' && !starMode && !(byLaser && (b.shellState === 'walk' || b.shellState === 'retract'))) {
+      // (A fireball or a sliding shell finishes a walking Koopa outright, below; only a
+      // stomp or a bump tucks it in.)
+      if (b.shellState === 'walk' || b.shellState === 'retract') {
+        // First hit tucks it into its shell - harmless, not a kill yet. The retract beat
+        // is a real state: head, arms and legs pull in over retractTime before it settles.
+        if (b.shellState === 'walk') {
+          b.shellState = 'retract';
+          b.shellT = def.retractTime;
+          b.vx = 0; b.targetVx = 0;
+          b.squashT = 0.2;
+          b.wobble = 1;
+          audio.pop();
+          spawn('dust', b.x, c.bottom, 4, { spread: c.u * 0.8, vx: 40, vy: -20, size: 6, dur: 0.35 });
+        }
+        return;
+      }
+      if (b.shellState === 'shelled') {
+        // A second hit kicks the shell away: immediate horizontal velocity, a short kick
+        // beat for the squash, then it is a sliding physics object.
+        b.shellState = 'kick';
+        b.shellT = def.kickTime;
+        b.shellDir = dir < 0 ? 1 : -1;
+        b.vx = b.shellDir * def.slideSpeed;
+        b.targetVx = b.vx;
+        b.shellHitCd = 0;
+        b.squashT = 0.14;
+        audio.zap();
+        spawn('dust', b.x - b.shellDir * c.u, c.bottom, 4, { spread: c.u * 0.5, vx: 30, vy: -20, size: 6, dur: 0.3 });
+        return;
+      }
+      if (b.shellState === 'kick' || b.shellState === 'sliding' || b.shellState === 'bouncing' || b.shellState === 'hit') {
+        if (byPet) {
+          // Landing on a moving shell stops it, same as the real thing; then it has to be
+          // kicked again. Walking into one just bounces off it.
+          b.shellState = 'shelled';
+          b.shellT = def.shellDelay;
+          b.vx = 0; b.targetVx = 0;
+          b.wobble = 1;
+          b.squashT = 0.18;
+          audio.pop();
+          return;
+        }
+        if (!byLaser) return;
+      }
+    }
+    // Star Mario doesn't whittle anything down hit by hit (except the boss, who still
+    // needs a real health bar to feel like an encounter) - it recoils hard and is gone.
+    if (b.hp > 1 && !(starMode && !b.boss)) {
+      b.hp -= 1;
+      b.hurtT = def.hitStagger;
+      b.knockVx = -dir * def.knockback;
+      b.vx = 0; b.targetVx = 0;
+      b.squashT = def.id === 'elite' ? 0.3 : 0.2;
+      if (def.id === 'boss') {
+        b.rage = 1 - b.hp / b.maxHp;
+        b.bossState = 'stagger'; b.bossT = def.hitStagger;
+        pet.shake = Math.max(pet.shake, 0.15);
+      }
+      audio.pop();
+      spawn('spark', c.x, c.y, def.id === 'boss' ? 8 : 5, { spread: c.u * 0.6, vx: 60, vy: -80, size: 8, hue: def.id === 'elite' ? 20 : 46, dur: 0.45 });
+      return;
+    }
+    b.alive = false;
+    b.state = 'dying';
+    b.squash = def.deathDur;
+    b.deathT = 0;
+    b.deathStage = 0;
+    b.deathVy = 0;
+    b.knockVx = -dir * def.knockback * (starMode ? 2.2 : 1.4);
+    if (def.id === 'shell') b.knockVx *= 0.4;
+    countKill(byLaser, b.boss);
+    playMarioDeathAnim(b, def, starMode);
+    if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
+  }
+  // The opening beat of each themed death, built from the shared particle vocabulary. The
+  // later beats (a flier's fall, the elite's second burst, the boss's staged collapse) are
+  // driven from updateMarioDeath() by the dying bug's own clock, so nothing here leans on a
+  // timer that could outlive the creature.
+  function playMarioDeathAnim(b, def, starMode) {
+    const c = marioEnemyCenter(b);
+    const u = c.u;
+    audio.pop();
+    if (starMode) spawn('spark', c.x, c.y, 10, { spread: u, vx: 140, vy: -110, size: 9, hue: (pet.t * 400) % 360, dur: 0.6 });
+    switch (def.deathAnim) {
+      case 'flatten':
+        spawn('dust', c.x, c.bottom, 8, { spread: u * 1.2, vx: 70, vy: -30, size: 8, dur: 0.5 });
+        break;
+      case 'shellspin':
+        spawn('spark', c.x, c.y, 8, { spread: u, vx: 130, vy: -60, size: 8, hue: 130, dur: 0.5 });
+        spawn('dust', c.x, c.bottom, 4, { spread: u, vx: 40, vy: -20, size: 7, dur: 0.4 });
+        break;
+      case 'airspin':
+        b.deathVy = -120;
+        spawn('spark', c.x, c.y, 5, { spread: u * 0.8, vx: 70, vy: -60, size: 7, hue: 200, dur: 0.45 });
+        break;
+      case 'flip':
+        b.deathVy = -260;
+        spawn('dust', c.x, c.bottom, 5, { spread: u, vx: 40, vy: -20, size: 7, dur: 0.4 });
+        spawn('spark', c.x, c.y, 4, { spread: u * 0.6, vx: 60, vy: -90, size: 7, hue: 95, dur: 0.45 });
+        break;
+      case 'sink':
+        spawn('dust', c.x, c.bottom, 6, { spread: u * 0.9, vx: 30, vy: -25, size: 8, dur: 0.5 });
+        break;
+      case 'collapse':
+        pet.shake = Math.max(pet.shake, 0.2);
+        spawn('spark', c.x, c.y, 10, { spread: u * 1.1, vx: 110, vy: -90, size: 10, hue: 20, dur: 0.7 });
+        spawn('shard', c.x, c.y, 6, { spread: u * 0.8, vx: 120, vy: -140, g: 700, size: 9, dur: 0.9 });
+        break;
+      case 'bossdown':
+        pet.shake = Math.max(pet.shake, 0.4);
+        spawn('spark', c.x, c.y, 14, { spread: u * 1.4, vx: 150, vy: -120, size: 12, hue: 42, dur: 0.9 });
+        break;
+      default:
+        spawn('spark', c.x, c.y, 6, { spread: u * 0.8, vx: 90, vy: -80, size: 8, hue: 95, dur: 0.5 });
     }
     say(line(b.boss ? 'bossDown' : (def.id === 'elite' ? 'zapped' : 'squash')), 1200);
+  }
+  // Later beats of a Mario enemy's death, on the dying bug's own clock (updateBugs still
+  // owns the countdown in b.squash and the eventual splice).
+  function updateMarioDeath(b, dt) {
+    const def = marioEnemyClass(b.enemyId);
+    b.deathT = (b.deathT || 0) + dt;
+    const c = marioEnemyCenter(b);
+    const u = c.u;
+    if (def.deathAnim === 'airspin' || def.deathAnim === 'flip') {
+      // Fall under gravity until the ground stops it.
+      b.deathVy = (b.deathVy || 0) + 900 * dt;
+      b.altitude = Math.max(0, (b.altitude || 0) - b.deathVy * dt);
+      if (b.altitude === 0 && b.deathVy > 0) {
+        if (b.deathStage === 0) { b.deathStage = 1; spawn('dust', b.x, groundY - 2, 5, { spread: u, vx: 40, vy: -15, size: 7, dur: 0.4 }); }
+        b.deathVy = 0;
+      }
+    } else if (def.deathAnim === 'collapse') {
+      if (b.deathStage === 0 && b.deathT > 0.28) {
+        b.deathStage = 1;
+        spawn('flame', c.x, c.y, 8, { spread: u, vx: 90, vy: -70, size: 12, hue: 30, dur: 0.6 });
+        spawn('shard', c.x, c.bottom - u, 5, { spread: u, vx: 110, vy: -120, g: 700, size: 8, dur: 0.8 });
+      } else if (b.deathStage === 1 && b.deathT > 0.62) {
+        b.deathStage = 2;
+        spawn('dust', c.x, c.bottom, 10, { spread: u * 1.4, vx: 80, vy: -30, size: 10, dur: 0.6 });
+      }
+    } else if (def.deathAnim === 'bossdown') {
+      // Stagger and flash, a first burst, the fall with a ground shake, then the dissolve.
+      if (b.deathStage === 0 && b.deathT > 0.55) {
+        b.deathStage = 1;
+        spawn('flame', c.x, c.y, 12, { spread: u * 1.3, vx: 120, vy: -100, size: 16, hue: 42, dur: 0.85 });
+      } else if (b.deathStage === 1 && b.deathT > 1.1) {
+        b.deathStage = 2;
+        pet.shake = Math.max(pet.shake, 0.5);
+        spawn('dust', c.x, c.bottom, 14, { spread: u * 1.8, vx: 120, vy: -40, size: 12, dur: 0.8 });
+        spawn('shard', c.x, c.bottom - u * 0.5, 8, { spread: u * 1.2, vx: 140, vy: -160, g: 700, size: 10, dur: 1.0 });
+        audio.thud();
+      } else if (b.deathStage === 2 && b.deathT > 1.6) {
+        b.deathStage = 3;
+        spawn('spark', c.x, c.y, 14, { spread: u * 1.6, vx: 160, vy: -90, size: 14, hue: 52, dur: 0.9 });
+      }
+    }
   }
   const MARIO_STAGE_NAMES = ['Small Mario', 'Super Mario', 'Fire Mario', 'Star Mario'];
   function getMarioSnapshot() {
@@ -2523,11 +2834,12 @@
         }
         return { style: 'stomp', charge: 0.18, sound: 'marioJump' };
       },
-      origin: (r) => {
-        return [{ x: Math.round(pet.x + pet.facing * r * 0.45), y: Math.round(pet.y - r * 1.1) }];
+      origin: () => {
+        const h = marioHandPoint();
+        return [{ x: Math.round(h.x), y: Math.round(h.y) }];
       },
       draw(r, k, isBoss, style) {
-        drawMarioAttack(r, k, isBoss, style);
+        drawMarioAttackFx(r, k, isBoss, style);
       },
     },
     voice: {
@@ -3228,6 +3540,7 @@
   function spawn(type, x, y, n, opt = {}) {
     const count = reduceMotion ? Math.ceil(n / 2) : n;
     for (let i = 0; i < count; i++) {
+      if (particles.length >= MAX_PARTICLES) particles.shift();
       particles.push({
         type, x: x + rand(-(opt.spread || 10), opt.spread || 10), y: y + rand(-(opt.spread || 10), opt.spread || 10),
         vx: rand(-(opt.vx || 60), opt.vx || 60), vy: opt.vy !== undefined ? opt.vy + rand(-40, 40) : rand(-120, -40),
@@ -3342,15 +3655,6 @@
     if (state.species !== 'goku' || state.asleep || pet.held || pet.carried) return;
     if (pet.reactionT > 0 || pet.zapCharge > 0 || pet.zap > 0) return;
     if (gokuState.transformT > 0) return;
-    pet.reaction = 'alert';
-    pet.reactionT = 1.15;
-    pet.surprise = Math.max(pet.surprise, 0.4);
-    if (Math.random() < 0.5) say(line('enemySpot'), 1200);
-  }
-  function triggerMarioAlert() {
-    if (state.species !== 'mario' || state.asleep || pet.held || pet.carried) return;
-    if (pet.reactionT > 0 || pet.zapCharge > 0 || pet.zap > 0) return;
-    if (marioState.transformT > 0) return;
     pet.reaction = 'alert';
     pet.reactionT = 1.15;
     pet.surprise = Math.max(pet.surprise, 0.4);
@@ -3471,32 +3775,7 @@
       bug.label = label || def.name;
       triggerGokuAlert();
     } else if (species().enemyPack === 'mario') {
-      const def = forceEnemyId ? marioEnemyClass(forceEnemyId) : (isBoss ? MARIO_ENEMIES.boss : pickMarioEnemyClass());
-      const stats = marioScaledStats(def);
-      bug.pack = 'mario';
-      bug.enemyId = def.id;
-      bug.boss = def.id === 'boss';
-      bug.hp = stats.hp;
-      bug.maxHp = stats.hp;
-      bug.vx = stats.speed * (Math.random() < 0.5 ? -1 : 1);
-      bug.facing = Math.sign(bug.vx) || 1;
-      bug.altitude = def.grounded ? 0 : rand(def.altitudeRange[0], def.altitudeRange[1]);
-      bug.hurtT = 0;
-      bug.knockVx = 0;
-      bug.bobPhase = rand(0, Math.PI * 2);
-      // Shell state machine: 'walk' (normal) -> 'shelled' (retracted, harmless) ->
-      // 'sliding' (a fast physics object that can chain into other enemies).
-      bug.shellState = 'walk';
-      bug.shellT = 0;
-      bug.shellDir = 1;
-      // Jumping enemy's own gravity arc, independent of the pet's.
-      bug.jumpVy = 0;
-      bug.jumpCd = def.id === 'jumping' ? rand(def.jumpInterval[0], def.jumpInterval[1]) : 0;
-      // Ambush state machine: hides low, then pops up and dashes before retreating.
-      bug.ambushState = 'hidden';
-      bug.ambushT = rand(0.6, 1.6);
-      bug.label = label || def.name;
-      triggerMarioAlert();
+      if (!initMarioEnemy(bug, isBoss, label, forceEnemyId)) return;
     }
     bugs.push(bug);
   }
@@ -3552,52 +3831,7 @@
       if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
       return;
     }
-    if (b.enemyId && b.pack === 'mario') {
-      const def = marioEnemyClass(b.enemyId);
-      const dir = Math.sign(pet.x - b.x) || -(b.facing || 1);
-      // Star Mario barrels straight through the shell gimmick too - nothing survives more
-      // than one hit while he is invincible.
-      const starMode = marioState.stage >= 3 || marioState.invincibleT > 0;
-      if (def.id === 'shell' && !starMode) {
-        if (b.shellState === 'walk') {
-          // First hit just retracts it into its shell - harmless, not a kill yet.
-          b.shellState = 'shelled';
-          b.shellT = def.shellDelay;
-          b.vx = 0;
-          audio.pop();
-          spawn('spark', b.x, groundY - 9 * scale, 4, { spread: 6, vx: 30, vy: -50, size: 7, hue: 130 });
-          return;
-        }
-        if (b.shellState === 'shelled') {
-          // A second hit kicks the shell away immediately, same as a real Koopa shell.
-          b.shellState = 'sliding';
-          b.shellDir = dir < 0 ? 1 : -1;
-          b.vx = b.shellDir * def.slideSpeed;
-          b.shellHitCd = 0;
-          audio.zap();
-          return;
-        }
-        if (!byLaser) return; // walking into an already-sliding shell just bounces off it
-      }
-      // Star Mario doesn't whittle anything down hit by hit (except the boss, who still
-      // needs a real health bar to feel like an encounter) - it recoils hard and is gone.
-      if (b.hp > 1 && !(starMode && !b.boss)) {
-        b.hp -= 1;
-        b.hurtT = def.hitStagger;
-        b.knockVx = -dir * def.knockback;
-        audio.pop();
-        spawn('spark', b.x, groundY - 9 * scale - (b.altitude || 0), 5, { spread: 8, vx: 40, vy: -70, size: 8, hue: 46 });
-        return;
-      }
-      b.alive = false;
-      b.state = 'dying';
-      b.squash = def.deathAnim === 'bossdown' ? 1.3 : def.deathAnim === 'collapse' ? 0.8 : 0.5;
-      b.knockVx = -dir * def.knockback * (starMode ? 2.2 : 1.4);
-      countKill(byLaser, b.boss);
-      playMarioDeathAnim(b, def);
-      if (byPet) { pet.knee = 0.5; pet.happy = 0.6; }
-      return;
-    }
+    if (b.enemyId && b.pack === 'mario') { hitMarioEnemy(b, byPet, byLaser); return; }
     if (b.boss && b.hp && b.hp > 1 && !byLaser) {
       b.hp -= 1;
       audio.pop();
@@ -4257,7 +4491,8 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         pet.x += pet.vx * dt;
         if (!state.asleep && !(DESKTOP && state.species === 'spiderman' && W >= 600)) {
           const dx = pet.ax - pet.x;
-          const speed = (state.species === 'kaiju' ? 32 : (debug.active || snack.active || drop.active) ? 150 : 75) * scale;
+          const speed = (state.species === 'kaiju' ? 32 : (debug.active || snack.active || drop.active) ? 150 : 75) * scale
+            * (state.species === 'mario' && marioStarMode() ? 1.45 : 1);
           if (Math.abs(dx) > 2) {
             pet.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
             pet.facing = Math.sign(dx);
@@ -4424,136 +4659,480 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried && pet.grounded;
     if (def.grounded && canStomp && Math.abs(b.x - pet.x) < r * 0.62) squashBug(b, true);
   }
-  // Movement, physics and light chain-reaction combat for Mario's own enemy pack. Kept
-  // entirely in this one function for the same reason as updateGokuEnemy above: the shared
-  // per-bug loop only ever asks `b.pack` and dispatches here, so no other species' bugs
-  // ever take this path and lifecycle stays owned by updateBugs itself.
+  // Movement, physics and light chain-reaction combat for Mario's own enemy pack. The
+  // shared per-bug loop only ever asks `b.pack` and dispatches to updateMarioEnemy, which
+  // runs the shared beats (hit recoil, acceleration, edges, facing, contact with Mario)
+  // around one per-class behaviour from this registry. Lifecycle stays owned by updateBugs.
+  //
+  // Every class steers by setting b.targetVx; the wrapper eases b.vx toward it at the
+  // class's accel, so a creature never reverses in a single frame. Randomness picks a
+  // plan ("pause and look", "close in on Mario", "turn around"), never a per-frame jitter.
+  const MARIO_ENEMY_BEHAVIORS = {
+    walker: updateMarioWalker,
+    shell: updateMarioShell,
+    flying: updateMarioFlying,
+    jumping: updateMarioJumping,
+    ambush: updateMarioAmbush,
+    elite: updateMarioElite,
+    boss: updateMarioBoss,
+  };
+  function marioTurn(b, dir) {
+    if (dir === 0 || Math.sign(b.targetVx || 0) === dir) return;
+    b.turnT = 0.18;
+    b.targetVx = dir * Math.abs(b.targetVx || b.speed);
+  }
+  // A common walker plan: keep walking, pause to look, turn, or drift toward Mario. Chosen
+  // on a timer per creature (with its own jittered length), so no two step in unison.
+  function marioPickPlan(b, def, r) {
+    const away = b.x - pet.x;
+    const near = Math.abs(away) < r * 3;
+    const roll = Math.random();
+    if (b.noticeT <= 0 && near && roll < 0.35) {
+      b.plan = 'notice'; b.noticeT = rand(0.45, 0.8); b.planT = b.noticeT;
+      b.targetVx = 0;
+    } else if (roll < 0.55) {
+      b.plan = 'approach'; b.planT = rand(1.2, 2.4);
+      b.targetVx = (Math.sign(-away) || 1) * b.speed * 0.9;
+      if (Math.sign(b.targetVx) !== Math.sign(b.vx || b.targetVx)) b.turnT = 0.18;
+    } else if (roll < 0.7) {
+      b.plan = 'pause'; b.planT = rand(0.5, 1.1);
+      b.targetVx = 0;
+    } else if (roll < 0.82) {
+      b.plan = 'turn'; b.planT = rand(1.0, 2.0);
+      marioTurn(b, -Math.sign(b.targetVx || b.facing || 1));
+      if (b.targetVx === 0) b.targetVx = -(b.facing || 1) * b.speed;
+    } else {
+      b.plan = 'walk'; b.planT = rand(1.4, 3.0);
+      b.targetVx = (Math.sign(b.targetVx || b.facing || 1)) * b.speed;
+    }
+  }
+  function updateMarioWalker(b, dt, r, def) {
+    b.noticeT = Math.max(0, b.noticeT - dt);
+    b.planT -= dt;
+    if (b.planT <= 0) marioPickPlan(b, def, r);
+    // A walker that sees Mario land right next to it flinches: a brief stop with raised
+    // brows before its plan resumes.
+    if (b.noticeT <= 0 && b.plan !== 'notice' && Math.abs(b.x - pet.x) < r * 1.6 && marioState.landT > 0.15 && Math.random() < 0.3) {
+      b.plan = 'notice'; b.noticeT = 0.5; b.planT = 0.5; b.targetVx = 0;
+    }
+  }
+  function updateMarioElite(b, dt, r, def) {
+    b.dodgeT = Math.max(0, b.dodgeT - dt);
+    b.dodgeCd -= dt;
+    if (b.dodgeT > 0) return;           // mid-sidestep: velocity already set
+    // Occasional dodge away from a charging shot, or a hop when Mario gets close.
+    const near = Math.abs(b.x - pet.x) < r * 2.6;
+    if (b.dodgeCd <= 0 && (pet.zapCharge > 0 || near) && Math.random() < 0.5) {
+      b.dodgeCd = rand(def.dodgeInterval[0], def.dodgeInterval[1]);
+      b.dodgeT = 0.28;
+      b.hopT = 0.28;
+      b.vx = (Math.sign(b.x - pet.x) || 1) * b.speed * 3.2;
+      b.targetVx = b.vx;
+      spawn('dust', b.x, groundY - 2, 4, { spread: r * 0.3, vx: 40, vy: -15, size: 7, dur: 0.35 });
+      return;
+    }
+    // Deliberate stepped walk: each step is preceded by a lean-back beat (stepT counts the
+    // wind-up down), then the body lurches forward, then it settles before the next.
+    b.stepCd -= dt;
+    if (b.stepT > 0) {
+      b.stepT = Math.max(0, b.stepT - dt);
+      if (b.stepT === 0) {
+        b.vx = (Math.sign(b.targetVx || b.facing || 1)) * b.speed * 2.6;
+        spawn('dust', b.x, groundY - 2, 2, { spread: r * 0.25, vx: 30, vy: -10, size: 7, dur: 0.3 });
+        if (Math.abs(b.x - pet.x) < r * 4) pet.shake = Math.max(pet.shake, 0.05);
+      }
+    } else if (b.stepCd <= 0) {
+      b.stepCd = rand(def.stepInterval[0], def.stepInterval[1]);
+      b.stepT = 0.16;
+      const away = b.x - pet.x;
+      // Faces Mario most of the time and closes in; sometimes wanders the other way.
+      const dir = Math.random() < 0.8 ? (Math.sign(-away) || 1) : (Math.sign(b.targetVx || b.facing || 1));
+      if (dir !== Math.sign(b.targetVx || dir)) b.turnT = 0.2;
+      b.targetVx = dir * b.speed * 0.5;
+    }
+    // Between steps the body settles quickly instead of gliding.
+    b.vx *= Math.pow(0.02, dt);
+  }
+  function updateMarioShell(b, dt, r, def) {
+    const c = marioEnemyCenter(b);
+    b.wobble = Math.max(0, b.wobble - dt * 1.6);
+    switch (b.shellState) {
+      case 'walk':
+        b.noticeT = Math.max(0, b.noticeT - dt);
+        b.planT -= dt;
+        if (b.planT <= 0) marioPickPlan(b, def, r);
+        break;
+      case 'retract':
+        b.shellT -= dt;
+        b.vx = 0; b.targetVx = 0;
+        if (b.shellT <= 0) { b.shellState = 'shelled'; b.shellT = def.shellDelay; b.wobble = 0.8; }
+        break;
+      case 'shelled':
+        b.shellT -= dt;
+        b.vx = 0; b.targetVx = 0;
+        if (b.shellT <= 0) {
+          // Auto-slide once the delay runs out, even without a second stomp kicking it:
+          // away from Mario, so it reads as an escape rather than an attack.
+          b.shellState = 'kick';
+          b.shellT = def.kickTime;
+          b.shellDir = pet.x > b.x ? -1 : 1;
+          b.vx = b.shellDir * def.slideSpeed;
+          b.targetVx = b.vx;
+          b.shellHitCd = 0;
+          b.squashT = 0.14;
+          audio.pop();
+        }
+        break;
+      case 'kick':
+        b.shellT -= dt;
+        if (b.shellT <= 0) b.shellState = 'sliding';
+        break;
+      case 'bouncing':
+      case 'hit':
+        b.shellT -= dt;
+        if (b.shellT <= 0) b.shellState = 'sliding';
+        break;
+      default:
+        break;
+    }
+    if (b.shellState === 'kick' || b.shellState === 'sliding' || b.shellState === 'bouncing' || b.shellState === 'hit') {
+      b.targetVx = b.vx;
+      b.shellHitCd = Math.max(0, (b.shellHitCd || 0) - dt);
+      // Spin follows the actual speed: a shell that slows spins slower, no fixed rate.
+      b.spinAngle += b.vx * dt / (c.u * 0.7);
+      // Chain reaction: a sliding shell wipes out the next enemy in its path. Bounded to
+      // one hit per short cooldown so it cannot cascade into a same-frame runaway loop.
+      if (b.shellHitCd <= 0) {
+        const mine = marioEnemyBounds(b);
+        for (const other of bugs) {
+          if (other === b || !other.alive || !other.enemyId) continue;
+          const ob = other.pack === 'mario' ? marioEnemyBounds(other) : { left: other.x - 12 * scale, right: other.x + 12 * scale, top: groundY - 20, bottom: groundY };
+          if (ob.left < mine.right && ob.right > mine.left && ob.top < mine.bottom && ob.bottom > mine.top) {
+            const dir = Math.sign(b.vx) || 1;
+            other.knockVx = dir * 160;
+            other.hurtT = Math.max(other.hurtT || 0, 0.2);
+            squashBug(other, false, true);
+            b.shellHitCd = 0.2;
+            b.shellState = 'hit'; b.shellT = 0.12;
+            b.vx *= 0.9;
+            spawn('spark', mine.cx + dir * mine.halfW, mine.cy, 6, { spread: c.u * 0.5, vx: 90, vy: -70, size: 8, hue: 48, dur: 0.4 });
+            spawn('dust', mine.cx, mine.bottom, 3, { spread: c.u * 0.6, vx: 20, vy: -20, size: 6, dur: 0.3 });
+            break;
+          }
+        }
+      }
+    }
+  }
+  function updateMarioFlying(b, dt, r, def) {
+    b.diveCd -= dt;
+    b.flap += dt * def.animationProfile.flapRate * (b.flyState === 'dive' ? 0.4 : b.flyState === 'recover' ? 1.5 : 1);
+    const away = b.x - pet.x;
+    // Altitude is a spring toward a target height, so climbs and dives ease in and out
+    // instead of snapping, and the wings visibly work harder on the way back up.
+    let targetAlt = b.baseAltitude + Math.sin(b.bobPhase += dt * 1.4) * 6;
+    if (b.flyState === 'patrol') {
+      b.planT -= dt;
+      if (b.planT <= 0) {
+        b.planT = rand(1.2, 2.6);
+        const roll = Math.random();
+        // Mild pursuit: drift over Mario more often than away from him.
+        if (roll < 0.5) b.targetVx = (Math.sign(-away) || 1) * b.speed;
+        else if (roll < 0.7) b.targetVx = 0;
+        else b.targetVx = (Math.random() < 0.5 ? -1 : 1) * b.speed;
+        if (Math.sign(b.targetVx) && Math.sign(b.targetVx) !== Math.sign(b.vx || b.targetVx)) b.turnT = 0.2;
+      }
+      if (b.diveCd <= 0 && Math.abs(away) < r * 3.5) {
+        b.flyState = 'dive'; b.flyT = 0;
+        b.targetVx = (Math.sign(-away) || 1) * b.speed * 1.6;
+      }
+      // Duck away from a charging shot rather than just sitting still for it.
+      if (pet.zapCharge > 0 && Math.abs(away) < r * 3 && b.dodgeCd <= 0) {
+        b.dodgeCd = 1.4;
+        b.targetVx = (Math.sign(away) || 1) * b.speed * 1.7;
+        b.turnT = 0.2;
+      }
+    } else if (b.flyState === 'dive') {
+      b.flyT += dt;
+      targetAlt = Math.max(def.altitudeRange[0] - def.diveDepth, b.baseAltitude - def.diveDepth);
+      if (b.flyT > 0.7) { b.flyState = 'recover'; b.flyT = 0; b.targetVx *= 0.4; }
+    } else if (b.flyState === 'recover') {
+      b.flyT += dt;
+      targetAlt = b.baseAltitude + def.lift * 0.5;
+      if (b.flyT > 0.9) { b.flyState = 'patrol'; b.diveCd = rand(def.diveInterval[0], def.diveInterval[1]); b.planT = 0; }
+    }
+    b.dodgeCd = Math.max(0, (b.dodgeCd || 0) - dt);
+    const k = b.flyState === 'dive' ? 6 : 3.2;
+    b.altVy += (targetAlt - b.altitude) * k * dt - b.altVy * 2.2 * dt;
+    b.altitude += b.altVy * dt;
+    const maxAlt = groundY - 1 - def.hitbox.h * marioEnemyUnit(def) - 12 * scale;
+    b.altitude = clamp(b.altitude, 18, Math.max(30, maxAlt));
+  }
+  function updateMarioJumping(b, dt, r, def) {
+    const c = marioEnemyCenter(b);
+    switch (b.jumpPhase) {
+      case 'ground':
+        b.jumpCd -= dt;
+        b.targetVx = (Math.sign(b.targetVx || b.facing || 1)) * b.speed * 0.35;
+        if (b.jumpCd <= 0) {
+          b.jumpPhase = 'anticipation'; b.jumpT = def.anticipation;
+          b.targetVx = 0;
+          // Usually hops toward Mario, sometimes the other way.
+          const dir = Math.random() < 0.7 ? (Math.sign(pet.x - b.x) || 1) : -(b.facing || 1);
+          if (dir !== (b.facing || 1)) b.turnT = 0.18;
+          b.jumpDir = dir;
+        }
+        break;
+      case 'anticipation':
+        b.jumpT -= dt;
+        b.targetVx = 0;
+        if (b.jumpT <= 0) {
+          b.jumpPhase = 'launch'; b.jumpT = 0.1;
+          b.jumpVy = -def.jumpImpulse * rand(0.9, 1.1);
+          b.vx = b.jumpDir * b.speed * 2.4; b.targetVx = b.vx;
+          audio.pop();
+          spawn('dust', b.x, c.bottom, 3, { spread: c.u * 0.6, vx: 30, vy: -10, size: 6, dur: 0.3 });
+        }
+        break;
+      case 'launch':
+      case 'ascending':
+      case 'apex':
+      case 'descending':
+        b.jumpT -= dt;
+        b.altitude -= b.jumpVy * dt;
+        b.jumpVy += def.jumpGravity * dt;
+        b.targetVx = b.vx;
+        if (b.jumpPhase === 'launch' && b.jumpT <= 0) b.jumpPhase = 'ascending';
+        if (b.jumpPhase === 'ascending' && b.jumpVy > -40) b.jumpPhase = 'apex';
+        if (b.jumpPhase === 'apex' && b.jumpVy > 40) b.jumpPhase = 'descending';
+        if (b.altitude <= 0) {
+          b.altitude = 0; b.jumpVy = 0;
+          b.jumpPhase = 'landing'; b.jumpT = 0.14; b.squashT = 0.2;
+          b.vx *= 0.3; b.targetVx = 0;
+          b.jumpCd = rand(def.jumpInterval[0], def.jumpInterval[1]);
+          spawn('dust', b.x, groundY - 2, 4, { spread: c.u, vx: 30, vy: -10, size: 6, dur: 0.3 });
+        }
+        break;
+      case 'landing':
+        b.jumpT -= dt;
+        if (b.jumpT <= 0) { b.jumpPhase = 'recovery'; b.jumpT = def.recovery; }
+        break;
+      case 'recovery':
+        b.jumpT -= dt;
+        if (b.jumpT <= 0) b.jumpPhase = 'ground';
+        break;
+      default:
+        b.jumpPhase = 'ground';
+    }
+  }
+  function updateMarioAmbush(b, dt, r, def) {
+    b.ambushT -= dt;
+    const away = pet.x - b.x;
+    switch (b.ambushState) {
+      case 'hidden':
+        b.ambushRise = Math.max(0, b.ambushRise - dt * 3);
+        b.targetVx = 0;
+        if (b.ambushT <= 0) {
+          b.ambushState = 'emerging'; b.ambushT = def.emergeTime;
+          b.facing = Math.sign(away) || 1; b.face = b.facing;
+        }
+        break;
+      case 'emerging':
+        // Rises with a little overshoot, no scaling of the whole body.
+        b.ambushRise = clamp(1 - b.ambushT / def.emergeTime, 0, 1);
+        b.targetVx = 0;
+        if (b.ambushT <= 0) {
+          b.ambushState = 'active'; b.ambushT = rand(def.activeTime[0], def.activeTime[1]);
+          b.ambushRise = 1;
+          audio.pop();
+        }
+        break;
+      case 'active':
+        b.ambushRise = 1;
+        b.targetVx = (Math.sign(away) || 1) * def.speed * 0.5;
+        if (Math.abs(away) > 2) marioTurn(b, Math.sign(away));
+        if (b.ambushT <= 0) {
+          b.ambushState = 'attacking'; b.ambushT = def.attackTime;
+          b.vx = (Math.sign(away) || 1) * def.speed * 1.6; b.targetVx = b.vx;
+          b.squashT = 0.12;
+        }
+        break;
+      case 'attacking':
+        b.ambushRise = 1;
+        b.targetVx = b.vx;
+        if (b.ambushT <= 0) {
+          b.ambushState = 'retreating'; b.ambushT = def.retreatTime;
+          b.targetVx = 0;
+        }
+        break;
+      case 'retreating':
+        b.ambushRise = clamp(b.ambushT / def.retreatTime, 0, 1);
+        b.targetVx = 0;
+        if (b.ambushT <= 0) {
+          b.ambushState = 'hidden'; b.ambushT = rand(def.hiddenTime[0], def.hiddenTime[1]);
+          b.ambushRise = 0;
+        }
+        break;
+      default:
+        b.ambushState = 'hidden';
+    }
+  }
+  function updateMarioBoss(b, dt, r, def) {
+    const away = pet.x - b.x;
+    b.rage = 1 - b.hp / b.maxHp;
+    b.bossT -= dt;
+    const enraged = b.hp / b.maxHp <= def.lowHealth;
+    switch (b.bossState) {
+      case 'stance':
+        // Faces Mario, paces slowly to keep him in front, and winds up a charge on a timer
+        // that shortens as its health drops.
+        if (Math.abs(away) > r * 0.5) marioTurn(b, Math.sign(away));
+        b.targetVx = Math.abs(away) > r * 3.5 ? (Math.sign(away) || 1) * b.speed : (Math.abs(away) < r * 1.8 ? -(Math.sign(away) || 1) * b.speed * 0.6 : 0);
+        if (b.bossT <= 0) { b.bossState = 'windup'; b.bossT = def.chargeWindup * (enraged ? 0.7 : 1); b.targetVx = 0; }
+        break;
+      case 'windup':
+        b.targetVx = -(Math.sign(away) || 1) * b.speed * 0.6;   // rocks back before the charge
+        if (b.bossT <= 0) {
+          b.bossState = 'charge'; b.bossT = def.chargeTime;
+          b.vx = (Math.sign(away) || 1) * def.chargeSpeed * (enraged ? 1.25 : 1);
+          b.targetVx = b.vx;
+          spawn('dust', b.x, groundY - 2, 6, { spread: r * 0.5, vx: 60, vy: -20, size: 9, dur: 0.4 });
+          audio.thud();
+        }
+        break;
+      case 'charge':
+        b.targetVx = b.vx;
+        if (b.bossT <= 0) { b.bossState = 'recover'; b.bossT = 0.5; b.targetVx = 0; }
+        break;
+      case 'recover':
+        b.targetVx = 0;
+        if (b.bossT <= 0) { b.bossState = 'stance'; b.bossT = rand(def.chargeInterval[0], def.chargeInterval[1]) * (enraged ? 0.6 : 1); }
+        break;
+      case 'stagger':
+        b.targetVx = 0;
+        if (b.bossT <= 0) { b.bossState = 'stance'; b.bossT = rand(1.2, 2.0); }
+        break;
+      default:
+        b.bossState = 'stance';
+    }
+  }
   function updateMarioEnemy(b, dt, r) {
+    const def = marioEnemyClass(b.enemyId);
+    const behave = MARIO_ENEMY_BEHAVIORS[def.behavior] || updateMarioWalker;
+    const prevX = b.x;
     if (b.hurtT > 0) {
       b.hurtT = Math.max(0, b.hurtT - dt);
       b.x += b.knockVx * dt;
       b.knockVx *= Math.pow(0.02, dt);
+    } else if (b.bumpT > 0) {
+      b.x += b.knockVx * dt;
+      b.knockVx *= Math.pow(0.02, dt);
     }
-    const def = marioEnemyClass(b.enemyId);
-    const edge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
+    b.bumpT = Math.max(0, (b.bumpT || 0) - dt);
+    b.turnT = Math.max(0, (b.turnT || 0) - dt);
+    b.squashT = Math.max(0, (b.squashT || 0) - dt);
+    b.hopT = Math.max(0, (b.hopT || 0) - dt);
+    b.breathPhase += dt * b.rate * 2.2;
     const stunned = b.hurtT > 0;
-
-    if (def.id === 'shell') {
-      if (b.shellState === 'shelled') {
-        b.shellT -= dt;
-        if (b.shellT <= 0) {
-          // Auto-slide once the delay runs out, even without a second stomp kicking it.
-          b.shellState = 'sliding';
-          b.shellDir = pet.x > b.x ? -1 : 1;
-          b.vx = b.shellDir * def.slideSpeed;
-          b.shellHitCd = 0;
-          audio.pop();
-        }
-      } else if (b.shellState === 'sliding') {
-        b.shellHitCd = Math.max(0, (b.shellHitCd || 0) - dt);
-        b.spinAngle = (b.spinAngle || 0) + Math.abs(b.vx) * dt * 0.05;
-        b.x += b.vx * dt;
-        if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx); }
-        if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx); }
-        // Chain reaction: a sliding shell wipes out the next enemy in its path. Bounded to
-        // one hit per short cooldown so it cannot cascade into a same-frame runaway loop.
-        if (b.shellHitCd <= 0) {
-          for (const other of bugs) {
-            if (other === b || !other.alive || !other.enemyId) continue;
-            if (Math.abs(other.x - b.x) < 16 * scale) {
-              squashBug(other, false, true);
-              b.shellHitCd = 0.2;
-              spawn('dust', b.x, groundY - 9 * scale, 3, { spread: 8, vx: 20, vy: -20, size: 6, dur: 0.3 });
-              break;
-            }
-          }
-        }
-      } else if (!stunned) {
-        b.x += b.vx * dt;
-        if (Math.random() < 0.01) b.vx *= -1;
-      }
-    } else if (def.id === 'flying') {
-      b.bobPhase += dt * 2.2;
-      b.altitude = clamp(b.altitude + Math.sin(b.bobPhase) * 7 * dt, def.altitudeRange[0], def.altitudeRange[1]);
-      if (!stunned) {
-        b.x += b.vx * dt;
-        // Duck away from a charging shot rather than just sitting still for it.
-        if (pet.zapCharge > 0 && Math.abs(b.x - pet.x) < r * 3 && Math.random() < 0.03) {
-          b.vx = -Math.sign(b.vx || 1) * def.speed * 1.7;
-        } else if (Math.random() < 0.01) {
-          b.vx *= -1;
-        }
-      }
-    } else if (def.id === 'jumping') {
-      const inAir = b.altitude > 0 || b.jumpVy !== 0;
-      if (inAir) {
-        b.altitude -= b.jumpVy * dt;
-        b.jumpVy += def.jumpGravity * dt;
-        if (b.altitude <= 0) {
-          b.altitude = 0; b.jumpVy = 0; b.squashT = 0.18;
-          b.jumpCd = rand(def.jumpInterval[0], def.jumpInterval[1]);
-          spawn('dust', b.x, groundY - 2, 3, { spread: 8, vx: 20, vy: -10, size: 6, dur: 0.3 });
-        }
-        if (!stunned) b.x += b.vx * dt;
+    if (!stunned) behave(b, dt, r, def);
+    // Ease toward the behaviour's requested velocity; shells and charges set both at once.
+    if (!stunned) {
+      const dv = (b.targetVx || 0) - b.vx;
+      const step = def.accel * dt * (b.rate || 1);
+      b.vx += clamp(dv, -step, step);
+      b.x += b.vx * dt;
+    }
+    const edge = marioEnemyEdge();
+    if (b.x < edge || b.x > W - edge) {
+      b.x = clamp(b.x, edge, W - edge);
+      if (def.id === 'shell' && b.shellState !== 'walk' && b.shellState !== 'retract' && b.shellState !== 'shelled') {
+        // Shell off the wall: keeps its speed, briefly squashes against the edge.
+        b.vx = -b.vx; b.targetVx = b.vx;
+        b.shellDir = Math.sign(b.vx) || 1;
+        if (b.shellState !== 'kick') { b.shellState = 'bouncing'; b.shellT = def.bounceTime; }
+        b.squashT = 0.14;
+        spawn('dust', b.x, groundY - 4, 3, { spread: 6, vx: 20, vy: -20, size: 6, dur: 0.3 });
       } else {
-        b.jumpCd -= dt;
-        if (b.squashT > 0) b.squashT = Math.max(0, b.squashT - dt);
-        if (!stunned) {
-          b.x += b.vx * 0.35 * dt;
-          if (b.jumpCd <= 0) {
-            b.jumpVy = -def.jumpImpulse;
-            audio.pop();
-            if (Math.random() < 0.35) b.vx = -b.vx;
-          }
-        }
-      }
-    } else if (def.id === 'ambush') {
-      b.ambushT -= dt;
-      if (b.ambushState === 'hidden' && b.ambushT <= 0) {
-        b.ambushState = 'active'; b.ambushT = rand(0.5, 0.9);
-        b.vx = (Math.sign(pet.x - b.x) || 1) * def.speed;
-        audio.pop();
-      } else if (b.ambushState === 'active' && b.ambushT <= 0) {
-        b.ambushState = 'retreating'; b.ambushT = rand(0.4, 0.7);
-        b.vx = -Math.sign(b.vx || 1) * def.speed * 0.7;
-      } else if (b.ambushState === 'retreating' && b.ambushT <= 0) {
-        b.ambushState = 'hidden'; b.ambushT = rand(0.8, 1.8);
-        b.vx = 0;
-      }
-      if (!stunned && b.ambushState !== 'hidden') b.x += b.vx * dt;
-    } else {
-      // walker / elite: a walk cycle with an occasional stop-and-look pause, plus a
-      // stronger, more frequent dodge-hop for the elite so it reads as tougher, not just bigger.
-      b.lookT = Math.max(0, (b.lookT || 0) - dt);
-      if (!stunned && b.lookT <= 0) {
-        b.x += b.vx * dt;
-        if (Math.random() < (def.id === 'elite' ? 0.006 : 0.01)) b.vx *= -1;
-        if (Math.random() < 0.003) b.lookT = rand(0.5, 1.2);
-        const away = b.x - pet.x;
-        if (Math.abs(away) < r * (def.id === 'elite' ? 2.2 : 1.8) && Math.random() < (def.id === 'elite' ? 0.03 : 0.015)) {
-          b.vx = Math.sign(away || 1) * def.speed * (Math.random() < 0.5 ? -1.6 : 1.2);
-        }
+        // Walkers decelerate to a stop at the edge and set off the other way.
+        const dir = b.x <= edge ? 1 : -1;
+        if (Math.sign(b.targetVx) !== dir) { b.turnT = 0.18; b.targetVx = dir * Math.abs(b.targetVx || b.speed); }
+        if (Math.sign(b.vx) === -dir) b.vx = 0;
+        if (b.knockVx && Math.sign(b.knockVx) === -dir) b.knockVx = 0;
       }
     }
-
-    if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx); }
-    if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx); }
-    b.facing = Math.sign(b.vx) || b.facing || 1;
-
-    const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried && pet.grounded;
-    if (def.grounded && canStomp && Math.abs(b.x - pet.x) < r * 0.62) squashBug(b, true);
-    // A flier can't just be walked into - but Mario landing on top of it mid-jump should
-    // still count as a stomp, the same "jump on it" fantasy the ground shortcut skips.
-    if (!def.grounded && state.hatched && !state.asleep && !pet.held && !pet.carried && !pet.grounded
-      && Math.abs(b.x - pet.x) < r * 0.7) {
-      const by = groundY - 9 * scale - (b.altitude || 0);
-      if (Math.abs((pet.y - r * 1.6) - by) < r * 0.9) squashBug(b, true);
+    if (Math.abs(b.vx) > 1) b.facing = Math.sign(b.vx);
+    // The renderer turns through this rather than snapping the whole drawing.
+    b.face = lerp(b.face === undefined ? b.facing : b.face, b.facing, Math.min(1, dt * 12));
+    // Walk cycles advance by distance covered, not by wall-clock time, so a creature that
+    // slows down visibly slows its feet with it.
+    b.animT += Math.abs(b.x - prevX) / (marioEnemyUnit(def) * def.animationProfile.stepLen);
+    marioContact(b, def);
+  }
+  // Contact between Mario and an enemy, resolved from geometry: his feet coming down onto
+  // its top is a stomp, anything else is a shove. Star Mario turns any touch into a hit.
+  function marioContact(b, def) {
+    if (!b.alive || !state.hatched || state.asleep || pet.held || pet.carried) return;
+    const m = marioState;
+    const eb = marioEnemyBounds(b);
+    const mb = marioBody();
+    if (Math.abs(mb.x - eb.cx) >= eb.halfW + mb.halfW * 0.75) return;
+    const airborne = m.jumpH > 2 || !pet.grounded;
+    const descending = mb.vy > 30;
+    const feetInBand = mb.feet > eb.top - 10 * scale && mb.feet < eb.top + eb.h * 0.5;
+    const starMode = marioStarMode();
+    if (airborne && descending && feetInBand) {
+      marioStompLand(b, def, eb, starMode);
+      return;
     }
+    if (mb.feet <= eb.top || mb.top >= eb.bottom) return;   // no vertical overlap
+    if (starMode) {
+      m.starHitT = 0.3;
+      spawn('spark', eb.cx, eb.cy, 8, { spread: eb.u, vx: 150, vy: -100, size: 9, hue: (pet.t * 400) % 360, dur: 0.5 });
+      squashBug(b, true, true);
+      return;
+    }
+    if (m.bumpCd > 0 || b.bumpT > 0) return;
+    marioBump(b, def, eb);
+  }
+  function marioStompLand(b, def, eb, starMode) {
+    const m = marioState;
+    // Bounce off the top; higher off the tougher classes so a boss stomp reads as a big hit.
+    const bounce = def.id === 'boss' ? 520 : def.id === 'elite' ? 440 : 380;
+    m.jumpVy = -bounce;
+    if (m.jumpH <= 2 && pet.grounded) m.jumpH = 3;
+    m.jumpPhase = 'launch'; m.launchT = 0.1;
+    m.stompT = 0.28;
+    m.landT = 0;
+    audio.marioStomp();
+    spawn('dust', eb.cx, eb.top, 5, { spread: eb.halfW, vx: 60, vy: -20, size: 7, dur: 0.4 });
+    if (!b.boss) b.squashT = Math.max(b.squashT || 0, 0.25);
+    squashBug(b, true, starMode);
+  }
+  function marioBump(b, def, eb) {
+    const m = marioState;
+    const dir = Math.sign(pet.x - b.x) || (pet.facing || 1);
+    m.bumpT = 0.4;
+    m.bumpCd = 1.1;
+    m.bumpVx = dir * (def.id === 'boss' ? 320 : def.id === 'elite' ? 260 : 200);
+    m.bumpDir = -dir;
+    // The enemy recoils the other way too - a shove, not damage, so no hit flash.
+    b.bumpT = 0.35;
+    b.knockVx = -dir * (def.id === 'boss' ? 30 : def.id === 'elite' ? 60 : 120);
+    if (def.id === 'walker' || def.id === 'shell') { b.noticeT = 0.5; b.plan = 'notice'; b.planT = 0.5; b.targetVx = 0; }
+    audio.thud();
+    spawn('dust', (pet.x + b.x) / 2, eb.bottom, 3, { spread: eb.u * 0.5, vx: 30, vy: -15, size: 6, dur: 0.3 });
+    if (Math.random() < 0.35) say(pick(['Mamma mia!', 'Ouch!', 'Hey!']), 900);
+  }
+  // A charge, a hop or an alert beat in progress blocks a new attack, so the fight reads as
+  // notice -> stance -> attack -> recover instead of a projectile out of nowhere.
+  function marioAttackBlocked() {
+    const m = marioState;
+    return m.jumpH > 0 || m.jumpVy !== 0 || m.alertT > 0.45 || m.bumpT > 0;
   }
   function updateBugs(dt) {
     const r = petR();
     const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried;
-    const canFire = canStomp && !pet.thrown && (floats() || (pet.grounded && pet.mode !== 'fly'));
+    const canFire = canStomp && !pet.thrown && (floats() || (pet.grounded && pet.mode !== 'fly'))
+      && !(state.species === 'mario' && marioAttackBlocked());
 
     for (let i = bugs.length - 1; i >= 0; i--) {
       const b = bugs[i];
@@ -4563,6 +5142,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
           b.x += (b.knockVx || 0) * dt;
           b.knockVx = (b.knockVx || 0) * Math.pow(0.05, dt);
           b.deathSpin = (b.deathSpin || 0) + dt * (b.boss ? 3 : 9);
+          if (b.pack === 'mario') updateMarioDeath(b, dt);
         }
         if (b.squash <= 0) bugs.splice(i, 1);
         continue;
@@ -4603,13 +5183,11 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
           const eyes = eyePoints();
           const shotStyle = pet.zapStyle || ((species().attack && species().attack.style) || 'beam');
           if (state.species === 'mario') {
+            // The attack itself does the damage: a fireball flies from his hand and a stomp
+            // is a hop onto the target, both resolved by collision, never by an instant kill.
             pet.zapLocal = (shotStyle === 'stomp');
-            drawMarioAttack(petR(), 1, pet.zapBoss, shotStyle);
-            if (aim.host) {
-              native({ type: 'zap', id: aim.id, eyes, style: shotStyle });
-            } else {
-              squashBug(live, false, true);
-            }
+            drawMarioAttack(petR(), 1, pet.zapBoss, shotStyle, aim.host ? null : live);
+            if (aim.host) native({ type: 'zap', id: aim.id, eyes, style: shotStyle });
           } else if (state.species === 'ronaldo') {
             pet.zapLocal = false;
             // Ronaldo strikes the free soccer ball with power and style!
@@ -6693,7 +7271,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
   const marioImgSuperWalk2 = new Image(); marioImgSuperWalk2.src = MARIO_SPRITES.super_walk2;
   const marioImgSuperRun = new Image(); marioImgSuperRun.src = MARIO_SPRITES.super_run;
   const marioImgSuperRun2 = marioImgSuperRun;
-  const marioImgSuperStride = marioImgSuperRun;
+  const marioImgSuperStride = new Image(); marioImgSuperStride.src = MARIO_SPRITES.super_stride;
   const marioImgSuperJump = new Image(); marioImgSuperJump.src = MARIO_SPRITES.super_jump;
 
   // Fire Mario (Stage 2) living poses (White suit, clean throwing pose)
@@ -6724,9 +7302,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     m.qblockVy = 0;
 
     // Mario leaps up to hit the ? block
-    pet.jump = true;
-    pet.vy = -380;
-    audio.marioJump();
+    marioHop(petR() * 0.95, 0);
 
     setTimeout(() => {
       m.qblockHit = true;
@@ -6777,10 +7353,8 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
 
     // Mario leaps toward the pipe
     pet.facing = (m.pipeX > pet.x ? 1 : -1);
-    pet.jump = true;
     pet.vx = (m.pipeX - pet.x) * 1.5;
-    pet.vy = -420;
-    audio.marioJump();
+    marioHop(petR() * 1.3, 0);
 
     setTimeout(() => {
       audio.marioPipe();
@@ -6805,33 +7379,110 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     ]), 4000);
   }
 
+  // Mario's own in-window hop. His window is not moved by the page (the host owns that
+  // while he is thrown), so a jump is an offset above his feet, marioState.jumpH, with its
+  // own gravity - the same trick the jumping enemy uses. Stomps, ? blocks and the pipe
+  // leap all go through here so there is exactly one jump.
+  const MARIO_HOP_GRAVITY = 1400;
+  function marioHop(height, vx) {
+    const m = marioState;
+    if (!pet.grounded || pet.held || pet.carried) return;
+    m.jumpVy = -Math.sqrt(2 * MARIO_HOP_GRAVITY * Math.max(4, height));
+    m.jumpH = Math.max(m.jumpH, 0.5);
+    m.hopVx = vx || 0;
+    m.jumpPhase = 'launch';
+    m.launchT = 0.1;
+    m.landT = 0;
+    audio.marioJump();
+  }
+  const marioAirborne = () => marioState.jumpH > 0 || !pet.grounded;
+  // Where the fireball leaves his hand, measured off the fire_throw frame: the arm's tip
+  // paints at 0.53 of the sprite height forward of centre and 0.41 of it above the feet.
+  function marioHandPoint() {
+    const m = marioState;
+    const h = petR() * (m.stage === 0 ? 1.9 : 2.85);
+    return { x: pet.x + pet.facing * h * 0.53, y: pet.y - m.jumpH - h * 0.41 };
+  }
+  function marioTargetPoint(live) {
+    if (live && live.pack === 'mario' && live.enemyId) return marioEnemyCenter(live);
+    if (live && !live.altitude && Number.isFinite(live.x) && Number.isFinite(live.y)) return { x: live.x, y: live.y };
+    return { x: Number.isFinite(pet.zapX) ? pet.zapX : pet.x + pet.facing * 140, y: Number.isFinite(pet.zapY) ? pet.zapY : groundY - 10 };
+  }
+  // Mario noticing one of his own enemies spawn: turns toward it, a beat of surprise, then
+  // a ready stance - and only after that does the hunt loop get to start a charge (see
+  // marioAttackBlocked). Reuses the same reaction channel petting uses, so it never fights
+  // with an attack or transformation already in progress.
+  function triggerMarioAlert(bug) {
+    if (state.species !== 'mario' || state.asleep || pet.held || pet.carried) return;
+    if (pet.reactionT > 0 || pet.zapCharge > 0 || pet.zap > 0) return;
+    if (marioState.transformT > 0 || marioAirborne()) return;
+    const m = marioState;
+    m.alertT = 1.1;
+    m.alertBug = bug || null;
+    if (bug && Math.abs(bug.x - pet.x) > 4) pet.facing = bug.x < pet.x ? -1 : 1;
+    pet.reaction = 'alert';
+    pet.reactionT = 1.15;
+    pet.surprise = Math.max(pet.surprise, 0.4);
+    if (Math.random() < 0.5) say(line('enemySpot'), 1200);
+  }
   function updateMarioSimulation(dt) {
     if (state.species !== 'mario') return;
     const m = marioState;
+    const r = petR();
+    for (const k of ['landT', 'stompT', 'bumpT', 'bumpCd', 'throwT', 'alertT', 'launchT', 'starHitT']) m[k] = Math.max(0, (m[k] || 0) - dt);
+    if (m.alertT <= 0) m.alertBug = null;
 
-    // Invincibility countdown
+    // Invincibility countdown, with a rate-limited sparkle so a 15s star never floods the
+    // particle array.
     if (m.invincibleT > 0) {
       m.invincibleT = Math.max(0, m.invincibleT - dt);
-      if (Math.random() < 0.4) {
-        spawn('spark', pet.x + rand(-18, 18), pet.y - rand(10, petR() * 2), 1, {
-          spread: 6,
-          vx: rand(-40, 40),
-          vy: rand(-50, 10),
-          size: rand(4, 9),
-          hue: (pet.t * 360) % 360,
-          dur: 0.4
+      m.sparkleT = (m.sparkleT || 0) - dt;
+      if (m.sparkleT <= 0) {
+        m.sparkleT = 0.09;
+        spawn('spark', pet.x + rand(-r * 0.6, r * 0.6), pet.y - m.jumpH - rand(r * 0.3, r * 2.4), 1, {
+          spread: 4, vx: rand(-40, 40), vy: rand(-50, 10), size: rand(4, 8), hue: (pet.t * 360) % 360, dur: 0.4,
         });
       }
     }
 
     if (m.transformT > 0) m.transformT = Math.max(0, m.transformT - dt);
 
+    // The hop: launch -> rise -> apex -> fall -> land, on real gravity.
+    if (m.jumpH > 0 || m.jumpVy !== 0) {
+      if (!pet.grounded || pet.held || pet.carried) {
+        m.jumpH = 0; m.jumpVy = 0; m.hopVx = 0; m.jumpPhase = 'ground';
+      } else {
+        m.jumpVy += MARIO_HOP_GRAVITY * dt;
+        m.jumpH -= m.jumpVy * dt;
+        if (m.hopVx) {
+          pet.x = clamp(pet.x + m.hopVx * dt, petHalfWidth(), W - petHalfWidth());
+          pet.ax = pet.x;
+          if (Math.abs(m.hopVx) > 20) pet.facing = Math.sign(m.hopVx);
+        }
+        if (m.jumpPhase === 'launch' && m.launchT <= 0) m.jumpPhase = 'rise';
+        if (m.jumpPhase === 'rise' && m.jumpVy > -60) m.jumpPhase = 'apex';
+        if (m.jumpPhase === 'apex' && m.jumpVy > 60) m.jumpPhase = 'fall';
+        if (m.jumpH <= 0) {
+          const impact = m.jumpVy;
+          m.jumpH = 0; m.jumpVy = 0; m.hopVx = 0; m.jumpPhase = 'ground';
+          m.landT = 0.24;
+          if (impact > 260) spawn('dust', pet.x, groundY - 3, 4, { spread: r * 0.5, vx: 50, vy: -20, size: 7, dur: 0.4 });
+        }
+      }
+    }
+    // Shoved by an enemy: a short slide backwards that the walk logic doesn't fight.
+    if (m.bumpT > 0 && pet.grounded) {
+      pet.x = clamp(pet.x + m.bumpVx * dt, petHalfWidth(), W - petHalfWidth());
+      pet.ax = pet.x;
+      m.bumpVx *= Math.pow(0.03, dt);
+    }
+
     // QBlock bouncing
     if (m.qblockActive && m.qblockHit) {
       m.qblockY += m.qblockVy * dt;
       m.qblockVy += 400 * dt;
-      if (m.qblockY >= groundY - petR() * 2.8) {
-        m.qblockY = groundY - petR() * 2.8;
+      if (m.qblockY >= groundY - r * 2.8) {
+        m.qblockY = groundY - r * 2.8;
         m.qblockVy = 0;
       }
     }
@@ -6857,7 +7508,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         sh.vy = 0;
       }
       // Collision with Mario -> Grow into Super Mario!
-      if (Math.hypot(pet.x - sh.x, (pet.y - petR()) - sh.y) < petR() * 1.4) {
+      if (Math.hypot(pet.x - sh.x, (pet.y - r) - sh.y) < r * 1.4) {
         sh.active = false;
         m.mushroomAnim = null;
         m.stage = 1; // Super Mario!
@@ -6867,57 +7518,67 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       }
     }
 
-    // Fireballs physics & collision
+    // Impact flashes left by fireballs - short rings, bounded, cleaned as they fade.
+    for (let i = m.flashes.length - 1; i >= 0; i--) {
+      const fl = m.flashes[i];
+      fl.t += dt;
+      if (fl.t >= fl.dur) m.flashes.splice(i, 1);
+    }
+
+    // Fireballs: a real projectile with gravity, a floor bounce, and a hit resolved against
+    // the target's own collision box. The projectile does the damage, not the throw.
     for (let i = m.fireballs.length - 1; i >= 0; i--) {
       const fb = m.fireballs[i];
+      fb.t = (fb.t || 0) + dt;
+      fb.bounceT = Math.max(0, (fb.bounceT || 0) - dt);
       fb.x += fb.vx * dt;
       fb.vy += 850 * dt;
       fb.y += fb.vy * dt;
+      fb.spin = (fb.spin || 0) + fb.vx * dt * 0.045;   // rolls with its own speed
       const floor = groundY - 10;
-      if (fb.y >= floor) {
+      if (fb.y >= floor && fb.vy > 0) {
         fb.y = floor;
-        fb.vy = -260; // bounce
+        fb.vy = -clamp(Math.abs(fb.vy) * 0.72, 200, 340);
         fb.bounces = (fb.bounces || 0) + 1;
+        fb.bounceT = 0.14;
+        spawn('dust', fb.x, groundY - 3, 2, { spread: 4, vx: 20, vy: -10, size: 5, dur: 0.3 });
       }
 
-      // Smoke trail - a star-powered throw leaves a rainbow streak instead of embers
-      if (Math.random() < 0.6) {
-        spawn('spark', fb.x, fb.y, 1, {
-          spread: 3,
-          vx: -fb.vx * 0.1,
-          vy: -30,
-          size: fb.star ? 7 : 5,
-          hue: fb.star ? (pet.t * 420) % 360 : pick([28, 45, 12]),
-          dur: 0.25
-        });
+      // Ember trail - a star-powered throw leaves a rainbow streak instead of embers.
+      fb.trailT = (fb.trailT || 0) - dt;
+      if (fb.trailT <= 0) {
+        fb.trailT = 0.035;
+        spawn('spark', fb.x, fb.y, 1, { spread: 3, vx: -fb.vx * 0.1, vy: -30, size: fb.star ? 7 : 5, hue: fb.star ? (pet.t * 420) % 360 : pick([28, 45, 12]), dur: 0.25 });
       }
 
-      // Check bug collision
-      let hit = false;
+      // Enemy collision against each enemy's real box (inflated by the fireball's radius).
+      let hit = null;
+      const fr = r * 0.28;
       for (const bug of bugs) {
         if (!bug.alive) continue;
-        const bugY = groundY - 9 * scale - (bug.altitude || 0);
-        if (Math.hypot(fb.x - bug.x, fb.y - bugY) < 22) {
-          hit = true;
-          squashBug(bug, false, true);
-          break;
+        if (bug.pack === 'mario' && bug.enemyId) {
+          const eb = marioEnemyBounds(bug);
+          if (fb.x > eb.left - fr && fb.x < eb.right + fr && fb.y > eb.top - fr && fb.y < eb.bottom + fr) { hit = bug; break; }
+        } else if (Math.hypot(fb.x - bug.x, fb.y - (groundY - 9 * scale - (bug.altitude || 0))) < 22) { hit = bug; break; }
+      }
+      if (hit) {
+        const dir = Math.sign(fb.vx) || pet.facing;
+        if (hit.pack === 'mario') {
+          const def = marioEnemyClass(hit.enemyId);
+          hit.knockVx = dir * def.knockback * (fb.star ? 2 : 1.2);
+          hit.hurtT = Math.max(hit.hurtT || 0, def.hitStagger);
+          hit.squashT = Math.max(hit.squashT || 0, 0.2);
         }
+        if (m.flashes.length < 6) m.flashes.push({ x: fb.x, y: fb.y, t: 0, dur: fb.star ? 0.32 : 0.24, star: !!fb.star, size: r * (fb.star ? 1.1 : 0.8) });
+        squashBug(hit, false, true);
       }
 
-      if (hit || fb.bounces > 4 || fb.x < 0 || fb.x > W) {
+      if (hit || fb.bounces > 4 || fb.t > 3.5 || fb.x < -20 || fb.x > W + 20) {
         m.fireballs.splice(i, 1);
         audio.splat();
-        const burst = fb.star ? 14 : 8;
-        for (let s = 0; s < burst; s++) {
-          spawn('spark', fb.x, fb.y, 1, {
-            spread: fb.star ? 14 : 8,
-            vx: rand(-90, 90) * (fb.star ? 1.4 : 1),
-            vy: rand(-120, -20) * (fb.star ? 1.3 : 1),
-            size: rand(5, 9),
-            hue: fb.star ? (pet.t * 500 + s * 40) % 360 : 35,
-            dur: fb.star ? 0.6 : 0.4
-          });
-        }
+        const burst = fb.star ? 12 : 7;
+        spawn('spark', fb.x, fb.y, burst, { spread: fb.star ? 12 : 7, vx: fb.star ? 130 : 90, vy: fb.star ? -110 : -80, size: 7, hue: fb.star ? (pet.t * 500) % 360 : 35, dur: fb.star ? 0.55 : 0.4 });
+        if (hit) spawn('flame', fb.x, fb.y, 4, { spread: 6, vx: 60, vy: -40, size: 9, hue: fb.star ? 300 : 28, dur: 0.3 });
       }
     }
 
@@ -6943,93 +7604,96 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const baseH = r * (isSmall ? 1.9 : 2.85);
     const targetH = baseH * (m.transformT > 0 ? (1 + 0.18 * Math.sin(pet.t * 30)) : 1.0);
 
-    // State detection
-    const isJumping = (pet.vy < -20 || pet.jump || pet.mode === 'jump' || (pet.zap > 0 && pet.zapStyle === 'stomp'));
-    const isThrowing = (pet.zap > 0 && pet.zapStyle === 'fireball');
-    const isWalking = (pet.walking || Math.abs(pet.vx || 0) > 15);
+    // The posed assets already carry deliberate body positioning, so the controller's job
+    // is to pick the right frame for the beat and add only bob, squash/stretch and small
+    // offsets - never to rotate the whole character to fake a lean.
+    const hopping = m.jumpH > 0;
+    const isJumping = hopping || pet.vy < -20 || (!pet.grounded && !isCarried);
+    const isThrowing = (pet.zap > 0 && (pet.zapStyle === 'fireball' || pet.zapStyle === 'starpower'));
+    const chargingThrow = pet.zapCharge > 0 && (pet.zapStyle === 'fireball' || pet.zapStyle === 'starpower');
+    const chargingStomp = pet.zapCharge > 0 && pet.zapStyle === 'stomp';
+    const alertPhase = m.alertT > 0 ? 1 - m.alertT / 1.1 : -1;   // 0..1 across the notice beat
+    const alertNotice = alertPhase >= 0 && alertPhase < 0.35;
+    const alertStance = alertPhase >= 0.35;
+    const bumped = m.bumpT > 0;
+    const isWalking = !hopping && (pet.walking || Math.abs(pet.vx || 0) > 15);
     const isSprinting = (isWalking && Math.abs(pet.vx || 0) > 65);
 
-    // Dynamic living sprite selection for ALL stages
-    let sprite = marioImgSuperIdle;
-    let walkBob = 0;
-    let walkTilt = 0;
+    // Frame selection per stage: [idle, idle2, walk1, walk2, run, jump, throw, stance]
+    let frames;
+    if (isSmall) frames = [marioImgSmallIdle, marioImgSmallIdle, marioImgSmallWalk, marioImgSmallIdle, marioImgSmallWalk, marioImgSmallJump, marioImgSmallWalk, marioImgSmallWalk];
+    else if (isFire) frames = [marioImgFireIdle, marioImgFireIdle, marioImgFireWalk1, marioImgFireWalk2, marioImgFireRun, marioImgFireJump, marioImgFireThrow, marioImgFireWalk1];
+    else frames = [marioImgSuperIdle, marioImgSuperThumbs, marioImgSuperWalk1, marioImgSuperWalk2, marioImgSuperRun, marioImgSuperJump, marioImgFireThrow, marioImgSuperStride];
+    const [imgIdle, imgIdle2, imgWalk1, imgWalk2, imgRun, imgJump, imgThrow, imgStance] = frames;
 
-    if (isSmall) {
-      // ---------------- Small Mario (Stage 0) ----------------
-      if (isJumping) {
-        sprite = marioImgSmallJump;
-        walkTilt = (pet.vy < 0 ? -0.12 : 0.08);
-      } else if (isWalking) {
-        sprite = marioImgSmallWalk;
-        walkBob = Math.abs(Math.sin(pet.t * 10)) * (r * 0.18);
-        walkTilt = Math.sin(pet.t * 10) * 0.08;
-      } else if (asleep) {
-        sprite = marioImgSmallIdle;
-        walkBob = Math.sin(pet.t * 1.5) * (r * 0.08);
-        walkTilt = 0.08;
-      } else {
-        sprite = marioImgSmallIdle;
-        walkBob = Math.sin(pet.t * 2.8) * (r * 0.06);
-      }
-    } else if (isFire) {
-      // ---------------- Fire Mario (Stage 2) ----------------
-      // Crisp white cap & shirt with bright red overalls
-      if (isThrowing) {
-        // ONLY when actively hurling a fireball at a bug!
-        sprite = marioImgFireThrow;
-        walkTilt = 0.06;
-      } else if (isJumping) {
-        sprite = marioImgFireJump;
-        walkTilt = (pet.vy < 0 ? -0.10 : 0.06);
-      } else if (isSprinting) {
-        sprite = marioImgFireRun;
-        walkBob = Math.abs(Math.sin(pet.t * 14)) * (r * 0.20);
-        walkTilt = 0.12;
-      } else if (isWalking) {
-        const walkFrame = Math.floor(pet.t * 6) % 2;
-        sprite = (walkFrame === 0) ? marioImgFireWalk1 : marioImgFireWalk2;
-        walkBob = Math.abs(Math.sin(pet.t * 8)) * (r * 0.16);
-        walkTilt = Math.sin(pet.t * 8) * 0.05;
-      } else if (asleep) {
-        sprite = marioImgFireIdle;
-        walkBob = Math.sin(pet.t * 1.4) * (r * 0.08);
-        walkTilt = 0.10;
-      } else {
-        sprite = marioImgFireIdle;
-        walkBob = Math.sin(pet.t * 2.5) * (r * 0.06);
-      }
+    let sprite = imgIdle;
+    let bob = 0;          // vertical offset, px
+    let sx = 1, sy = 1;   // squash/stretch about the feet
+    let lean = 0;         // the one small rotation allowed, radians
+    let shift = 0;        // forward/back offset in facing space, px
+    const stride = pet.stride;   // advanced by the shared walk code, distance-based
+    if (isThrowing) {
+      sprite = imgThrow;
+      shift = -r * 0.12 * (m.throwT / 0.25);            // recoil from the throw
+    } else if (isJumping) {
+      sprite = imgJump;
+      const vy = hopping ? m.jumpVy : pet.vy;
+      lean = f * clamp(-vy / 3000, -0.05, 0.04);
+      if (m.jumpPhase === 'launch' || m.launchT > 0) { sx = 0.92; sy = 1.1; }
+    } else if (asleep) {
+      sprite = imgIdle;
+      bob = Math.sin(pet.t * 1.4) * (r * 0.05);
+      sy = 1 + Math.sin(pet.t * 1.4) * 0.02;
+    } else if (isCarried) {
+      sprite = imgJump;
+      bob = Math.sin(pet.t * 8) * (r * 0.06);
+      shift = Math.sin(pet.t * 6) * r * 0.05;
+    } else if (chargingStomp) {
+      // Anticipation: a crouch that deepens as the charge fills.
+      const k = 1 - clamp(pet.zapCharge / Math.max(0.01, pet.zapFull), 0, 1);
+      sprite = imgStance;
+      sx = 1 + 0.08 * k; sy = 1 - 0.1 * k;
+    } else if (chargingThrow) {
+      sprite = imgStance;
+      const k = 1 - clamp(pet.zapCharge / Math.max(0.01, pet.zapFull), 0, 1);
+      shift = -r * 0.08 * k;                              // winds the arm back
+      sy = 1 + 0.02 * Math.sin(pet.t * 18) * k;
+    } else if (bumped) {
+      sprite = imgIdle;
+      const k = m.bumpT / 0.4;
+      lean = m.bumpDir * 0.06 * k;
+      sx = 1 + 0.06 * k; sy = 1 - 0.06 * k;
+    } else if (alertNotice) {
+      sprite = imgIdle;
+      const k = alertPhase / 0.35;
+      sy = 1 + 0.08 * Math.sin(k * Math.PI);            // a startled hop of the shoulders
+      sx = 1 - 0.04 * Math.sin(k * Math.PI);
+    } else if (alertStance) {
+      sprite = imgStance;
+      sx = 1.03; sy = 0.96;
+      bob = Math.sin(pet.t * 12) * r * 0.015;
+    } else if (isSprinting) {
+      sprite = imgRun;
+      bob = Math.abs(Math.sin(stride * 1.4)) * (r * 0.14);
+      lean = f * 0.05;
+      sy = 1 + Math.sin(stride * 2.8) * 0.03;
+    } else if (isWalking) {
+      const walkFrame = Math.floor(stride / Math.PI) % 2;
+      sprite = walkFrame === 0 ? imgWalk1 : imgWalk2;
+      bob = Math.abs(Math.sin(stride)) * (r * 0.1);
+      sy = 1 + Math.sin(stride * 2) * 0.025;
+      sx = 1 - Math.sin(stride * 2) * 0.02;
     } else {
-      // ---------------- Super Mario & Star Mario (Stage 1 & 3) ----------------
-      if (isThrowing) {
-        sprite = marioImgFireThrow;
-        walkTilt = 0.06;
-      } else if (isJumping) {
-        sprite = marioImgSuperJump;
-        walkTilt = (pet.vy < 0 ? -0.10 : 0.06);
-      } else if (isSprinting) {
-        sprite = marioImgSuperRun;
-        walkBob = Math.abs(Math.sin(pet.t * 14)) * (r * 0.20);
-        walkTilt = 0.12;
-      } else if (isWalking) {
-        const walkFrame = Math.floor(pet.t * 6) % 2;
-        sprite = (walkFrame === 0) ? marioImgSuperWalk1 : marioImgSuperWalk2;
-        walkBob = Math.abs(Math.sin(pet.t * 8)) * (r * 0.16);
-        walkTilt = Math.sin(pet.t * 8) * 0.05;
-      } else if (asleep) {
-        sprite = marioImgSuperIdle;
-        walkBob = Math.sin(pet.t * 1.4) * (r * 0.08);
-        walkTilt = 0.10;
-      } else if (isCarried) {
-        sprite = marioImgSuperJump;
-        walkBob = Math.sin(pet.t * 8) * (r * 0.10);
-        walkTilt = Math.sin(pet.t * 6) * 0.08;
-      } else {
-        // Living Idle: Alternate between warm wave and proud winking thumbs-up!
-        const idleCycle = Math.floor(pet.t / 4.5) % 2;
-        sprite = (idleCycle === 0) ? marioImgSuperIdle : marioImgSuperThumbs;
-        walkBob = Math.sin(pet.t * 2.5) * (r * 0.06);
-      }
+      // Living idle: breathing plus the occasional proud thumbs-up frame.
+      const idleCycle = Math.floor(pet.t / 4.5) % 2;
+      sprite = (idleCycle === 0) ? imgIdle : imgIdle2;
+      sy = 1 + Math.sin(pet.t * 2.5) * 0.015;
+      bob = Math.sin(pet.t * 2.5) * (r * 0.02);
     }
+    // Landing squash and the stomp's own compress-then-spring, layered on whatever pose.
+    if (m.landT > 0) { const k = Math.sin((m.landT / 0.24) * Math.PI); sx *= 1 + 0.14 * k; sy *= 1 - 0.16 * k; }
+    if (m.stompT > 0) { const k = m.stompT / 0.28; sx *= 1 + 0.1 * k; sy *= 1 - 0.12 * k; }
+    if (m.starHitT > 0) { const k = m.starHitT / 0.3; sx *= 1 + 0.08 * k; sy *= 1 + 0.06 * k; }
 
     // World Render: Props proportionally scaled with master radius r = petR()
     // 1. 3D Warp Pipe (proportional to pet size)
@@ -7079,16 +7743,18 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       ctx.restore();
     }
 
-    // 5. 3D Bouncing Fireballs (ONLY drawn as flying projectiles!)
+    // 5. Fireballs in flight: roll with their own velocity and flatten on each floor bounce.
     for (const fb of m.fireballs) {
       if (marioImgFireball && marioImgFireball.complete) {
         ctx.save();
-        const fw = r * (fb.star ? 1.6 : 1.2), fh = r * (fb.star ? 1.6 : 1.2);
+        const fw = r * (fb.star ? 1.5 : 1.15), fh = fw;
         ctx.translate(fb.x, fb.y);
-        ctx.rotate(pet.t * 16);
+        const bk = fb.bounceT > 0 ? Math.sin((fb.bounceT / 0.14) * Math.PI) : 0;
+        ctx.scale(1 + 0.3 * bk, 1 - 0.3 * bk);
+        ctx.rotate(fb.spin || 0);
         if (fb.star) {
-          ctx.fillStyle = `hsla(${(pet.t * 460) % 360}, 100%, 70%, 0.55)`;
-          ctx.beginPath(); ctx.arc(0, 0, fw * 0.95, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = `hsla(${(pet.t * 460) % 360}, 100%, 70%, 0.5)`;
+          ctx.beginPath(); ctx.arc(0, 0, fw * 0.8, 0, Math.PI * 2); ctx.fill();
         }
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -7096,44 +7762,61 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         ctx.restore();
       }
     }
+    // 6. Impact flashes: a bright core and an expanding ring where a fireball connected.
+    for (const fl of m.flashes) {
+      const k = clamp(fl.t / fl.dur, 0, 1);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 1 - k;
+      ctx.fillStyle = fl.star ? `hsl(${(pet.t * 500) % 360}, 100%, 80%)` : '#fff3c4';
+      ctx.beginPath(); ctx.arc(fl.x, fl.y, fl.size * (0.35 + 0.25 * k), 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = fl.star ? `hsl(${(pet.t * 500 + 120) % 360}, 100%, 70%)` : '#ffb347';
+      ctx.lineWidth = Math.max(1.5, fl.size * 0.16 * (1 - k));
+      ctx.beginPath(); ctx.arc(fl.x, fl.y, fl.size * (0.3 + 1.1 * k), 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
 
-    // Fire Mario ambient ember particles (proportional to size)
-    if (isFire && !asleep && Math.random() < 0.28) {
-      spawn('spark', pet.x + rand(-r * 0.5, r * 0.5), pet.y - rand(r * 0.3, r * 1.8), 1, {
-        spread: 4,
-        vx: rand(-15, 15),
-        vy: rand(-35, -8),
-        size: rand(r * 0.12, r * 0.25),
-        hue: pick([25, 42, 12]),
-        dur: 0.45
-      });
+    // Fire Mario ambient ember particles, rate-limited (proportional to size)
+    if (isFire && !asleep) {
+      m.emberT = (m.emberT || 0) - 1 / 60;
+      if (m.emberT <= 0) {
+        m.emberT = 0.07;
+        spawn('spark', pet.x + rand(-r * 0.5, r * 0.5), pet.y - m.jumpH - rand(r * 0.3, r * 1.8), 1, {
+          spread: 4, vx: rand(-15, 15), vy: rand(-35, -8), size: rand(r * 0.12, r * 0.25), hue: pick([25, 42, 12]), dur: 0.45,
+        });
+      }
+    }
+
+    // Ground shadow that shrinks as he leaves the ground (stageBody's own shadow is off).
+    if (!isCarried && pet.grounded) {
+      const lift = m.jumpH;
+      const sk = clamp(1 - lift / (r * 3), 0.35, 1);
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.22 * sk})`;
+      ctx.beginPath(); ctx.ellipse(pet.x, groundY + 2, r * 0.75 * sk * sx, r * 0.16 * sk, 0, 0, Math.PI * 2); ctx.fill();
     }
 
     // Character Rendering
-    stageBody({ shadow: false, bob: isCarried ? 0.01 : 0.02, bobRate: 2.0, sway: isCarried ? 0 : 0.01 }, (radius, t) => {
+    stageBody({ shadow: false, bob: isCarried ? 0.01 : 0, bobRate: 2.0, sway: 0 }, () => {
       ctx.save();
+      ctx.translate(0, -m.jumpH - bob);
+      ctx.rotate(lean);
+      ctx.scale(f * sx, sy);
+      ctx.translate(shift, 0);
 
-      // Horizontal facing & movement dynamics
-      ctx.scale(f, 1);
-      ctx.translate(0, -walkBob);
-      ctx.rotate(walkTilt);
-
-      // Star Mario 3D rainbow invincibility aura & orbiting star (scaled to targetH)
+      // Star Mario: a controlled rainbow aura behind him and a small orbiting star. His
+      // own colours stay untouched so he still reads as Mario.
       if (isStar) {
-        ctx.filter = `hue-rotate(${Math.round((pet.t * 540) % 360)}deg) saturate(1.8) brightness(1.2)`;
-        if (marioImgStar && marioImgStar.complete) {
-          ctx.save();
-          const starAngle = pet.t * 6;
-          const starOrbitX = Math.cos(starAngle) * (targetH * 0.55);
-          const starOrbitY = -targetH * 0.65 + Math.sin(starAngle) * (targetH * 0.25);
-          const starSize = r * 1.5;
-          ctx.translate(starOrbitX, starOrbitY);
-          ctx.rotate(Math.sin(pet.t * 10) * 0.2);
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(marioImgStar, -starSize / 2, -starSize / 2, starSize, starSize);
-          ctx.restore();
-        }
+        const hue = (pet.t * 300) % 360;
+        const aura = ctx.createRadialGradient(0, -targetH * 0.5, targetH * 0.1, 0, -targetH * 0.5, targetH * 0.62);
+        aura.addColorStop(0, `hsla(${hue}, 100%, 75%, 0.38)`);
+        aura.addColorStop(0.6, `hsla(${(hue + 60) % 360}, 100%, 70%, 0.18)`);
+        aura.addColorStop(1, `hsla(${(hue + 120) % 360}, 100%, 70%, 0)`);
+        ctx.fillStyle = aura;
+        ctx.beginPath(); ctx.ellipse(0, -targetH * 0.5, targetH * 0.5, targetH * 0.64, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `hsla(${(hue + 180) % 360}, 100%, 80%, 0.35)`;
+        ctx.lineWidth = Math.max(1.5, r * 0.06);
+        ctx.beginPath(); ctx.ellipse(0, -targetH * 0.5, targetH * 0.36 + Math.sin(pet.t * 9) * r * 0.05, targetH * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
+        if (marioImgStar && marioImgStar.complete && Math.sin(pet.t * 6) < 0) drawMarioOrbitStar(targetH, r);
       }
 
       // Transform flash
@@ -7147,43 +7830,113 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         const drawW = targetH * aspect;
         const drawX = -drawW * (isThrowing ? 0.40 : 0.50);
         const drawY = -targetH * 0.98;
-
         drawPosedSprite('mario', sprite, drawX, drawY, drawW, targetH);
       }
+      ctx.filter = 'none';
+      if (isStar && marioImgStar && marioImgStar.complete && Math.sin(pet.t * 6) >= 0) drawMarioOrbitStar(targetH, r);
 
+      // A charging fireball glows in the hand before it leaves.
+      if (chargingThrow) {
+        const k = 1 - clamp(pet.zapCharge / Math.max(0.01, pet.zapFull), 0, 1);
+        const gx = targetH * 0.3 + shift, gy = -targetH * 0.45;
+        const glow = ctx.createRadialGradient(gx, gy, 0, gx, gy, r * 0.32 * (0.4 + k));
+        glow.addColorStop(0, `hsla(${pet.zapStyle === 'starpower' ? (pet.t * 400) % 360 : 40}, 100%, 80%, ${0.9 * k})`);
+        glow.addColorStop(1, 'hsla(20, 100%, 60%, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(gx, gy, r * 0.32 * (0.4 + k), 0, Math.PI * 2); ctx.fill();
+      }
       ctx.restore();
+
+      // "!" when he notices something: pops in, holds, fades.
+      if (alertPhase >= 0 && alertPhase < 0.55) {
+        const pop = clamp(alertPhase / 0.12, 0, 1);
+        const fade = alertPhase > 0.4 ? 1 - (alertPhase - 0.4) / 0.15 : 1;
+        const s = r * 0.42 * (1.3 - 0.3 * pop);
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.translate(f * r * 0.35, -m.jumpH - targetH - r * 0.4);
+        ctx.fillStyle = '#ffd23f';
+        ctx.strokeStyle = '#2a1a0e';
+        ctx.lineWidth = Math.max(1, r * 0.05);
+        ctx.beginPath(); ctx.roundRect(-s * 0.45, -s * 0.65, s * 0.9, s * 1.3, s * 0.25); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#2a1a0e';
+        ctx.font = `800 ${Math.round(s * 1.1)}px Fredoka, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('!', 0, s * 0.02);
+        ctx.restore();
+      }
     });
   }
+  function drawMarioOrbitStar(targetH, r) {
+    ctx.save();
+    const starAngle = pet.t * 6;
+    const starOrbitX = Math.cos(starAngle) * (targetH * 0.42);
+    const starOrbitY = -targetH * 0.6 + Math.sin(starAngle) * (targetH * 0.18);
+    const starSize = r * 0.9;
+    ctx.translate(starOrbitX, starOrbitY);
+    ctx.rotate(Math.sin(pet.t * 10) * 0.2);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(marioImgStar, -starSize / 2, -starSize / 2, starSize, starSize);
+    ctx.restore();
+  }
 
-  function drawMarioAttack(r, k, isBoss, style) {
-    // Stomp, Fireball, or Star Mario's overwhelming star-power throw
-    if (style === 'fireball' || style === 'starpower' || marioState.stage >= 2 || isBoss) {
-      // Fireball blast
+  // The moment an attack is released: a fireball leaves his hand, or a stomp becomes a hop
+  // aimed at the target's top. Called once per attack (from the shared charge code and the
+  // dev/test harness), never per frame; drawMarioAttackFx is the per-frame companion.
+  function drawMarioAttack(r, k, isBoss, style, live) {
+    const m = marioState;
+    const target = live || (pet.zapAim && !pet.zapAim.host ? pet.zapAim.bug : null);
+    const isFireball = style === 'fireball' || style === 'starpower' || (style !== 'stomp' && (m.stage >= 2 || isBoss));
+    if (isFireball) {
       const star = style === 'starpower';
-      const ox = pet.x + pet.facing * r * 0.5, oy = groundY - 14;
-      const targetX = Number.isFinite(pet.zapX) ? pet.zapX : (ox + pet.facing * 140);
-      const targetY = Number.isFinite(pet.zapY) ? pet.zapY : (groundY - 10);
-      const bdx = targetX - ox, bdy = targetY - oy;
-      const dist = Math.max(1, Math.hypot(bdx, bdy));
-      const spd = star ? 680 : 520;
-      marioState.fireballs.push({
-        x: ox,
-        y: oy,
-        vx: (bdx / dist) * spd,
-        vy: (bdy / dist) * spd - 60,
-        bounces: 0,
-        star,
-      });
+      const hand = marioHandPoint();
+      const tp = marioTargetPoint(target);
+      // Lead the shot along a gravity arc so it actually arrives where the target is.
+      const dx = tp.x - hand.x, dy = tp.y - hand.y;
+      const spd = star ? 640 : 500;
+      const dist = Math.max(1, Math.hypot(dx, dy));
+      const T = clamp(dist / spd, 0.15, 0.7);
+      const vx = dx / T + (target && target.vx ? target.vx * 0.35 : 0);
+      const vy = dy / T - 0.5 * 850 * T;
+      if (m.fireballs.length >= MARIO_MAX_FIREBALLS) m.fireballs.shift();
+      m.fireballs.push({ x: hand.x, y: hand.y, vx, vy, bounces: 0, star, spin: 0, t: 0, bounceT: 0, trailT: 0 });
+      m.throwT = 0.25;
+      spawn('spark', hand.x, hand.y, 3, { spread: 4, vx: 40, vy: -40, size: 6, hue: star ? (pet.t * 400) % 360 : 40, dur: 0.3 });
       audio.marioFireball();
     } else {
-      // Stomp leap
-      pet.jump = true;
-      pet.vy = -340;
-      audio.marioJump();
-      setTimeout(() => {
-        audio.marioStomp();
-      }, 240);
+      // Stomp: a hop whose apex clears the target's top, with enough drift to land on it.
+      const tp = target ? marioTargetPoint(target) : null;
+      const topH = target && target.pack === 'mario' ? (groundY - marioEnemyBounds(target).top) : (tp ? Math.max(0, groundY - tp.y) : 0);
+      const height = clamp(topH + r * 0.7, r * 0.8, r * 4.2);
+      const g = MARIO_HOP_GRAVITY;
+      const vy0 = Math.sqrt(2 * g * height);
+      const tUp = vy0 / g;
+      const tFall = Math.sqrt(2 * Math.max(0, height - topH) / g);
+      const T = Math.max(0.2, tUp + tFall);
+      let vx = 0;
+      if (tp) {
+        const lead = target && target.vx ? target.vx * T * 0.5 : 0;
+        vx = clamp((tp.x + lead - pet.x) / T, -440, 440);
+      }
+      if (Math.abs(vx) > 20) pet.facing = Math.sign(vx);
+      marioHop(height, vx);
     }
+  }
+  // Per-frame attack visual while pet.zap runs: the stomp's launch lines under his feet.
+  function drawMarioAttackFx(r, k, isBoss, style) {
+    if (style !== 'stomp' || marioState.jumpH <= 0) return;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.6 * k})`;
+    ctx.lineWidth = Math.max(1, r * 0.05);
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(pet.x + s * r * 0.45, groundY - 2);
+      ctx.lineTo(pet.x + s * r * 0.75, groundY - 2 - r * 0.25 * k);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------- Cristiano Ronaldo (CR7) sprites & renderer
@@ -10024,203 +10777,649 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
   }
 
   // ---------------------------------------------------------------- Mario's enemy pack: art
-  // Original platformer-archetype silhouettes - a mushroom-capped walker, a domed shell, a
-  // winged buzzer, a spring-legged hopper, a crouching lurker, an armored elite and a horned
-  // boss. All state (shellState/shellT/jumpVy/ambushState/spinAngle/squashT/hurtT/knockVx) is
-  // written by spawnBug/updateMarioEnemy/squashBug above; this only ever reads it.
+  // Original platformer-archetype creatures drawn in the same soft-shaded, outlined style as
+  // Mario's rendered assets: a capped stomper, a shelled walker, a helmeted flier, a
+  // spring-legged hopper, a burrowing lurker, an armoured elite and a horned boss. Every
+  // renderer draws with its feet at the origin, facing +x, in units of `u` (see
+  // marioEnemyUnit) and only ever reads state written by initMarioEnemy / the behaviours /
+  // hitMarioEnemy above. drawMarioEnemy() dispatches through MARIO_ENEMY_RENDERERS.
   function marioEnemyPalette(id) {
     switch (id) {
-      case 'shell': return { body: '#3ba55c', dark: '#1c5c31', glow: '#c6f6d5', belly: '#f2d9a0' };
-      case 'flying': return { body: '#7c5cff', dark: '#3a2680', glow: '#e0d4ff', belly: '#f2d9a0' };
-      case 'jumping': return { body: '#7a4a2b', dark: '#3d2412', glow: '#ffd98e', belly: '#f2d9a0' };
-      case 'ambush': return { body: '#2d8f8f', dark: '#154848', glow: '#a6f3f3', belly: '#f2d9a0' };
-      case 'elite': return { body: '#b91c1c', dark: '#4a0a0a', glow: '#ff9f43', belly: '#2a2a2a' };
-      case 'boss': return { body: '#2f7d32', dark: '#123813', glow: '#ffe066', belly: '#f2d9a0' };
-      default: return { body: '#c9743a', dark: '#6b3818', glow: '#ffe4b8', belly: '#f2d9a0' };
+      case 'shell': return { body: '#3fb35f', light: '#8fe89a', dark: '#1d5a2e', skin: '#e9d86a', skinDark: '#b8a23a', belly: '#f6e3a8', eye: '#1b1b1b' };
+      case 'flying': return { body: '#e05a2b', light: '#ffab7a', dark: '#7a2410', skin: '#f6e3a8', skinDark: '#c9a86a', belly: '#f6e3a8', eye: '#1b1b1b' };
+      case 'jumping': return { body: '#8fa64a', light: '#d4e58a', dark: '#4a5a1e', skin: '#e8dba0', skinDark: '#a89a60', belly: '#e8dba0', eye: '#1b1b1b' };
+      case 'ambush': return { body: '#2f9a8f', light: '#8ee8dc', dark: '#123f3a', skin: '#8ee8dc', skinDark: '#1f6e66', belly: '#cdf5ef', eye: '#ffd23f' };
+      case 'elite': return { body: '#a8232b', light: '#ff8a7a', dark: '#4a0a10', skin: '#8f949c', skinDark: '#3d4148', belly: '#2b2e33', eye: '#ffb03a' };
+      case 'boss': return { body: '#3f9a3f', light: '#9ee08a', dark: '#1a4d1c', skin: '#f2d27a', skinDark: '#b98f2e', belly: '#f7e2a0', eye: '#e83a2a' };
+      default: return { body: '#a35a2a', light: '#e39a5e', dark: '#4e2810', skin: '#f2d9a6', skinDark: '#c9a06a', belly: '#f2d9a6', eye: '#1b1b1b' };
     }
   }
-  function drawMarioEnemy(b) {
-    const def = marioEnemyClass(b.enemyId);
-    const u = 8 * def.sizeMul * scale;
-    const pal = marioEnemyPalette(def.id);
+  // Shared drawing vocabulary so the cast reads as one family.
+  function meBlob(x, y, rx, ry, pal, st, rot) {
+    // A shaded, outlined ellipse: the basic volume every creature is built from.
+    const g = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.45, Math.min(rx, ry) * 0.1, x, y, Math.max(rx, ry) * 1.15);
+    g.addColorStop(0, st.ink(pal.light));
+    g.addColorStop(0.55, st.ink(pal.body));
+    g.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = g;
+    ctx.strokeStyle = st.ink(pal.dark);
+    ctx.lineWidth = st.line;
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  function meSkin(x, y, rx, ry, pal, st, rot) {
+    const g = ctx.createRadialGradient(x - rx * 0.3, y - ry * 0.4, Math.min(rx, ry) * 0.1, x, y, Math.max(rx, ry) * 1.1);
+    g.addColorStop(0, st.ink('#ffffff'));
+    g.addColorStop(0.35, st.ink(pal.skin));
+    g.addColorStop(1, st.ink(pal.skinDark));
+    ctx.fillStyle = g;
+    ctx.strokeStyle = st.ink(pal.dark);
+    ctx.lineWidth = st.line;
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  function meEye(x, y, rx, ry, st, opts = {}) {
+    // White with a tracked pupil and a highlight; lid closes it from the top for a squint,
+    // dead eyes are a cross.
+    if (opts.dead) {
+      ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = Math.max(1, rx * 0.35); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x - rx * 0.7, y - ry * 0.7); ctx.lineTo(x + rx * 0.7, y + ry * 0.7);
+      ctx.moveTo(x + rx * 0.7, y - ry * 0.7); ctx.lineTo(x - rx * 0.7, y + ry * 0.7); ctx.stroke();
+      return;
+    }
+    const lid = clamp(opts.lid || 0, 0, 1);
     ctx.save();
-    ctx.translate(b.x, groundY - 1 - (b.altitude || 0));
-
-    if (!b.alive) {
-      const total = def.deathAnim === 'bossdown' ? 1.3 : def.deathAnim === 'collapse' ? 0.8 : 0.5;
-      const k = clamp(b.squash / total, 0, 1);
-      if (def.deathAnim === 'flatten') {
-        ctx.globalAlpha = k;
-        ctx.fillStyle = pal.dark;
-        ctx.beginPath(); ctx.ellipse(0, -u * 0.15, u * (1.3 + (1 - k) * 0.5), u * 0.3 * k, 0, 0, Math.PI * 2); ctx.fill();
-      } else if (def.deathAnim === 'shellspin' || def.deathAnim === 'flip') {
-        ctx.rotate((b.deathSpin || 0) * 1.4);
-        ctx.globalAlpha = k;
-        ctx.fillStyle = pal.body;
-        ctx.beginPath(); ctx.ellipse(0, -u * 0.8, u * 0.9 * k, u * 0.9 * k, 0, 0, Math.PI * 2); ctx.fill();
-      } else {
-        ctx.rotate((b.deathSpin || 0) * (def.id === 'flying' ? 1 : 0.6));
-        ctx.globalAlpha = k;
-        ctx.fillStyle = pal.glow;
-        ctx.beginPath(); ctx.arc(0, -u * 0.9, u * (1.1 + (1 - k) * 0.6), 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = k * 0.7;
-        ctx.fillStyle = pal.body;
-        ctx.beginPath(); ctx.ellipse(0, -u * 0.9, u * 0.8 * k, u * 1.1 * k, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fillStyle = opts.white || '#ffffff'; ctx.fill();
+    ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(0.8, rx * 0.16); ctx.stroke();
+    ctx.clip();
+    const px = x + (opts.look ? opts.look.x : 0) * rx * 0.45, py = y + (opts.look ? opts.look.y : 0) * ry * 0.4;
+    if (opts.iris) { ctx.fillStyle = opts.iris; ctx.beginPath(); ctx.ellipse(px, py, rx * 0.62, ry * 0.62, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = opts.pupil || '#1b1b1b';
+    if (opts.slit) { ctx.beginPath(); ctx.ellipse(px, py, rx * 0.18, ry * 0.62, 0, 0, Math.PI * 2); ctx.fill(); }
+    else { ctx.beginPath(); ctx.ellipse(px, py, rx * 0.42, ry * 0.42, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.ellipse(px - rx * 0.16, py - ry * 0.2, rx * 0.14, ry * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+    if (lid > 0) {
+      ctx.fillStyle = opts.lidColor || '#2a1a0e';
+      ctx.fillRect(x - rx * 1.2, y - ry * 1.2, rx * 2.4, ry * 2.4 * lid * 0.5 + ry * 0.2);
+    }
+    ctx.restore();
+  }
+  function meBrow(x1, y1, x2, y2, w, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  function meFoot(x, y, w, h, pal, st, lift, color) {
+    ctx.fillStyle = st.ink(color || pal.dark);
+    ctx.strokeStyle = st.ink('#1c1008');
+    ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath(); ctx.ellipse(x, y - h * 0.5 - (lift || 0), w * 0.5, h * 0.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  function meMouth(x, y, w, open, color, fangs, st) {
+    // A frown/grin that opens into a dark oval; optional fangs poke up from the lower lip.
+    ctx.fillStyle = st.ink(color || '#2a1a0e');
+    ctx.beginPath();
+    if (open > 0.05) ctx.ellipse(x, y, w * 0.5, w * 0.18 + open * w * 0.32, 0, 0, Math.PI * 2);
+    else { ctx.moveTo(x - w * 0.5, y); ctx.quadraticCurveTo(x, y - w * 0.28, x + w * 0.5, y); ctx.quadraticCurveTo(x, y + w * 0.05, x - w * 0.5, y); }
+    ctx.fill();
+    if (fangs) {
+      ctx.fillStyle = '#ffffff';
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(x + s * w * 0.3, y + w * 0.02); ctx.lineTo(x + s * w * 0.2, y - w * 0.2); ctx.lineTo(x + s * w * 0.1, y + w * 0.02); ctx.closePath(); ctx.fill();
+      }
+    }
+  }
+  function meShadow(w, h, alpha) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+    ctx.beginPath(); ctx.ellipse(0, 1, w, h, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  function meSpeedLines(u, vx, y, st) {
+    const n = Math.min(3, Math.floor(Math.abs(vx) / 90));
+    if (n <= 0) return;
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 * st.k})`; ctx.lineWidth = Math.max(1, u * 0.08); ctx.lineCap = 'round';
+    const dir = -Math.sign(vx) || 1;
+    for (let i = 0; i < n; i++) {
+      ctx.beginPath(); ctx.moveTo(dir * u * (1.1 + i * 0.25), y - u * (0.3 - i * 0.3)); ctx.lineTo(dir * u * (1.9 + i * 0.4), y - u * (0.3 - i * 0.3)); ctx.stroke();
+    }
+  }
+  // Walk-cycle helpers: `phase` advances with distance so it slows and stops with the body.
+  const mePhase = (b) => (b.animT || 0) * Math.PI;
+  function drawMarioWalker(b, def, u, pal, st) {
+    const t = 1 - st.k;
+    if (st.dead) {
+      // Flattened flat, eyes crossed, then fades into the dust.
+      ctx.globalAlpha = clamp(1.4 - t * 1.6, 0, 1);
+      const flat = 0.28;
+      ctx.save(); ctx.scale(1 + t * 0.35, flat);
+      meBlob(0, -0.95 * u, 1.0 * u, 0.95 * u, pal, st);
+      meSkin(0, -0.65 * u, 0.78 * u, 0.5 * u, pal, st);
+      ctx.restore();
+      meFoot(-0.5 * u, 0, 0.7 * u, 0.22 * u, pal, st, 0);
+      meFoot(0.5 * u, 0, 0.7 * u, 0.22 * u, pal, st, 0);
+      meEye(-0.3 * u, -0.28 * u, 0.16 * u, 0.12 * u, st, { dead: true });
+      meEye(0.3 * u, -0.28 * u, 0.16 * u, 0.12 * u, st, { dead: true });
+      return;
+    }
+    const ph = mePhase(b);
+    const moving = Math.abs(b.vx) > 4;
+    const noticing = b.plan === 'notice' && b.noticeT > 0;
+    const bob = moving ? Math.abs(Math.sin(ph)) * u * def.animationProfile.bob * 1.6 : 0;
+    const breath = moving ? 0 : Math.sin(b.breathPhase) * def.animationProfile.breath;
+    const sq = st.squash;
+    // Feet alternate: each one swings forward and lifts on its own half of the cycle.
+    const stepL = Math.sin(ph), stepR = -stepL;
+    meFoot(-0.42 * u + (moving ? stepL * 0.28 * u : 0), 0, 0.62 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepL) * 0.16 * u : 0);
+    meFoot(0.42 * u + (moving ? stepR * 0.28 * u : 0), 0, 0.62 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepR) * 0.16 * u : 0);
+    ctx.save();
+    ctx.translate(0, -0.18 * u - bob);
+    ctx.scale(1 + sq * 0.28 - breath * 0.5, 1 - sq * 0.32 + breath);
+    // Body is mostly head: a tan face under a big domed cap with a slightly flared lip.
+    meSkin(0, -0.72 * u, 0.82 * u, 0.62 * u, pal, st);
+    const cap = ctx.createRadialGradient(-0.35 * u, -1.5 * u, u * 0.1, 0, -1.05 * u, u * 1.25);
+    cap.addColorStop(0, st.ink(pal.light)); cap.addColorStop(0.5, st.ink(pal.body)); cap.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = cap; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+    ctx.beginPath();
+    ctx.moveTo(-1.02 * u, -0.82 * u);
+    ctx.quadraticCurveTo(-1.05 * u, -1.05 * u, -0.85 * u, -1.35 * u);
+    ctx.quadraticCurveTo(-0.5 * u, -1.98 * u, 0, -1.98 * u);
+    ctx.quadraticCurveTo(0.5 * u, -1.98 * u, 0.85 * u, -1.35 * u);
+    ctx.quadraticCurveTo(1.05 * u, -1.05 * u, 1.02 * u, -0.82 * u);
+    ctx.quadraticCurveTo(0.5 * u, -0.95 * u, 0, -0.9 * u);
+    ctx.quadraticCurveTo(-0.5 * u, -0.95 * u, -1.02 * u, -0.82 * u);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // Face: big eyes with tracked pupils, heavy angry brows (raised when it notices Mario).
+    const lid = noticing ? 0 : 0.12;
+    meEye(-0.3 * u, -0.6 * u, 0.2 * u, 0.24 * u, st, { look: st.look, lid, lidColor: pal.skinDark });
+    meEye(0.3 * u, -0.6 * u, 0.2 * u, 0.24 * u, st, { look: st.look, lid, lidColor: pal.skinDark });
+    const browLift = noticing ? -0.12 * u : 0;
+    meBrow(-0.55 * u, -0.98 * u + browLift, -0.1 * u, -0.86 * u + browLift * 0.5, st.line * 2.2, st.ink('#2a1a0e'));
+    meBrow(0.55 * u, -0.98 * u + browLift, 0.1 * u, -0.86 * u + browLift * 0.5, st.line * 2.2, st.ink('#2a1a0e'));
+    meMouth(0, -0.3 * u, 0.6 * u, noticing ? 0.5 : 0, '#2a1a0e', !noticing, st);
+    ctx.restore();
+  }
+  function drawMarioShell(b, def, u, pal, st) {
+    const t = 1 - st.k;
+    const shellCore = (cx, cy, rx, ry, rot) => {
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot || 0);
+      meBlob(0, 0, rx, ry, pal, st);
+      // Plate lines and a pale rim on the underside.
+      ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
+      ctx.beginPath(); ctx.ellipse(0, ry * 0.05, rx * 0.62, ry * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -ry * 0.9); ctx.lineTo(0, ry * 0.85);
+      ctx.moveTo(-rx * 0.85, ry * 0.1); ctx.lineTo(-rx * 0.55, -ry * 0.05); ctx.moveTo(rx * 0.85, ry * 0.1); ctx.lineTo(rx * 0.55, -ry * 0.05); ctx.stroke();
+      ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark);
+      ctx.beginPath(); ctx.ellipse(0, ry * 0.78, rx * 0.95, ry * 0.3, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    };
+    if (st.dead) {
+      // Flips upside down, spins out and fades.
+      ctx.globalAlpha = clamp(1.3 - t * 1.4, 0, 1);
+      const lift = Math.sin(Math.min(1, t * 1.6) * Math.PI) * u * 1.2;
+      shellCore(0, -0.72 * u - lift, 0.95 * u, 0.68 * u, Math.PI + (b.deathSpin || 0) * 0.8);
+      return;
+    }
+    const s = b.shellState;
+    const sq = st.squash;
+    if (s === 'walk' || s === 'retract') {
+      const k = s === 'retract' ? clamp(1 - b.shellT / def.retractTime, 0, 1) : 0;   // 0 out .. 1 tucked
+      const ph = mePhase(b);
+      const moving = Math.abs(b.vx) > 4;
+      const bob = moving ? Math.abs(Math.sin(ph)) * u * def.animationProfile.bob * 1.5 : 0;
+      const breath = moving ? 0 : Math.sin(b.breathPhase) * def.animationProfile.breath;
+      const stepL = Math.sin(ph), stepR = -stepL;
+      // Legs and feet tuck up into the shell over the retract beat.
+      const legs = 1 - k;
+      ctx.save();
+      ctx.translate(0, (1 - legs) * 0.55 * u);
+      if (legs > 0.05) {
+        ctx.save(); ctx.scale(1, legs);
+        meFoot(-0.38 * u + (moving ? stepL * 0.25 * u : 0), 0, 0.55 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepL) * 0.14 * u : 0, pal.skinDark);
+        meFoot(0.42 * u + (moving ? stepR * 0.25 * u : 0), 0, 0.55 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepR) * 0.14 * u : 0, pal.skinDark);
+        ctx.restore();
+      }
+      ctx.translate(0, -bob);
+      ctx.scale(1 + sq * 0.25 - breath * 0.5, 1 - sq * 0.3 + breath);
+      // Belly in front of the shell, shell on the back.
+      meSkin(0.15 * u, -0.95 * u, 0.5 * u, 0.68 * u, pal, st);
+      shellCore(-0.25 * u, -1.25 * u, 0.85 * u, 0.78 * u, 0);
+      // Arm, head and beak scale into the shell on retract.
+      const hs = 1 - k;
+      if (hs > 0.03) {
+        ctx.save(); ctx.translate(0.45 * u, -1.55 * u); ctx.scale(hs, hs); ctx.translate(-0.45 * u, 1.55 * u);
+        ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
+        ctx.beginPath(); ctx.ellipse(0.55 * u, -1.15 * u, 0.16 * u, 0.28 * u, 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // Neck and head, with a small beak-like snout, tracking Mario with the eye.
+        ctx.beginPath(); ctx.ellipse(0.45 * u, -1.75 * u, 0.22 * u, 0.3 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        meSkin(0.55 * u, -2.05 * u, 0.44 * u, 0.4 * u, pal, st);
+        ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark);
+        ctx.beginPath(); ctx.ellipse(0.92 * u, -1.98 * u, 0.24 * u, 0.17 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = st.ink('#2a1a0e'); ctx.beginPath(); ctx.arc(1.04 * u, -1.98 * u, 0.04 * u, 0, Math.PI * 2); ctx.fill();
+        meEye(0.62 * u, -2.12 * u, 0.15 * u, 0.18 * u, st, { look: st.look, lid: b.plan === 'notice' ? 0 : 0.15, lidColor: pal.skinDark });
+        meBrow(0.45 * u, -2.36 * u, 0.78 * u, -2.32 * u, st.line * 1.6, st.ink('#2a1a0e'));
+        ctx.restore();
       }
       ctx.restore();
       return;
     }
-
-    if (def.id === 'boss') {
-      const bw = 90, bh = 6;
-      ctx.fillStyle = 'rgba(18, 20, 26, 0.85)';
-      ctx.fillRect(-bw / 2 - 1, -u * 3.8 - 1, bw + 2, bh + 2);
-      ctx.fillStyle = '#ef4444';
-      const hpPct = clamp((b.hp || 1) / (b.maxHp || 1), 0, 1);
-      ctx.fillRect(-bw / 2, -u * 3.8, bw * hpPct, bh);
-      ctx.font = 'bold 9px ui-monospace, Menlo, monospace';
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.fillText(b.label || def.name, 0, -u * 3.8 - 5);
-    }
-
-    ctx.scale(b.facing || 1, 1);
-    const flash = b.hurtT > 0 ? clamp(b.hurtT / def.hitStagger, 0, 1) : 0;
-    if (flash > 0) ctx.translate(Math.sin(pet.t * 60) * u * 0.15 * flash, 0);
-    const ink = (fallback) => (flash > 0 ? '#ffffff' : fallback);
-
-    if (def.id === 'shell') {
-      const spinning = b.shellState === 'sliding';
+    // Shelled / kicked / sliding / bouncing / hit: just the shell, a physics object.
+    const wob = (b.wobble || 0) * Math.sin(pet.t * 16) * 0.12;
+    const spinning = s === 'kick' || s === 'sliding' || s === 'bouncing' || s === 'hit';
+    if (spinning) meSpeedLines(u, b.vx, -0.7 * u, st);
+    ctx.save();
+    ctx.scale(1 + sq * 0.3, 1 - sq * 0.3);
+    shellCore(0, -0.72 * u, 0.95 * u, 0.68 * u, spinning ? b.spinAngle : wob);
+    if (s === 'hit') { ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, -0.72 * u, u, 0.72 * u, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+  function drawMarioFlying(b, def, u, pal, st) {
+    const t = 1 - st.k;
+    const tilt = st.dead ? (b.deathSpin || 0) : clamp(b.vx / Math.max(1, b.speed), -1, 1) * 0.22 - clamp((b.altVy || 0) / 200, -1, 1) * 0.1;
+    const cy = -1.05 * u;
+    ctx.save();
+    if (st.dead) ctx.globalAlpha = clamp(1.4 - t * 1.5, 0, 1);
+    ctx.translate(0, cy); ctx.rotate(tilt); ctx.translate(0, -cy);
+    // Wings: an asymmetric flap - a fast down-stroke and a slower recovery - so they read
+    // as beating, not oscillating. Folded when diving hard or dead.
+    const p = ((b.flap || 0) % (Math.PI * 2)) / (Math.PI * 2);
+    let ang = p < 0.35 ? lerp(0.75, -0.55, 1 - Math.pow(1 - p / 0.35, 2)) : lerp(-0.55, 0.75, (p - 0.35) / 0.65);
+    if (b.flyState === 'dive' && !st.dead) ang = 0.95;
+    if (st.dead) ang = 1.25;
+    for (const side of [-1, 1]) {
       ctx.save();
-      if (spinning) ctx.rotate(b.spinAngle || 0);
-      if (!spinning && b.shellState === 'walk') {
-        // little feet peeking out from under the shell while it still walks around
-        ctx.fillStyle = ink(pal.dark);
-        const stride = Math.sin(pet.t * 10) * u * 0.2;
-        ctx.beginPath(); ctx.ellipse(-u * 0.35, -u * 0.05, u * 0.28, u * 0.18, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(u * 0.35 + stride, -u * 0.05, u * 0.28, u * 0.18, 0, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.ellipse(0, -u * 0.95, u * 1.05, u * 0.95, 0, Math.PI, 0); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(0, -u * 0.7, u * 1.05, u * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = ink(pal.dark);
-      ctx.lineWidth = Math.max(1, u * 0.09);
-      for (const sx of [-0.5, 0, 0.5]) {
-        ctx.beginPath(); ctx.moveTo(sx * u, -u * 1.5); ctx.lineTo(sx * u * 1.3, -u * 0.3); ctx.stroke();
-      }
-      if (!spinning) {
-        ctx.fillStyle = pal.belly;
-        ctx.beginPath(); ctx.ellipse(0, -u * 0.15, u * 0.5, u * 0.3, 0, 0, Math.PI); ctx.fill();
-      }
-      ctx.restore();
-    } else if (def.id === 'flying') {
-      const bob = Math.sin(b.bobPhase || 0) * u * 0.15;
-      const flap = Math.sin(pet.t * 16) * 0.5 + 0.5;
-      ctx.save();
-      ctx.translate(0, bob);
-      ctx.fillStyle = ink(pal.glow);
-      ctx.globalAlpha = 0.4 + flap * 0.3;
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.ellipse(s * u * 0.9, -u * 1.15, u * 0.75, u * 0.32 * (0.4 + flap * 0.6), s * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 1.1, u * 0.8, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.moveTo(u * 0.7, -u * 1.1); ctx.lineTo(u * 1.25, -u * 1.0); ctx.lineTo(u * 0.7, -u * 0.9); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(-u * 0.2, -u * 1.25, u * 0.18, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    } else if (def.id === 'jumping') {
-      const squashK = b.squashT > 0 ? b.squashT / 0.18 : 0;
-      const jumping = b.altitude > 0.5;
-      ctx.save();
-      ctx.scale(1 + squashK * 0.35, 1 - squashK * 0.35 - (jumping ? 0.12 : 0));
-      // a coiled spring for a leg
-      ctx.strokeStyle = ink(pal.dark);
-      ctx.lineWidth = Math.max(1, u * 0.16);
+      ctx.translate(side * 0.5 * u, -1.55 * u);
+      ctx.rotate(side * -ang);
+      const wg = ctx.createLinearGradient(0, 0, side * 1.2 * u, 0);
+      wg.addColorStop(0, 'rgba(255,255,255,0.95)'); wg.addColorStop(1, 'rgba(225,232,255,0.8)');
+      ctx.fillStyle = st.ink('#ffffff'); ctx.fillStyle = wg; ctx.strokeStyle = st.ink('#5a6a8a'); ctx.lineWidth = st.line * 0.8;
       ctx.beginPath();
-      for (let i = 0; i < 4; i++) {
-        const yy = -i * u * 0.22;
-        ctx.moveTo(-u * 0.3, yy); ctx.lineTo(u * 0.3, yy - u * 0.14);
-      }
-      ctx.stroke();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 1.35, u * 0.85, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(u * 0.28, -u * 1.5, u * 0.2, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#111';
-      ctx.beginPath(); ctx.arc(u * 0.34, -u * 1.5, u * 0.09, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    } else if (def.id === 'ambush') {
-      const active = b.ambushState !== 'hidden';
-      const crouch = b.ambushState === 'hidden' ? 0.55 : b.ambushState === 'retreating' ? 0.8 : 1;
-      ctx.save();
-      ctx.scale(1, crouch);
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.roundRect(-u * 0.75, -u * 1.3, u * 1.5, u * 1.3, u * 0.35); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 1.45, u * 0.62, 0, Math.PI * 2); ctx.fill();
-      if (active) {
-        ctx.fillStyle = pal.glow;
-        ctx.beginPath(); ctx.arc(-u * 0.22, -u * 1.5, u * 0.16, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(u * 0.22, -u * 1.5, u * 0.16, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.restore();
-    } else if (def.id === 'elite') {
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.roundRect(-u * 0.95, -u * 1.9, u * 1.9, u * 1.9, u * 0.4); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 2.15, u * 0.78, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = ink(pal.dark);
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(s * u * 0.5, -u * 2.6); ctx.lineTo(s * u * 0.85, -u * 3.15); ctx.lineTo(s * u * 0.2, -u * 2.75);
-        ctx.closePath(); ctx.fill();
-      }
-      ctx.save();
-      ctx.shadowColor = pal.glow;
-      ctx.shadowBlur = u * (0.5 + Math.sin(pet.t * 6) * 0.15);
-      ctx.fillStyle = pal.glow;
-      ctx.beginPath(); ctx.arc(0, -u * 1.05, u * 0.32, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    } else if (def.id === 'boss') {
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.roundRect(-u * 1.5, -u * 2.8, u * 3, u * 2.8, u * 0.5); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 3.0, u * 1.1, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = pal.glow;
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(s * u * 0.5, -u * 3.6); ctx.lineTo(s * u * 1.0, -u * 4.4); ctx.lineTo(s * u * 0.15, -u * 3.7);
-        ctx.closePath(); ctx.fill();
-      }
-      ctx.fillStyle = '#fff';
-      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * u * 0.42, -u * 3.05, u * 0.16, 0, Math.PI * 2); ctx.fill(); }
-      ctx.strokeStyle = pal.glow;
-      ctx.globalAlpha = 0.5 + Math.sin(pet.t * 4) * 0.2;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(0, -u * 1.4, u * 2.1, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-    } else {
-      // walker: a little mushroom-capped stomper, the common enemy
-      const stride = b.lookT > 0 ? 0 : Math.sin(pet.t * 12) * u * 0.22;
-      ctx.save();
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.ellipse(-u * 0.35, -u * 0.1, u * 0.3, u * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(u * 0.35 + stride, -u * 0.1, u * 0.3, u * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.ellipse(0, -u * 0.95, u * 1.0, u * 0.85, 0, Math.PI, 0); ctx.fill();
-      ctx.fillStyle = pal.belly;
-      ctx.beginPath(); ctx.ellipse(0, -u * 0.55, u * 0.7, u * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#1a1a1a';
-      const lookDx = b.lookT > 0 ? Math.sin(pet.t * 3) * u * 0.15 : 0;
-      ctx.beginPath(); ctx.arc(-u * 0.25 + lookDx, -u * 0.55, u * 0.11, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(u * 0.25 + lookDx, -u * 0.55, u * 0.11, 0, Math.PI * 2); ctx.fill();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(side * 0.7 * u, -0.85 * u, side * 1.35 * u, -0.55 * u);
+      ctx.quadraticCurveTo(side * 1.1 * u, -0.15 * u, side * 0.55 * u, 0.12 * u);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(side * 0.2 * u, -0.05 * u); ctx.lineTo(side * 0.95 * u, -0.5 * u); ctx.stroke();
       ctx.restore();
     }
+    // Dangling feet swing with the beat.
+    const swing = Math.sin((b.flap || 0) * 0.5) * 0.12 * u;
+    meFoot(-0.3 * u + swing, -0.05 * u, 0.36 * u, 0.22 * u, pal, st, 0, pal.skinDark);
+    meFoot(0.32 * u - swing, -0.05 * u, 0.36 * u, 0.22 * u, pal, st, 0, pal.skinDark);
+    // Helmet-shell body with a cream face band underneath.
+    meSkin(0, -0.72 * u, 0.72 * u, 0.42 * u, pal, st);
+    const dome = ctx.createRadialGradient(-0.3 * u, -1.5 * u, u * 0.1, 0, -1.1 * u, u * 1.05);
+    dome.addColorStop(0, st.ink(pal.light)); dome.addColorStop(0.55, st.ink(pal.body)); dome.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = dome; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+    ctx.beginPath(); ctx.ellipse(0, -1.05 * u, 0.88 * u, 0.72 * u, 0, Math.PI, Math.PI * 2); ctx.lineTo(0.88 * u, -0.9 * u);
+    ctx.quadraticCurveTo(0, -0.7 * u, -0.88 * u, -0.9 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath(); ctx.ellipse(0, -1.05 * u, 0.6 * u, 0.42 * u, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+    // Eyes peek from under the rim; narrowed in a dive.
+    const lid = b.flyState === 'dive' ? 0.45 : 0.1;
+    meEye(-0.26 * u, -0.78 * u, 0.15 * u, 0.15 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    meEye(0.26 * u, -0.78 * u, 0.15 * u, 0.15 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    if (!st.dead) meMouth(0.02 * u, -0.5 * u, 0.32 * u, b.flyState === 'dive' ? 0.5 : 0, '#2a1a0e', false, st);
+    ctx.restore();
+  }
+  function drawMarioJumping(b, def, u, pal, st) {
+    const t = 1 - st.k;
+    const ph = b.jumpPhase;
+    // Pose numbers per phase: body squash/stretch, leg bend (0 straight .. 1 folded), lean.
+    let sx = 1, sy = 1, bend = 0.55, lean = 0, ear = 0, lid = 0.1;
+    const dir = b.jumpDir || 1;
+    if (ph === 'anticipation') { const k = 1 - b.jumpT / def.anticipation; sx = 1 + 0.2 * k; sy = 1 - 0.25 * k; bend = 0.95; ear = -0.5; lid = 0.4; }
+    else if (ph === 'launch') { sx = 0.86; sy = 1.22; bend = 0; ear = 0.4; }
+    else if (ph === 'ascending') { sx = 0.92; sy = 1.1; bend = 0.15; lean = -0.1 * dir; ear = 0.5; }
+    else if (ph === 'apex') { bend = 0.4; ear = 0.2; }
+    else if (ph === 'descending') { sx = 0.96; sy = 1.04; bend = 0.1; lean = 0.08 * dir; ear = -0.2; lid = 0; }
+    else if (ph === 'landing') { const k = b.jumpT / 0.14; sx = 1 + 0.35 * k; sy = 1 - 0.38 * k; bend = 1; ear = -0.6; lid = 0.3; }
+    else if (ph === 'recovery') { const k = b.jumpT / def.recovery; sx = 1 + 0.1 * k; sy = 1 - 0.1 * k; bend = 0.7; }
+    else { const breath = Math.sin(b.breathPhase) * def.animationProfile.breath; sx = 1 - breath * 0.5; sy = 1 + breath; }
+    const sq = st.squash; sx *= 1 + sq * 0.25; sy *= 1 - sq * 0.3;
+    ctx.save();
+    if (st.dead) {
+      ctx.globalAlpha = clamp(1.4 - t * 1.5, 0, 1);
+      ctx.translate(0, -1.1 * u); ctx.rotate((b.deathSpin || 0) * 1.2); ctx.translate(0, 1.1 * u);
+      bend = 0.2; lid = 0;
+    }
+    ctx.rotate(lean);
+    // Legs: hip -> knee -> foot as thick rounded strokes, feet as pads. Bend folds them.
+    const hipY = -0.75 * u * sy, footY = 0;
+    const kneeY = lerp(footY - 0.55 * u, hipY + 0.15 * u, bend);
+    ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = u * 0.22; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const side of [-1, 1]) {
+      const hipX = side * 0.32 * u * sx, kneeX = side * (0.55 + bend * 0.25) * u * sx, footX = side * 0.42 * u * sx;
+      ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(kneeX, kneeY); ctx.lineTo(footX, footY - 0.1 * u); ctx.stroke();
+      meFoot(footX + side * 0.05 * u, footY, 0.5 * u, 0.24 * u, pal, st, 0, pal.body);
+    }
+    ctx.save();
+    ctx.translate(0, -1.15 * u * sy);
+    ctx.scale(sx, sy);
+    // Pointed ears swing with the jump.
+    ctx.fillStyle = st.ink(pal.body); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
+    for (const side of [-1, 1]) {
+      ctx.save(); ctx.translate(side * 0.45 * u, -0.5 * u); ctx.rotate(side * (0.35 - ear * 0.5));
+      ctx.beginPath(); ctx.moveTo(-0.16 * u, 0); ctx.lineTo(0, -0.55 * u); ctx.lineTo(0.16 * u, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    meBlob(0, 0, 0.78 * u, 0.72 * u, pal, st);
+    meSkin(0.08 * u, 0.18 * u, 0.5 * u, 0.38 * u, pal, st);
+    meEye(-0.2 * u, -0.1 * u, 0.17 * u, 0.2 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    meEye(0.3 * u, -0.1 * u, 0.17 * u, 0.2 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    meMouth(0.12 * u, 0.28 * u, 0.36 * u, ph === 'descending' || ph === 'launch' ? 0.6 : 0, '#2a1a0e', false, st);
+    ctx.restore();
+    ctx.restore();
+  }
+  function drawMarioAmbush(b, def, u, pal, st) {
+    const t = 1 - st.k;
+    const rise = st.dead ? clamp(1 - t * 2.2, 0, 1) : clamp(b.ambushRise || 0, 0, 1);
+    const holeW = st.dead ? 0.95 * u * clamp(1.5 - t * 1.5, 0, 1) : 0.95 * u;
+    // The burrow: an earthen mound with a dark hole, drawn in two halves around the body.
+    ctx.fillStyle = st.ink('#6b4a2e'); ctx.strokeStyle = st.ink('#3a2412'); ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath(); ctx.ellipse(0, 0, holeW * 1.25, 0.4 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#10201e';
+    ctx.beginPath(); ctx.ellipse(0, 0, holeW, 0.3 * u, 0, 0, Math.PI * 2); ctx.fill();
+    if (rise <= 0.001 && st.dead) return;
+    const hiddenH = def.hitbox.hiddenH * u, fullH = def.hitbox.h * u;
+    const drop = (1 - rise) * (fullH - hiddenH);
+    const s = b.ambushState;
+    const attacking = s === 'attacking' && !st.dead;
+    const dir = Math.sign(b.vx) || 1;
+    ctx.save();
+    // Nothing below the ground line is visible: it is in the burrow.
+    ctx.beginPath(); ctx.rect(-3 * u, -6 * u, 6 * u, 6 * u); ctx.clip();
+    ctx.translate(0, drop);
+    if (attacking) { ctx.translate(dir * 0.25 * u, 0); ctx.rotate(dir * 0.14); }
+    const sq = st.squash;
+    ctx.scale(1 + sq * 0.2, 1 - sq * 0.2);
+    // Leafy fins at the sides.
+    ctx.fillStyle = st.ink(pal.dark); ctx.strokeStyle = st.ink('#0b2a27'); ctx.lineWidth = st.line * 0.7;
+    for (const side of [-1, 1]) {
+      ctx.save(); ctx.translate(side * 0.6 * u, -1.05 * u); ctx.rotate(side * (0.9 + Math.sin(b.breathPhase) * 0.08));
+      ctx.beginPath(); ctx.ellipse(0, -0.35 * u, 0.2 * u, 0.42 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    // Tall bulb body, mouth in front with two rows of teeth, slit-pupil eyes on top.
+    const breath = s === 'hidden' ? 0 : Math.sin(b.breathPhase) * def.animationProfile.breath;
+    ctx.save(); ctx.translate(0, -1.3 * u); ctx.scale(1 - breath * 0.5, 1 + breath); ctx.translate(0, 1.3 * u);
+    meBlob(0, -1.3 * u, 0.72 * u, 1.02 * u, pal, st);
+    const open = attacking ? 0.9 : (s === 'active' ? 0.35 : 0.1);
+    const mw = 0.9 * u, mh = (0.12 + open * 0.34) * u;
+    ctx.fillStyle = st.ink('#3a0d1c'); ctx.strokeStyle = st.ink('#0b2a27'); ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath(); ctx.ellipse(0.15 * u, -1.0 * u, mw * 0.5, mh, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 4; i++) {
+      const tx = 0.15 * u - mw * 0.36 + i * mw * 0.24;
+      ctx.beginPath(); ctx.moveTo(tx - 0.07 * u, -1.0 * u - mh); ctx.lineTo(tx, -1.0 * u - mh * 0.35); ctx.lineTo(tx + 0.07 * u, -1.0 * u - mh); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(tx + 0.05 * u, -1.0 * u + mh); ctx.lineTo(tx + 0.12 * u, -1.0 * u + mh * 0.35); ctx.lineTo(tx + 0.19 * u, -1.0 * u + mh); ctx.closePath(); ctx.fill();
+    }
+    const blink = s === 'hidden' && Math.sin(b.breathPhase * 1.7) > 0.93;
+    const lid = st.dead ? 0 : (s === 'retreating' ? 0.5 : blink ? 0.95 : 0.1);
+    meEye(-0.3 * u, -2.0 * u, 0.17 * u, 0.2 * u, st, { look: st.look, iris: pal.eye, slit: true, lid, lidColor: pal.dark, dead: st.dead });
+    meEye(0.3 * u, -2.0 * u, 0.17 * u, 0.2 * u, st, { look: st.look, iris: pal.eye, slit: true, lid, lidColor: pal.dark, dead: st.dead });
+    ctx.restore();
+    ctx.restore();
+    // Front lip of the burrow over the body's base.
+    ctx.fillStyle = st.ink('#5a3d24'); ctx.strokeStyle = st.ink('#3a2412'); ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath(); ctx.ellipse(0, 0.02 * u, holeW * 1.25, 0.4 * u, 0, 0, Math.PI); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#10201e';
+    ctx.beginPath(); ctx.ellipse(0, 0, holeW, 0.28 * u, 0, 0, Math.PI); ctx.fill();
+  }
+  function drawMarioElite(b, def, u, pal, st) {
+    const t = 1 - st.k;
+    const ph = mePhase(b);
+    const moving = Math.abs(b.vx) > 6;
+    const windup = b.stepT > 0 ? b.stepT / 0.16 : 0;
+    const hop = b.hopT > 0 ? Math.sin((b.hopT / 0.28) * Math.PI) * 0.35 * u : 0;
+    const stagger = b.hurtT > 0 ? b.hurtT / def.hitStagger : 0;
+    const sq = st.squash;
+    ctx.save();
+    if (st.dead) {
+      // Stagger, crack, then sink into a heap.
+      const sink = clamp((t - 0.5) / 0.5, 0, 1);
+      ctx.globalAlpha = clamp(1.6 - t * 1.6, 0, 1);
+      ctx.rotate(-0.18 * clamp(t / 0.3, 0, 1));
+      ctx.scale(1 + sink * 0.35, 1 - sink * 0.6);
+    } else {
+      ctx.rotate(-0.08 * windup - 0.14 * stagger);
+      ctx.translate(-0.15 * u * stagger, -hop);
+    }
+    // Wide iron boots that alternate on a slow stride.
+    const stepL = Math.sin(ph), stepR = -stepL;
+    meFoot(-0.55 * u + (moving ? stepL * 0.2 * u : 0), 0, 0.8 * u, 0.36 * u, pal, st, moving ? Math.max(0, stepL) * 0.12 * u : 0, pal.skinDark);
+    meFoot(0.55 * u + (moving ? stepR * 0.2 * u : 0), 0, 0.8 * u, 0.36 * u, pal, st, moving ? Math.max(0, stepR) * 0.12 * u : 0, pal.skinDark);
+    ctx.save();
+    ctx.scale(1 + sq * 0.2, 1 - sq * 0.22);
+    // Legs, gauntlet fists, belly plate, then the big domed shell with bands and rivets.
+    ctx.strokeStyle = st.ink(pal.skinDark); ctx.lineWidth = u * 0.3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-0.45 * u, -0.9 * u); ctx.lineTo(-0.5 * u, -0.25 * u); ctx.moveTo(0.45 * u, -0.9 * u); ctx.lineTo(0.5 * u, -0.25 * u); ctx.stroke();
+    ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+    ctx.beginPath(); ctx.ellipse(0.3 * u, -1.15 * u, 0.62 * u, 0.7 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const shell = ctx.createRadialGradient(-0.5 * u, -2.2 * u, u * 0.1, -0.1 * u, -1.75 * u, u * 1.5);
+    shell.addColorStop(0, st.ink(pal.light)); shell.addColorStop(0.5, st.ink(pal.body)); shell.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = shell; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 1.1;
+    ctx.beginPath(); ctx.ellipse(-0.1 * u, -1.7 * u, 1.15 * u, 1.15 * u, 0, Math.PI * 0.95, Math.PI * 2.05); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.9;
+    for (const ry of [0.75, 0.45]) { ctx.beginPath(); ctx.ellipse(-0.1 * u, -1.7 * u, 1.15 * u * ry, 1.15 * u * ry, 0, Math.PI * 1.02, Math.PI * 1.98); ctx.stroke(); }
+    ctx.fillStyle = st.ink(pal.skin);
+    for (const a of [1.15, 1.4, 1.6, 1.85]) { ctx.beginPath(); ctx.arc(-0.1 * u + Math.cos(a * Math.PI) * 0.95 * u, -1.7 * u + Math.sin(a * Math.PI) * 0.95 * u, 0.07 * u, 0, Math.PI * 2); ctx.fill(); }
+    if (st.dead && t > 0.25) {
+      // Cracks spread across the armour before it gives way.
+      ctx.strokeStyle = '#1c0a0a'; ctx.lineWidth = st.line;
+      ctx.beginPath(); ctx.moveTo(-0.3 * u, -2.6 * u); ctx.lineTo(-0.1 * u, -2.1 * u); ctx.lineTo(-0.45 * u, -1.7 * u); ctx.lineTo(-0.2 * u, -1.2 * u);
+      ctx.moveTo(0.5 * u, -2.4 * u); ctx.lineTo(0.3 * u, -2.0 * u); ctx.lineTo(0.7 * u, -1.6 * u); ctx.stroke();
+    }
+    // Heavy arm and fist in front.
+    ctx.strokeStyle = st.ink(pal.skinDark); ctx.lineWidth = u * 0.28; ctx.lineCap = 'round';
+    const punch = stagger > 0 ? -0.2 * u : windup * 0.2 * u;
+    ctx.beginPath(); ctx.moveTo(0.7 * u, -1.6 * u); ctx.lineTo(1.05 * u + punch, -1.0 * u); ctx.stroke();
+    ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath(); ctx.arc(1.1 * u + punch, -0.95 * u, 0.26 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Iron helmet with a visor slit, glowing eyes inside, and two horns.
+    const hx = 0.35 * u, hy = -2.55 * u;
+    ctx.fillStyle = st.ink(pal.dark); ctx.strokeStyle = st.ink('#1c0a0a'); ctx.lineWidth = st.line * 0.8;
+    for (const side of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(hx + side * 0.25 * u, hy - 0.35 * u);
+      ctx.quadraticCurveTo(hx + side * 0.55 * u, hy - 0.75 * u, hx + side * 0.7 * u, hy - 1.05 * u);
+      ctx.quadraticCurveTo(hx + side * 0.45 * u, hy - 0.7 * u, hx + side * 0.05 * u, hy - 0.45 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    const helm = ctx.createRadialGradient(hx - 0.25 * u, hy - 0.3 * u, u * 0.05, hx, hy, u * 0.8);
+    helm.addColorStop(0, st.ink('#d5d9df')); helm.addColorStop(0.5, st.ink(pal.skin)); helm.addColorStop(1, st.ink(pal.skinDark));
+    ctx.fillStyle = helm; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+    ctx.beginPath(); ctx.ellipse(hx, hy, 0.62 * u, 0.52 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = st.ink('#15171a');
+    ctx.beginPath(); ctx.roundRect(hx - 0.35 * u, hy - 0.08 * u, 0.9 * u, 0.2 * u, 0.06 * u); ctx.fill();
+    if (!st.dead) {
+      const glow = 0.6 + Math.sin(pet.t * 6 + b.bobPhase) * 0.2 + stagger * 0.4;
+      ctx.fillStyle = `rgba(255, 176, 58, ${glow})`;
+      ctx.beginPath(); ctx.ellipse(hx + 0.02 * u, hy + 0.02 * u, 0.1 * u, 0.06 * u, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(hx + 0.32 * u, hy + 0.02 * u, 0.1 * u, 0.06 * u, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    ctx.restore();
+    // Health pips over the helmet: its extra hits, visible before the first one lands.
+    if (!st.dead && b.maxHp > 1) {
+      const n = b.maxHp, w = 0.26 * u, gap = 0.08 * u;
+      const x0 = -((n * w + (n - 1) * gap) / 2);
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = i < b.hp ? '#ffcf3f' : 'rgba(30, 20, 20, 0.6)';
+        ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(0.8, u * 0.04);
+        ctx.beginPath(); ctx.roundRect(x0 + i * (w + gap), -3.6 * u, w, w * 0.9, w * 0.25); ctx.fill(); ctx.stroke();
+      }
+    }
+  }
+  function drawMarioBossBar(b, def, u) {
+    // A Mario-world health bar: a brick-brown frame with a gold rim, the bar split into one
+    // cell per hit, and the name in a rounded outlined face.
+    const w = Math.max(88, u * 2.6), h = Math.max(7, u * 0.22);
+    const y = -def.hitbox.h * u - u * 0.95;
+    ctx.save();
+    ctx.fillStyle = '#5b3417'; ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(1, u * 0.05);
+    ctx.beginPath(); ctx.roundRect(-w / 2 - 3, y - 3, w + 6, h + 6, 4); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#ffcf3f'; ctx.lineWidth = Math.max(1, u * 0.035);
+    ctx.beginPath(); ctx.roundRect(-w / 2 - 1.5, y - 1.5, w + 3, h + 3, 3); ctx.stroke();
+    ctx.fillStyle = '#2a1414';
+    ctx.fillRect(-w / 2, y, w, h);
+    const n = Math.max(1, b.maxHp || 1);
+    const cell = w / n;
+    for (let i = 0; i < n; i++) {
+      if (i >= b.hp) continue;
+      const g = ctx.createLinearGradient(0, y, 0, y + h);
+      g.addColorStop(0, '#ff7a6a'); g.addColorStop(0.5, '#e52521'); g.addColorStop(1, '#8f0f12');
+      ctx.fillStyle = g;
+      ctx.fillRect(-w / 2 + i * cell + 0.5, y, cell - 1, h);
+    }
+    const label = (b.label || def.name).toUpperCase();
+    ctx.font = `800 ${Math.max(9, Math.round(u * 0.32))}px Fredoka, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(2, u * 0.09);
+    ctx.strokeText(label, 0, y - 5);
+    ctx.fillStyle = '#ffe28a';
+    ctx.fillText(label, 0, y - 5);
+    ctx.restore();
+  }
+  function drawMarioBoss(b, def, u, pal, st) {
+    const t = 1 - st.k;
+    const ph = mePhase(b);
+    const s = b.bossState;
+    const enraged = !st.dead && b.hp / b.maxHp <= def.lowHealth;
+    const breathRate = enraged ? 1.6 : 1;
+    const breath = Math.sin(b.breathPhase * breathRate) * def.animationProfile.breath * (st.dead ? 0 : 1);
+    const stagger = b.hurtT > 0 ? b.hurtT / def.hitStagger : 0;
+    const windup = s === 'windup' ? 1 - clamp(b.bossT / def.chargeWindup, 0, 1) : 0;
+    const charging = s === 'charge';
+    const moving = Math.abs(b.vx) > 6;
+    let lean = -0.16 * windup + (charging ? 0.14 : 0) - 0.15 * stagger;
+    let mouthOpen = charging ? 0.9 : windup > 0 ? windup * 0.8 : s === 'recover' ? 0.4 + Math.sin(pet.t * 10) * 0.2 : 0.12;
+    ctx.save();
+    if (st.dead) {
+      // Multi-stage defeat: a stagger with a strobing flash, a lurch up, the fall onto its
+      // shell with the ground shake (particles from updateMarioDeath), then the dissolve.
+      const stage = t < 0.25 ? 0 : t < 0.5 ? 1 : t < 0.73 ? 2 : 3;
+      if (stage === 0) { lean = -0.2 * (t / 0.25); if (Math.floor(pet.t * 24) % 2 === 0) st.flash = 1; }
+      else if (stage === 1) { const k = (t - 0.25) / 0.25; lean = -0.2 - k * 0.35; ctx.translate(0, -Math.sin(k * Math.PI) * u * 0.6); ctx.scale(1 + k * 0.15, 1 - k * 0.35); }
+      else if (stage === 2) { lean = -0.55; ctx.translate(Math.sin(pet.t * 60) * u * 0.05, 0); ctx.scale(1.15, 0.65); }
+      else { const k = (t - 0.73) / 0.27; lean = -0.55; ctx.globalAlpha = 1 - k; ctx.scale(1.15 + k * 0.2, 0.65 - k * 0.35); }
+      mouthOpen = 0.7;
+    }
+    ctx.rotate(lean);
+    if (stagger > 0 && !st.dead) ctx.translate(-0.2 * u * stagger, 0);
+    const sq = st.squash;
+    // Big three-toed feet on a wide stance; the stride only cycles while it walks.
+    const stepL = Math.sin(ph), stepR = -stepL;
+    for (const side of [-1, 1]) {
+      const step = side < 0 ? stepL : stepR;
+      const fx = side * 0.75 * u + (moving ? step * 0.25 * u : 0), lift = moving ? Math.max(0, step) * 0.14 * u : 0;
+      ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+      ctx.beginPath(); ctx.ellipse(fx, -0.2 * u - lift, 0.5 * u, 0.24 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = st.ink('#f8f4e8');
+      for (const toe of [-0.28, 0, 0.28]) { ctx.beginPath(); ctx.moveTo(fx + toe * u + side * 0.3 * u, -0.22 * u - lift); ctx.lineTo(fx + toe * u + side * 0.55 * u, -0.1 * u - lift); ctx.lineTo(fx + toe * u + side * 0.3 * u, -0.05 * u - lift); ctx.closePath(); ctx.fill(); }
+    }
+    ctx.save();
+    ctx.translate(0, -0.3 * u);
+    ctx.scale(1 + sq * 0.15 - breath * 0.4, 1 - sq * 0.18 + breath);
+    // Thick legs, a spiked tail, the shell with cream spikes, then the banded belly.
+    ctx.strokeStyle = st.ink(pal.body); ctx.lineWidth = u * 0.42; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-0.55 * u, -0.9 * u); ctx.lineTo(-0.7 * u, -0.1 * u); ctx.moveTo(0.55 * u, -0.9 * u); ctx.lineTo(0.7 * u, -0.1 * u); ctx.stroke();
+    ctx.fillStyle = st.ink(pal.body); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+    ctx.beginPath(); ctx.moveTo(-1.0 * u, -0.9 * u); ctx.quadraticCurveTo(-1.7 * u, -0.8 * u, -1.95 * u, -0.25 * u); ctx.quadraticCurveTo(-1.5 * u, -0.45 * u, -1.05 * u, -0.45 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = st.ink(pal.belly);
+    for (const k of [0.35, 0.6]) { ctx.beginPath(); ctx.moveTo(-1.0 * u - k * 0.9 * u, -0.85 * u + k * 0.4 * u); ctx.lineTo(-1.05 * u - k * 0.9 * u, -1.15 * u + k * 0.4 * u); ctx.lineTo(-1.2 * u - k * 0.9 * u, -0.8 * u + k * 0.4 * u); ctx.closePath(); ctx.fill(); }
+    const shell = ctx.createRadialGradient(-0.8 * u, -2.3 * u, u * 0.1, -0.35 * u, -1.75 * u, u * 1.6);
+    shell.addColorStop(0, st.ink(pal.light)); shell.addColorStop(0.5, st.ink(pal.body)); shell.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = shell; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 1.2;
+    ctx.beginPath(); ctx.ellipse(-0.35 * u, -1.75 * u, 1.25 * u, 1.15 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (enraged) { ctx.fillStyle = `rgba(255, 60, 40, ${0.15 + Math.sin(pet.t * 8) * 0.12})`; ctx.beginPath(); ctx.ellipse(-0.35 * u, -1.75 * u, 1.25 * u, 1.15 * u, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.9;
+    for (const a of [1.12, 1.32, 1.52, 1.72]) {
+      const ax = -0.35 * u + Math.cos(a * Math.PI) * 1.2 * u, ay = -1.75 * u + Math.sin(a * Math.PI) * 1.1 * u;
+      const nx = Math.cos(a * Math.PI), ny = Math.sin(a * Math.PI);
+      ctx.beginPath(); ctx.moveTo(ax - ny * 0.22 * u, ay + nx * 0.22 * u); ctx.lineTo(ax + nx * 0.55 * u, ay + ny * 0.55 * u); ctx.lineTo(ax + ny * 0.22 * u, ay - nx * 0.22 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    const belly = ctx.createLinearGradient(0, -2.6 * u, 0, -0.4 * u);
+    belly.addColorStop(0, st.ink('#fff3c8')); belly.addColorStop(1, st.ink(pal.skinDark));
+    ctx.fillStyle = belly; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+    ctx.beginPath(); ctx.ellipse(0.2 * u, -1.5 * u, 0.98 * u, 1.12 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = st.ink(pal.skinDark); ctx.lineWidth = st.line * 0.8;
+    for (const yy of [-2.05, -1.65, -1.25, -0.85]) { ctx.beginPath(); ctx.moveTo(-0.55 * u, yy * u); ctx.quadraticCurveTo(0.2 * u, (yy + 0.12) * u, 0.95 * u, yy * u); ctx.stroke(); }
+    // Arms with spiked cuffs and clawed hands; raised for the wind-up, forward in a charge.
+    const armLift = windup * 0.5 - (charging ? 0.2 : 0) + stagger * 0.3;
+    for (const [ax, ay, front] of [[-0.6, -2.0, false], [0.85, -1.85, true]]) {
+      const hx = ax * u + (front ? 0.55 : -0.3) * u + (charging ? 0.25 * u : 0), hy = ay * u + 0.8 * u - armLift * u;
+      ctx.strokeStyle = st.ink(front ? pal.body : pal.dark); ctx.lineWidth = u * 0.36; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(ax * u, ay * u); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.fillStyle = st.ink('#2a2a2e'); ctx.strokeStyle = st.ink('#111');
+      ctx.lineWidth = st.line * 0.7;
+      ctx.beginPath(); ctx.ellipse(hx - (hx - ax * u) * 0.25, hy - (hy - ay * u) * 0.25, 0.26 * u, 0.2 * u, Math.atan2(hy - ay * u, hx - ax * u), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark);
+      ctx.beginPath(); ctx.arc(hx, hy, 0.3 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = st.ink('#f8f4e8');
+      for (const c of [-0.2, 0, 0.2]) { ctx.beginPath(); ctx.moveTo(hx + c * u, hy + 0.05 * u); ctx.lineTo(hx + c * u + 0.12 * u, hy + 0.35 * u); ctx.lineTo(hx + c * u + 0.2 * u, hy); ctx.closePath(); ctx.fill(); }
+    }
+    // Head: red mane, horns, green skull, cream muzzle with fangs, angry brows, tracked eyes.
+    const hx0 = 0.75 * u, hy0 = -2.85 * u + Math.sin(b.breathPhase * breathRate) * 0.05 * u + windup * 0.15 * u;
+    ctx.fillStyle = st.ink(enraged ? '#ff4a2a' : '#d92d1e'); ctx.strokeStyle = st.ink('#5a0f0a'); ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath(); ctx.moveTo(hx0 - 0.4 * u, hy0 - 0.5 * u);
+    for (let i = 0; i < 5; i++) { const a = -0.95 * Math.PI + i * 0.2 * Math.PI; ctx.lineTo(hx0 - 0.5 * u + Math.cos(a) * 1.05 * u, hy0 + 0.1 * u + Math.sin(a) * 1.05 * u); ctx.lineTo(hx0 - 0.5 * u + Math.cos(a + 0.1 * Math.PI) * 0.7 * u, hy0 + 0.1 * u + Math.sin(a + 0.1 * Math.PI) * 0.7 * u); }
+    ctx.lineTo(hx0 - 0.8 * u, hy0 + 0.6 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark);
+    for (const side of [-0.35, 0.35]) {
+      ctx.beginPath(); ctx.moveTo(hx0 + side * u - 0.16 * u, hy0 - 0.4 * u); ctx.quadraticCurveTo(hx0 + side * u + side * 0.3 * u, hy0 - 0.9 * u, hx0 + side * u + side * 0.55 * u, hy0 - 1.2 * u);
+      ctx.quadraticCurveTo(hx0 + side * u + side * 0.2 * u, hy0 - 0.75 * u, hx0 + side * u + 0.18 * u, hy0 - 0.45 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    meBlob(hx0, hy0, 0.78 * u, 0.64 * u, pal, st);
+    meSkin(hx0 + 0.45 * u, hy0 + 0.2 * u, 0.5 * u, 0.36 * u, pal, st);
+    ctx.fillStyle = st.ink(pal.dark);
+    ctx.beginPath(); ctx.arc(hx0 + 0.8 * u, hy0 + 0.08 * u, 0.05 * u, 0, Math.PI * 2); ctx.fill();
+    meMouth(hx0 + 0.42 * u, hy0 + 0.48 * u, 0.85 * u, mouthOpen, '#3a0d1c', true, st);
+    const lid = st.dead ? 0.7 : stagger > 0 ? 0.8 : windup > 0 ? 0.35 : 0.12;
+    meEye(hx0 - 0.05 * u, hy0 - 0.12 * u, 0.2 * u, 0.24 * u, st, { look: st.look, iris: pal.eye, lid, lidColor: pal.dark, dead: st.dead && t > 0.5 });
+    meEye(hx0 + 0.42 * u, hy0 - 0.15 * u, 0.2 * u, 0.24 * u, st, { look: st.look, iris: pal.eye, lid, lidColor: pal.dark, dead: st.dead && t > 0.5 });
+    const browDrop = 0.06 * u * (enraged ? 2 : 1) + windup * 0.08 * u;
+    meBrow(hx0 - 0.3 * u, hy0 - 0.46 * u, hx0 + 0.08 * u, hy0 - 0.36 * u + browDrop, st.line * 2, st.ink('#d92d1e'));
+    meBrow(hx0 + 0.3 * u, hy0 - 0.36 * u + browDrop, hx0 + 0.66 * u, hy0 - 0.46 * u, st.line * 2, st.ink('#d92d1e'));
+    ctx.restore();
+    ctx.restore();
+  }
+  const MARIO_ENEMY_RENDERERS = {
+    walker: drawMarioWalker,
+    shell: drawMarioShell,
+    flying: drawMarioFlying,
+    jumping: drawMarioJumping,
+    ambush: drawMarioAmbush,
+    elite: drawMarioElite,
+    boss: drawMarioBoss,
+  };
+  function drawMarioEnemy(b) {
+    const def = marioEnemyClass(b.enemyId);
+    const u = marioEnemyUnit(def);
+    const pal = marioEnemyPalette(def.id);
+    const alt = b.altitude || 0;
+    ctx.save();
+    ctx.translate(b.x, groundY - 1 - alt);
+    // Ground shadow under everything, fading and shrinking with height.
+    const shadowK = clamp(1 - alt / (petR() * 3), 0.3, 1);
+    ctx.save(); ctx.translate(0, alt);
+    meShadow(def.hitbox.halfW * u * 0.95 * shadowK, u * 0.16 * shadowK, (b.alive ? 0.22 : 0.1) * shadowK);
+    ctx.restore();
+    if (def.id === 'boss' && b.alive) drawMarioBossBar(b, def, u);
+    // Turn through the smoothed facing instead of snapping the drawing around.
+    const face = b.face === undefined ? (b.facing || 1) : b.face;
+    ctx.scale((Math.sign(face) || 1) * Math.max(0.12, Math.abs(face)), 1);
+    const flashK = b.hurtT > 0 ? clamp(b.hurtT / def.hitStagger, 0, 1) : 0;
+    const st = {
+      dead: !b.alive,
+      k: b.alive ? 1 : clamp(b.squash / def.deathDur, 0, 1),
+      flash: flashK > 0 && Math.floor(pet.t * 30) % 2 === 0 ? 1 : 0,
+      squash: b.squashT > 0 ? Math.sin(clamp(b.squashT / 0.25, 0, 1) * Math.PI) : 0,
+      line: Math.max(1, u * 0.085),
+      look: { x: 0, y: 0 },
+      ink: (c) => (st.flash ? '#ffffff' : c),
+    };
+    // Eyes track Mario in the creature's own facing space.
+    const faceSign = Math.sign(face) || 1;
+    st.look.x = clamp((pet.x - b.x) * faceSign / (petR() * 4), -1, 1);
+    st.look.y = clamp(((pet.y - marioState.jumpH - petR() * 1.4) - (groundY - alt - u * 1.3)) / (petR() * 4), -1, 1);
+    if (flashK > 0 && b.alive) ctx.translate(Math.sin(pet.t * 60) * u * 0.12 * flashK, 0);
+    (MARIO_ENEMY_RENDERERS[def.renderer] || drawMarioWalker)(b, def, u, pal, st);
     ctx.restore();
   }
 

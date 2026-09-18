@@ -10418,294 +10418,582 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
   // hitMarioEnemy above. drawMarioEnemy() dispatches through MARIO_ENEMY_RENDERERS.
   function marioEnemyPalette(id) {
     switch (id) {
-      case 'shell': return { body: '#3fb35f', light: '#8fe89a', dark: '#1d5a2e', skin: '#e9d86a', skinDark: '#b8a23a', belly: '#f6e3a8', eye: '#1b1b1b' };
-      case 'flying': return { body: '#e05a2b', light: '#ffab7a', dark: '#7a2410', skin: '#f6e3a8', skinDark: '#c9a86a', belly: '#f6e3a8', eye: '#1b1b1b' };
-      case 'jumping': return { body: '#8fa64a', light: '#d4e58a', dark: '#4a5a1e', skin: '#e8dba0', skinDark: '#a89a60', belly: '#e8dba0', eye: '#1b1b1b' };
-      case 'ambush': return { body: '#2f9a8f', light: '#8ee8dc', dark: '#123f3a', skin: '#8ee8dc', skinDark: '#1f6e66', belly: '#cdf5ef', eye: '#ffd23f' };
-      case 'elite': return { body: '#a8232b', light: '#ff8a7a', dark: '#4a0a10', skin: '#8f949c', skinDark: '#3d4148', belly: '#2b2e33', eye: '#ffb03a' };
-      case 'boss': return { body: '#3f9a3f', light: '#9ee08a', dark: '#1a4d1c', skin: '#f2d27a', skinDark: '#b98f2e', belly: '#f7e2a0', eye: '#e83a2a' };
-      default: return { body: '#a35a2a', light: '#e39a5e', dark: '#4e2810', skin: '#f2d9a6', skinDark: '#c9a06a', belly: '#f2d9a6', eye: '#1b1b1b' };
+      case 'shell':
+        return {
+          body: '#2ea84e', light: '#72e590', dark: '#135c24', rim: '#fefefe', rimDark: '#c8ccb0',
+          skin: '#fad455', skinDark: '#b88c1b', belly: '#fef3c7', bellyDark: '#d4be72',
+          eye: '#1b1b1b', scute: '#196b30', scuteRim: '#52d472',
+        };
+      case 'flying':
+        return {
+          body: '#e54d24', light: '#ff9266', dark: '#802008', rim: '#ffc8a8',
+          skin: '#fde68a', skinDark: '#ca8a04', belly: '#fef3c7', eye: '#1b1b1b',
+          wingLight: '#ffffff', wingMid: '#dbeafe', wingDark: '#93c5fd', wingStroke: '#475569',
+        };
+      case 'jumping':
+        return {
+          body: '#65a30d', light: '#bef264', dark: '#365314', rim: '#ecfccb',
+          skin: '#fef08a', skinDark: '#ca8a04', belly: '#fef9c3', earInner: '#fbcfe8',
+          eye: '#1b1b1b', pad: '#4d7c0f',
+        };
+      case 'ambush':
+        return {
+          body: '#0d9488', light: '#2dd4bf', dark: '#115e59', spot: '#99f6e4',
+          skin: '#14b8a6', skinDark: '#0f766e', belly: '#ccfbf1', eye: '#f59e0b',
+          mouth: '#4c0519', lips: '#042f2c', tooth: '#ffffff', stem: '#0f766e', stemDark: '#042f2c',
+        };
+      case 'elite':
+        return {
+          body: '#475569', light: '#94a3b8', dark: '#1e293b', rim: '#cbd5e1',
+          skin: '#64748b', skinDark: '#334155', belly: '#334155', eye: '#f97316',
+          gold: '#f59e0b', goldLight: '#fef08a', horn: '#334155', spike: '#e2e8f0',
+        };
+      case 'boss':
+        return {
+          body: '#166534', light: '#4ade80', dark: '#052e16', rim: '#86efac',
+          skin: '#eab308', skinDark: '#a16207', belly: '#fef08a', bellyRib: '#ca8a04',
+          eye: '#ef4444', horn: '#fef08a', hornDark: '#854d0e', spike: '#fefce8', spikeBase: '#dc2626',
+          mane: '#dc2626', maneLight: '#f87171', maneDark: '#7f1d1d', cuff: '#1e293b',
+        };
+      default: // walker
+        return {
+          body: '#8e4823', light: '#cf7d45', dark: '#4a200a', rim: '#fbd5ab',
+          skin: '#fae3b8', skinDark: '#c99b5a', belly: '#fae3b8', eye: '#1b1b1b',
+          boot: '#381c08', bootLight: '#6d3915', bootSole: '#1f0d03', fang: '#ffffff',
+        };
     }
   }
-  // Shared drawing vocabulary so the cast reads as one family.
-  function meBlob(x, y, rx, ry, pal, st, rot) {
-    // A shaded, outlined ellipse: the basic volume every creature is built from.
-    const g = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.45, Math.min(rx, ry) * 0.1, x, y, Math.max(rx, ry) * 1.15);
+
+  // Shared 3D-shaded drawing vocabulary so the cast reads as one coherent family matching Mario.
+  function meBlob(x, y, rx, ry, pal, st, rot, rimCol) {
+    // 3D ellipsoidal dome: top-left directional key light, ambient core shadow, bottom rim bounce.
+    ctx.save();
+    if (rot) { ctx.translate(x, y); ctx.rotate(rot); ctx.translate(-x, -y); }
+    const g = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.45, Math.min(rx, ry) * 0.08, x, y, Math.max(rx, ry) * 1.18);
     g.addColorStop(0, st.ink(pal.light));
-    g.addColorStop(0.55, st.ink(pal.body));
+    g.addColorStop(0.52, st.ink(pal.body));
     g.addColorStop(1, st.ink(pal.dark));
     ctx.fillStyle = g;
     ctx.strokeStyle = st.ink(pal.dark);
     ctx.lineWidth = st.line;
-    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Top-left specular gleam
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.beginPath(); ctx.ellipse(x - rx * 0.32, y - ry * 0.4, rx * 0.28, ry * 0.16, -0.3, 0, Math.PI * 2); ctx.fill();
+
+    // Subtle bottom ambient bounce reflection
+    const rc = rimCol || pal.rim;
+    if (rc) {
+      const bg = ctx.createLinearGradient(x, y + ry * 0.2, x, y + ry);
+      bg.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      bg.addColorStop(1, st.ink(rc));
+      ctx.fillStyle = bg;
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.ellipse(x, y + ry * 0.1, rx * 0.88, ry * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1.0;
+    }
+    ctx.restore();
   }
+
   function meSkin(x, y, rx, ry, pal, st, rot) {
-    const g = ctx.createRadialGradient(x - rx * 0.3, y - ry * 0.4, Math.min(rx, ry) * 0.1, x, y, Math.max(rx, ry) * 1.1);
+    ctx.save();
+    if (rot) { ctx.translate(x, y); ctx.rotate(rot); ctx.translate(-x, -y); }
+    const g = ctx.createRadialGradient(x - rx * 0.3, y - ry * 0.42, Math.min(rx, ry) * 0.08, x, y, Math.max(rx, ry) * 1.12);
     g.addColorStop(0, st.ink('#ffffff'));
-    g.addColorStop(0.35, st.ink(pal.skin));
+    g.addColorStop(0.38, st.ink(pal.skin));
     g.addColorStop(1, st.ink(pal.skinDark));
     ctx.fillStyle = g;
-    ctx.strokeStyle = st.ink(pal.dark);
+    ctx.strokeStyle = st.ink(pal.dark || '#381c08');
     ctx.lineWidth = st.line;
-    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Cheek highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.beginPath(); ctx.ellipse(x - rx * 0.25, y - ry * 0.35, rx * 0.25, ry * 0.15, -0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
+
   function meEye(x, y, rx, ry, st, opts = {}) {
-    // White with a tracked pupil and a highlight; lid closes it from the top for a squint,
-    // dead eyes are a cross.
+    // 3D platformer eye: socket depth, white sclera with top eyelid drop-shadow, glossy iris, dual highlights.
     if (opts.dead) {
-      ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = Math.max(1, rx * 0.35); ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(x - rx * 0.7, y - ry * 0.7); ctx.lineTo(x + rx * 0.7, y + ry * 0.7);
-      ctx.moveTo(x + rx * 0.7, y - ry * 0.7); ctx.lineTo(x - rx * 0.7, y + ry * 0.7); ctx.stroke();
+      ctx.save();
+      ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = Math.max(1.6, rx * 0.4); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x - rx * 0.75, y - ry * 0.75); ctx.lineTo(x + rx * 0.75, y + ry * 0.75);
+      ctx.moveTo(x + rx * 0.75, y - ry * 0.75); ctx.lineTo(x - rx * 0.75, y + ry * 0.75); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = Math.max(0.8, rx * 0.18);
+      ctx.beginPath(); ctx.moveTo(x - rx * 0.7, y - ry * 0.7); ctx.lineTo(x + rx * 0.7, y + ry * 0.7); ctx.stroke();
+      ctx.restore();
       return;
     }
     const lid = clamp(opts.lid || 0, 0, 1);
     ctx.save();
+    // Eye socket shadow ring
+    ctx.fillStyle = 'rgba(30, 16, 10, 0.15)';
+    ctx.beginPath(); ctx.ellipse(x, y, rx * 1.15, ry * 1.15, 0, 0, Math.PI * 2); ctx.fill();
+
     ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
     ctx.fillStyle = opts.white || '#ffffff'; ctx.fill();
-    ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(0.8, rx * 0.16); ctx.stroke();
+    ctx.strokeStyle = '#241206'; ctx.lineWidth = Math.max(0.9, rx * 0.18); ctx.stroke();
     ctx.clip();
-    const px = x + (opts.look ? opts.look.x : 0) * rx * 0.45, py = y + (opts.look ? opts.look.y : 0) * ry * 0.4;
-    if (opts.iris) { ctx.fillStyle = opts.iris; ctx.beginPath(); ctx.ellipse(px, py, rx * 0.62, ry * 0.62, 0, 0, Math.PI * 2); ctx.fill(); }
+
+    // Top eyelid soft drop-shadow inside eyeball
+    const sg = ctx.createLinearGradient(x, y - ry, x, y + ry * 0.5);
+    sg.addColorStop(0, 'rgba(30, 20, 15, 0.28)');
+    sg.addColorStop(1, 'rgba(30, 20, 15, 0)');
+    ctx.fillStyle = sg; ctx.fillRect(x - rx * 1.1, y - ry * 1.1, rx * 2.2, ry * 2.2);
+
+    const px = x + (opts.look ? opts.look.x : 0) * rx * 0.44, py = y + (opts.look ? opts.look.y : 0) * ry * 0.38;
+    if (opts.iris) {
+      const ig = ctx.createRadialGradient(px - rx * 0.1, py - ry * 0.1, 0, px, py, rx * 0.65);
+      ig.addColorStop(0, opts.irisLight || opts.iris);
+      ig.addColorStop(1, opts.iris);
+      ctx.fillStyle = ig; ctx.beginPath(); ctx.ellipse(px, py, rx * 0.65, ry * 0.65, 0, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.fillStyle = opts.pupil || '#1b1b1b';
-    if (opts.slit) { ctx.beginPath(); ctx.ellipse(px, py, rx * 0.18, ry * 0.62, 0, 0, Math.PI * 2); ctx.fill(); }
-    else { ctx.beginPath(); ctx.ellipse(px, py, rx * 0.42, ry * 0.42, 0, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.beginPath(); ctx.ellipse(px - rx * 0.16, py - ry * 0.2, rx * 0.14, ry * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+    if (opts.slit) { ctx.beginPath(); ctx.ellipse(px, py, rx * 0.22, ry * 0.65, 0, 0, Math.PI * 2); ctx.fill(); }
+    else { ctx.beginPath(); ctx.ellipse(px, py, rx * 0.44, ry * 0.44, 0, 0, Math.PI * 2); ctx.fill(); }
+
+    // Dual specular reflections: primary top-left gleam + secondary micro bounce
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath(); ctx.ellipse(px - rx * 0.18, py - ry * 0.2, rx * 0.16, ry * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.ellipse(px + rx * 0.14, py + ry * 0.18, rx * 0.08, ry * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+
     if (lid > 0) {
       ctx.fillStyle = opts.lidColor || '#2a1a0e';
-      ctx.fillRect(x - rx * 1.2, y - ry * 1.2, rx * 2.4, ry * 2.4 * lid * 0.5 + ry * 0.2);
+      ctx.fillRect(x - rx * 1.2, y - ry * 1.2, rx * 2.4, ry * 2.4 * lid * 0.52 + ry * 0.2);
+      ctx.strokeStyle = '#1a0d06'; ctx.lineWidth = Math.max(0.8, rx * 0.14);
+      ctx.beginPath(); ctx.moveTo(x - rx, y - ry * 1.0 + ry * 2.4 * lid * 0.52);
+      ctx.lineTo(x + rx, y - ry * 1.0 + ry * 2.4 * lid * 0.52); ctx.stroke();
     }
     ctx.restore();
   }
+
   function meBrow(x1, y1, x2, y2, w, color) {
+    ctx.save();
     ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    // 3D top edge highlight
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = Math.max(0.6, w * 0.35);
+    ctx.beginPath(); ctx.moveTo(x1, y1 - w * 0.25); ctx.lineTo(x2, y2 - w * 0.25); ctx.stroke();
+    ctx.restore();
   }
-  function meFoot(x, y, w, h, pal, st, lift, color) {
-    ctx.fillStyle = st.ink(color || pal.dark);
-    ctx.strokeStyle = st.ink('#1c1008');
-    ctx.lineWidth = st.line * 0.8;
-    ctx.beginPath(); ctx.ellipse(x, y - h * 0.5 - (lift || 0), w * 0.5, h * 0.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  }
-  function meMouth(x, y, w, open, color, fangs, st) {
-    // A frown/grin that opens into a dark oval; optional fangs poke up from the lower lip.
-    ctx.fillStyle = st.ink(color || '#2a1a0e');
+
+  function meFoot(x, y, w, h, pal, st, lift, color, soleColor) {
+    // Sculpted platformer boot: rounded bulbous toe, leather highlight, welted sole with tread.
+    ctx.save();
+    ctx.translate(x, y - (lift || 0));
+    const by = -h * 0.5;
+    // Sole bottom welt
+    ctx.fillStyle = st.ink(soleColor || pal.bootSole || '#1c0d04');
     ctx.beginPath();
-    if (open > 0.05) ctx.ellipse(x, y, w * 0.5, w * 0.18 + open * w * 0.32, 0, 0, Math.PI * 2);
-    else { ctx.moveTo(x - w * 0.5, y); ctx.quadraticCurveTo(x, y - w * 0.28, x + w * 0.5, y); ctx.quadraticCurveTo(x, y + w * 0.05, x - w * 0.5, y); }
+    ctx.roundRect(-w * 0.52, -h * 0.32, w * 1.04, h * 0.34, h * 0.16);
     ctx.fill();
+    ctx.strokeStyle = st.ink('#140802'); ctx.lineWidth = st.line * 0.7; ctx.stroke();
+
+    // Upper boot leather with radial gradient
+    const bg = ctx.createRadialGradient(-w * 0.2, by - h * 0.15, Math.min(w, h) * 0.1, 0, by, Math.max(w, h) * 0.65);
+    bg.addColorStop(0, st.ink(pal.bootLight || pal.light || '#6d3915'));
+    bg.addColorStop(0.5, st.ink(color || pal.boot || pal.dark));
+    bg.addColorStop(1, st.ink(pal.bootSole || '#1c0d04'));
+    ctx.fillStyle = bg;
+    ctx.strokeStyle = st.ink(pal.bootSole || '#1c0d04');
+    ctx.lineWidth = st.line * 0.8;
+    ctx.beginPath();
+    ctx.ellipse(0, by, w * 0.48, h * 0.44, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+
+    // Toe leather shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.beginPath(); ctx.ellipse(-w * 0.12, by - h * 0.18, w * 0.22, h * 0.14, -0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function meMouth(x, y, w, open, color, fangs, st) {
+    ctx.save();
+    ctx.fillStyle = st.ink(color || '#38121a');
+    ctx.strokeStyle = st.ink('#1b080a');
+    ctx.lineWidth = st.line * 0.75;
+    ctx.beginPath();
+    if (open > 0.05) {
+      ctx.ellipse(x, y, w * 0.5, w * 0.18 + open * w * 0.34, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      // Tongue inside
+      ctx.fillStyle = st.ink('#d95368');
+      ctx.beginPath();
+      ctx.ellipse(x, y + (w * 0.18 + open * w * 0.34) * 0.45, w * 0.32, (w * 0.18 + open * w * 0.34) * 0.45, 0, 0, Math.PI);
+      ctx.fill();
+    } else {
+      ctx.moveTo(x - w * 0.5, y);
+      ctx.quadraticCurveTo(x, y - w * 0.28, x + w * 0.5, y);
+      ctx.quadraticCurveTo(x, y + w * 0.06, x - w * 0.5, y);
+      ctx.fill(); ctx.stroke();
+    }
     if (fangs) {
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = st.ink('#ffffff');
+      ctx.strokeStyle = st.ink('#2a1a0e');
+      ctx.lineWidth = Math.max(0.6, w * 0.06);
       for (const s of [-1, 1]) {
-        ctx.beginPath(); ctx.moveTo(x + s * w * 0.3, y + w * 0.02); ctx.lineTo(x + s * w * 0.2, y - w * 0.2); ctx.lineTo(x + s * w * 0.1, y + w * 0.02); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + s * w * 0.3, y + w * 0.04);
+        ctx.lineTo(x + s * w * 0.2, y - w * 0.22);
+        ctx.lineTo(x + s * w * 0.1, y + w * 0.04);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
       }
     }
+    ctx.restore();
   }
+
   function meShadow(w, h, alpha) {
     ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
     ctx.beginPath(); ctx.ellipse(0, 1, w, h, 0, 0, Math.PI * 2); ctx.fill();
   }
+
   function meSpeedLines(u, vx, y, st) {
-    const n = Math.min(3, Math.floor(Math.abs(vx) / 90));
+    const n = Math.min(4, Math.floor(Math.abs(vx) / 75));
     if (n <= 0) return;
-    ctx.strokeStyle = `rgba(255,255,255,${0.35 * st.k})`; ctx.lineWidth = Math.max(1, u * 0.08); ctx.lineCap = 'round';
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,255,255,${0.45 * st.k})`; ctx.lineWidth = Math.max(1.2, u * 0.08); ctx.lineCap = 'round';
     const dir = -Math.sign(vx) || 1;
     for (let i = 0; i < n; i++) {
-      ctx.beginPath(); ctx.moveTo(dir * u * (1.1 + i * 0.25), y - u * (0.3 - i * 0.3)); ctx.lineTo(dir * u * (1.9 + i * 0.4), y - u * (0.3 - i * 0.3)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(dir * u * (1.1 + i * 0.26), y - u * (0.35 - i * 0.25)); ctx.lineTo(dir * u * (2.1 + i * 0.42), y - u * (0.35 - i * 0.25)); ctx.stroke();
     }
+    ctx.restore();
   }
-  // Walk-cycle helpers: `phase` advances with distance so it slows and stops with the body.
+
   const mePhase = (b) => (b.animT || 0) * Math.PI;
+
+  // ---------------------------------------------------------------- Mario Enemy Renderers
   function drawMarioWalker(b, def, u, pal, st) {
     const t = 1 - st.k;
     if (st.dead) {
-      // Flattened flat, eyes crossed, then fades into the dust.
+      // Accordion pancake squashed onto the floor, eyes crossed, leather boots splayed.
       ctx.globalAlpha = clamp(1.4 - t * 1.6, 0, 1);
-      const flat = 0.28;
-      ctx.save(); ctx.scale(1 + t * 0.35, flat);
-      meBlob(0, -0.95 * u, 1.0 * u, 0.95 * u, pal, st);
-      meSkin(0, -0.65 * u, 0.78 * u, 0.5 * u, pal, st);
+      const flat = 0.26;
+      ctx.save();
+      ctx.scale(1 + t * 0.4, flat);
+      meBlob(0, -0.95 * u, 1.05 * u, 0.95 * u, pal, st);
+      meSkin(0, -0.65 * u, 0.82 * u, 0.52 * u, pal, st);
       ctx.restore();
-      meFoot(-0.5 * u, 0, 0.7 * u, 0.22 * u, pal, st, 0);
-      meFoot(0.5 * u, 0, 0.7 * u, 0.22 * u, pal, st, 0);
-      meEye(-0.3 * u, -0.28 * u, 0.16 * u, 0.12 * u, st, { dead: true });
-      meEye(0.3 * u, -0.28 * u, 0.16 * u, 0.12 * u, st, { dead: true });
+      meFoot(-0.55 * u, 0, 0.72 * u, 0.22 * u, pal, st, 0);
+      meFoot(0.55 * u, 0, 0.72 * u, 0.22 * u, pal, st, 0);
+      meEye(-0.32 * u, -0.26 * u, 0.18 * u, 0.13 * u, st, { dead: true });
+      meEye(0.32 * u, -0.26 * u, 0.18 * u, 0.13 * u, st, { dead: true });
       return;
     }
     const ph = mePhase(b);
     const moving = Math.abs(b.vx) > 4;
     const noticing = b.plan === 'notice' && b.noticeT > 0;
     const bob = moving ? Math.abs(Math.sin(ph)) * u * def.animationProfile.bob * 1.6 : 0;
+    const waddleTilt = moving ? Math.sin(ph) * 0.06 : 0;
     const breath = moving ? 0 : Math.sin(b.breathPhase) * def.animationProfile.breath;
     const sq = st.squash;
-    // Feet alternate: each one swings forward and lifts on its own half of the cycle.
+
+    // Platformer boots: alternate lifting, swing forward and touch down
     const stepL = Math.sin(ph), stepR = -stepL;
-    meFoot(-0.42 * u + (moving ? stepL * 0.28 * u : 0), 0, 0.62 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepL) * 0.16 * u : 0);
-    meFoot(0.42 * u + (moving ? stepR * 0.28 * u : 0), 0, 0.62 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepR) * 0.16 * u : 0);
+    meFoot(-0.42 * u + (moving ? stepL * 0.26 * u : 0), 0, 0.64 * u, 0.32 * u, pal, st, moving ? Math.max(0, stepL) * 0.16 * u : 0);
+    meFoot(0.42 * u + (moving ? stepR * 0.26 * u : 0), 0, 0.64 * u, 0.32 * u, pal, st, moving ? Math.max(0, stepR) * 0.16 * u : 0);
+
     ctx.save();
     ctx.translate(0, -0.18 * u - bob);
+    ctx.rotate(waddleTilt);
     ctx.scale(1 + sq * 0.28 - breath * 0.5, 1 - sq * 0.32 + breath);
-    // Body is mostly head: a tan face under a big domed cap with a slightly flared lip.
-    meSkin(0, -0.72 * u, 0.82 * u, 0.62 * u, pal, st);
-    const cap = ctx.createRadialGradient(-0.35 * u, -1.5 * u, u * 0.1, 0, -1.05 * u, u * 1.25);
-    cap.addColorStop(0, st.ink(pal.light)); cap.addColorStop(0.5, st.ink(pal.body)); cap.addColorStop(1, st.ink(pal.dark));
-    ctx.fillStyle = cap; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
+
+    // Tan sculpted face stalk
+    meSkin(0, -0.72 * u, 0.84 * u, 0.64 * u, pal, st);
+
+    // 3D mushroom cap dome with flared brim and underside shadow
+    const cap = ctx.createRadialGradient(-0.35 * u, -1.6 * u, u * 0.1, 0, -1.1 * u, u * 1.25);
+    cap.addColorStop(0, st.ink(pal.light));
+    cap.addColorStop(0.52, st.ink(pal.body));
+    cap.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = cap;
+    ctx.strokeStyle = st.ink(pal.dark);
+    ctx.lineWidth = st.line;
     ctx.beginPath();
-    ctx.moveTo(-1.02 * u, -0.82 * u);
-    ctx.quadraticCurveTo(-1.05 * u, -1.05 * u, -0.85 * u, -1.35 * u);
-    ctx.quadraticCurveTo(-0.5 * u, -1.98 * u, 0, -1.98 * u);
-    ctx.quadraticCurveTo(0.5 * u, -1.98 * u, 0.85 * u, -1.35 * u);
-    ctx.quadraticCurveTo(1.05 * u, -1.05 * u, 1.02 * u, -0.82 * u);
-    ctx.quadraticCurveTo(0.5 * u, -0.95 * u, 0, -0.9 * u);
-    ctx.quadraticCurveTo(-0.5 * u, -0.95 * u, -1.02 * u, -0.82 * u);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    // Face: big eyes with tracked pupils, heavy angry brows (raised when it notices Mario).
+    ctx.moveTo(-1.05 * u, -0.85 * u);
+    ctx.quadraticCurveTo(-1.08 * u, -1.1 * u, -0.88 * u, -1.4 * u);
+    ctx.quadraticCurveTo(-0.52 * u, -2.02 * u, 0, -2.02 * u);
+    ctx.quadraticCurveTo(0.52 * u, -2.02 * u, 0.88 * u, -1.4 * u);
+    ctx.quadraticCurveTo(1.08 * u, -1.1 * u, 1.05 * u, -0.85 * u);
+    ctx.quadraticCurveTo(0.5 * u, -0.98 * u, 0, -0.92 * u);
+    ctx.quadraticCurveTo(-0.5 * u, -0.98 * u, -1.05 * u, -0.85 * u);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // Underside cap rim/collar flange (rim curl)
+    ctx.fillStyle = st.ink(pal.dark);
+    ctx.beginPath();
+    ctx.ellipse(0, -0.9 * u, 0.95 * u, 0.12 * u, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Cap highlight curve along the upper crest
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = Math.max(1, u * 0.08);
+    ctx.beginPath();
+    ctx.ellipse(-0.15 * u, -1.55 * u, 0.68 * u, 0.38 * u, -0.25, Math.PI * 1.1, Math.PI * 1.85);
+    ctx.stroke();
+
+    // Expressive face: big almond eyes with tracked pupils
     const lid = noticing ? 0 : 0.12;
-    meEye(-0.3 * u, -0.6 * u, 0.2 * u, 0.24 * u, st, { look: st.look, lid, lidColor: pal.skinDark });
-    meEye(0.3 * u, -0.6 * u, 0.2 * u, 0.24 * u, st, { look: st.look, lid, lidColor: pal.skinDark });
-    const browLift = noticing ? -0.12 * u : 0;
-    meBrow(-0.55 * u, -0.98 * u + browLift, -0.1 * u, -0.86 * u + browLift * 0.5, st.line * 2.2, st.ink('#2a1a0e'));
-    meBrow(0.55 * u, -0.98 * u + browLift, 0.1 * u, -0.86 * u + browLift * 0.5, st.line * 2.2, st.ink('#2a1a0e'));
-    meMouth(0, -0.3 * u, 0.6 * u, noticing ? 0.5 : 0, '#2a1a0e', !noticing, st);
+    meEye(-0.3 * u, -0.6 * u, 0.22 * u, 0.25 * u, st, { look: st.look, lid, lidColor: pal.skinDark });
+    meEye(0.3 * u, -0.6 * u, 0.22 * u, 0.25 * u, st, { look: st.look, lid, lidColor: pal.skinDark });
+
+    // Fierce sculpted 3D brows (raise high in surprise when noticing Mario)
+    const browLift = noticing ? -0.14 * u : 0;
+    meBrow(-0.58 * u, -0.98 * u + browLift, -0.08 * u, -0.85 * u + browLift * 0.5, st.line * 2.3, st.ink('#2a1a0e'));
+    meBrow(0.58 * u, -0.98 * u + browLift, 0.08 * u, -0.85 * u + browLift * 0.5, st.line * 2.3, st.ink('#2a1a0e'));
+
+    // Grumpy mouth with two upward fangs
+    meMouth(0, -0.28 * u, 0.62 * u, noticing ? 0.55 : 0, '#2a1a0e', !noticing, st);
     ctx.restore();
   }
+
   function drawMarioShell(b, def, u, pal, st) {
     const t = 1 - st.k;
     const shellCore = (cx, cy, rx, ry, rot) => {
-      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot || 0);
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (rot) ctx.rotate(rot);
+
+      // Carapace 3D dome
       meBlob(0, 0, rx, ry, pal, st);
-      // Plate lines and a pale rim on the underside.
-      ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
-      ctx.beginPath(); ctx.ellipse(0, ry * 0.05, rx * 0.62, ry * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, -ry * 0.9); ctx.lineTo(0, ry * 0.85);
-      ctx.moveTo(-rx * 0.85, ry * 0.1); ctx.lineTo(-rx * 0.55, -ry * 0.05); ctx.moveTo(rx * 0.85, ry * 0.1); ctx.lineTo(rx * 0.55, -ry * 0.05); ctx.stroke();
-      ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark);
-      ctx.beginPath(); ctx.ellipse(0, ry * 0.78, rx * 0.95, ry * 0.3, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      // Hexagonal scute plates with embossed ridges
+      ctx.strokeStyle = st.ink(pal.scute || pal.dark);
+      ctx.lineWidth = st.line * 0.85;
+      ctx.beginPath();
+      // Center hexagon
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3;
+        const hx = Math.cos(a) * rx * 0.48, hy = Math.sin(a) * ry * 0.44;
+        if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath(); ctx.stroke();
+
+      // Radial scute dividers
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * rx * 0.48, Math.sin(a) * ry * 0.44);
+        ctx.lineTo(Math.cos(a) * rx * 0.9, Math.sin(a) * ry * 0.88);
+        ctx.stroke();
+      }
+
+      // Thick cream/white flared shell collar/rim along the underside with drop-shadow
+      ctx.fillStyle = st.ink(pal.rimDark || '#c8ccb0');
+      ctx.beginPath();
+      ctx.ellipse(0, ry * 0.82, rx * 1.02, ry * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const rg = ctx.createLinearGradient(0, ry * 0.6, 0, ry * 0.92);
+      rg.addColorStop(0, st.ink(pal.rim || '#ffffff'));
+      rg.addColorStop(1, st.ink(pal.rimDark || '#d6d6ca'));
+      ctx.fillStyle = rg;
+      ctx.strokeStyle = st.ink(pal.dark);
+      ctx.lineWidth = st.line * 0.8;
+      ctx.beginPath();
+      ctx.ellipse(0, ry * 0.76, rx * 0.98, ry * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
       ctx.restore();
     };
+
     if (st.dead) {
-      // Flips upside down, spins out and fades.
       ctx.globalAlpha = clamp(1.3 - t * 1.4, 0, 1);
       const lift = Math.sin(Math.min(1, t * 1.6) * Math.PI) * u * 1.2;
-      shellCore(0, -0.72 * u - lift, 0.95 * u, 0.68 * u, Math.PI + (b.deathSpin || 0) * 0.8);
+      shellCore(0, -0.72 * u - lift, 0.95 * u, 0.68 * u, Math.PI + (b.deathSpin || 0) * 0.85);
       return;
     }
+
     const s = b.shellState;
     const sq = st.squash;
+
     if (s === 'walk' || s === 'retract') {
-      const k = s === 'retract' ? clamp(1 - b.shellT / def.retractTime, 0, 1) : 0;   // 0 out .. 1 tucked
+      const k = s === 'retract' ? clamp(1 - b.shellT / def.retractTime, 0, 1) : 0; // 0 out .. 1 tucked
       const ph = mePhase(b);
       const moving = Math.abs(b.vx) > 4;
       const bob = moving ? Math.abs(Math.sin(ph)) * u * def.animationProfile.bob * 1.5 : 0;
       const breath = moving ? 0 : Math.sin(b.breathPhase) * def.animationProfile.breath;
       const stepL = Math.sin(ph), stepR = -stepL;
-      // Legs and feet tuck up into the shell over the retract beat.
+
+      // Legs retract into the shell
       const legs = 1 - k;
       ctx.save();
       ctx.translate(0, (1 - legs) * 0.55 * u);
       if (legs > 0.05) {
         ctx.save(); ctx.scale(1, legs);
-        meFoot(-0.38 * u + (moving ? stepL * 0.25 * u : 0), 0, 0.55 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepL) * 0.14 * u : 0, pal.skinDark);
-        meFoot(0.42 * u + (moving ? stepR * 0.25 * u : 0), 0, 0.55 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepR) * 0.14 * u : 0, pal.skinDark);
+        meFoot(-0.38 * u + (moving ? stepL * 0.25 * u : 0), 0, 0.56 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepL) * 0.14 * u : 0, pal.skinDark);
+        meFoot(0.42 * u + (moving ? stepR * 0.25 * u : 0), 0, 0.56 * u, 0.3 * u, pal, st, moving ? Math.max(0, stepR) * 0.14 * u : 0, pal.skinDark);
         ctx.restore();
       }
       ctx.translate(0, -bob);
       ctx.scale(1 + sq * 0.25 - breath * 0.5, 1 - sq * 0.3 + breath);
-      // Belly in front of the shell, shell on the back.
-      meSkin(0.15 * u, -0.95 * u, 0.5 * u, 0.68 * u, pal, st);
-      shellCore(-0.25 * u, -1.25 * u, 0.85 * u, 0.78 * u, 0);
-      // Arm, head and beak scale into the shell on retract.
+
+      // Plastron (yellow/cream belly) with horizontal muscle plates
+      meSkin(0.18 * u, -0.98 * u, 0.52 * u, 0.7 * u, pal, st);
+      ctx.strokeStyle = st.ink(pal.bellyDark || pal.skinDark);
+      ctx.lineWidth = st.line * 0.75;
+      for (const yy of [-1.35, -1.05, -0.75]) {
+        ctx.beginPath(); ctx.moveTo(-0.15 * u, yy * u); ctx.quadraticCurveTo(0.2 * u, (yy + 0.08) * u, 0.55 * u, yy * u); ctx.stroke();
+      }
+
+      // Shell on the back
+      shellCore(-0.25 * u, -1.25 * u, 0.86 * u, 0.78 * u, 0);
+
+      // Arm, head and beak scale into the shell on retract
       const hs = 1 - k;
       if (hs > 0.03) {
-        ctx.save(); ctx.translate(0.45 * u, -1.55 * u); ctx.scale(hs, hs); ctx.translate(-0.45 * u, 1.55 * u);
+        ctx.save();
+        ctx.translate(0.45 * u, -1.55 * u);
+        ctx.scale(hs, hs);
+        ctx.translate(-0.45 * u, 1.55 * u);
+
+        // Arm and hand
         ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
-        ctx.beginPath(); ctx.ellipse(0.55 * u, -1.15 * u, 0.16 * u, 0.28 * u, 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        // Neck and head, with a small beak-like snout, tracking Mario with the eye.
-        ctx.beginPath(); ctx.ellipse(0.45 * u, -1.75 * u, 0.22 * u, 0.3 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        meSkin(0.55 * u, -2.05 * u, 0.44 * u, 0.4 * u, pal, st);
+        ctx.beginPath(); ctx.ellipse(0.56 * u, -1.15 * u, 0.18 * u, 0.3 * u, 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+        // Neck
+        ctx.beginPath(); ctx.ellipse(0.45 * u, -1.75 * u, 0.24 * u, 0.32 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+        // Reptilian head with snout
+        meSkin(0.55 * u, -2.05 * u, 0.46 * u, 0.42 * u, pal, st);
         ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark);
-        ctx.beginPath(); ctx.ellipse(0.92 * u, -1.98 * u, 0.24 * u, 0.17 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = st.ink('#2a1a0e'); ctx.beginPath(); ctx.arc(1.04 * u, -1.98 * u, 0.04 * u, 0, Math.PI * 2); ctx.fill();
-        meEye(0.62 * u, -2.12 * u, 0.15 * u, 0.18 * u, st, { look: st.look, lid: b.plan === 'notice' ? 0 : 0.15, lidColor: pal.skinDark });
-        meBrow(0.45 * u, -2.36 * u, 0.78 * u, -2.32 * u, st.line * 1.6, st.ink('#2a1a0e'));
+        ctx.beginPath(); ctx.ellipse(0.94 * u, -1.98 * u, 0.25 * u, 0.18 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // Nostril
+        ctx.fillStyle = st.ink('#2a1a0e'); ctx.beginPath(); ctx.arc(1.06 * u, -1.98 * u, 0.04 * u, 0, Math.PI * 2); ctx.fill();
+
+        // Expressive eyes and brow
+        meEye(0.64 * u, -2.12 * u, 0.16 * u, 0.2 * u, st, { look: st.look, lid: b.plan === 'notice' ? 0 : 0.14, lidColor: pal.skinDark });
+        meBrow(0.45 * u, -2.36 * u, 0.82 * u, -2.32 * u, st.line * 1.6, st.ink('#2a1a0e'));
         ctx.restore();
       }
       ctx.restore();
       return;
     }
-    // Shelled / kicked / sliding / bouncing / hit: just the shell, a physics object.
+
+    // Shelled / Kicked / Sliding / Bouncing / Hit physics object
     const wob = (b.wobble || 0) * Math.sin(pet.t * 16) * 0.12;
     const spinning = s === 'kick' || s === 'sliding' || s === 'bouncing' || s === 'hit';
     if (spinning) meSpeedLines(u, b.vx, -0.7 * u, st);
     ctx.save();
     ctx.scale(1 + sq * 0.3, 1 - sq * 0.3);
     shellCore(0, -0.72 * u, 0.95 * u, 0.68 * u, spinning ? b.spinAngle : wob);
-    if (s === 'hit') { ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, -0.72 * u, u, 0.72 * u, 0, 0, Math.PI * 2); ctx.fill(); }
+    if (s === 'hit') {
+      ctx.globalAlpha = 0.55; ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.ellipse(0, -0.72 * u, u * 1.05, 0.74 * u, 0, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   }
+
   function drawMarioFlying(b, def, u, pal, st) {
     const t = 1 - st.k;
-    const tilt = st.dead ? (b.deathSpin || 0) : clamp(b.vx / Math.max(1, b.speed), -1, 1) * 0.22 - clamp((b.altVy || 0) / 200, -1, 1) * 0.1;
+    const tilt = st.dead ? (b.deathSpin || 0) : clamp(b.vx / Math.max(1, b.speed), -1, 1) * 0.24 - clamp((b.altVy || 0) / 200, -1, 1) * 0.12;
     const cy = -1.05 * u;
     ctx.save();
     if (st.dead) ctx.globalAlpha = clamp(1.4 - t * 1.5, 0, 1);
     ctx.translate(0, cy); ctx.rotate(tilt); ctx.translate(0, -cy);
-    // Wings: an asymmetric flap - a fast down-stroke and a slower recovery - so they read
-    // as beating, not oscillating. Folded when diving hard or dead.
+
+    // Layered wings with dynamic flap cycle: snappy downstroke and slower recovery
     const p = ((b.flap || 0) % (Math.PI * 2)) / (Math.PI * 2);
     let ang = p < 0.35 ? lerp(0.75, -0.55, 1 - Math.pow(1 - p / 0.35, 2)) : lerp(-0.55, 0.75, (p - 0.35) / 0.65);
     if (b.flyState === 'dive' && !st.dead) ang = 0.95;
-    if (st.dead) ang = 1.25;
+    if (st.dead) ang = 1.28;
+
     for (const side of [-1, 1]) {
       ctx.save();
       ctx.translate(side * 0.5 * u, -1.55 * u);
       ctx.rotate(side * -ang);
-      const wg = ctx.createLinearGradient(0, 0, side * 1.2 * u, 0);
-      wg.addColorStop(0, 'rgba(255,255,255,0.95)'); wg.addColorStop(1, 'rgba(225,232,255,0.8)');
-      ctx.fillStyle = st.ink('#ffffff'); ctx.fillStyle = wg; ctx.strokeStyle = st.ink('#5a6a8a'); ctx.lineWidth = st.line * 0.8;
+
+      // Primary wing feather layer
+      const wg = ctx.createLinearGradient(0, 0, side * 1.25 * u, -0.6 * u);
+      wg.addColorStop(0, st.ink('#ffffff'));
+      wg.addColorStop(0.6, st.ink(pal.wingMid || '#dbeafe'));
+      wg.addColorStop(1, st.ink(pal.wingDark || '#93c5fd'));
+      ctx.fillStyle = wg;
+      ctx.strokeStyle = st.ink(pal.wingStroke || '#475569');
+      ctx.lineWidth = st.line * 0.85;
+
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.quadraticCurveTo(side * 0.7 * u, -0.85 * u, side * 1.35 * u, -0.55 * u);
-      ctx.quadraticCurveTo(side * 1.1 * u, -0.15 * u, side * 0.55 * u, 0.12 * u);
+      ctx.quadraticCurveTo(side * 0.72 * u, -0.9 * u, side * 1.4 * u, -0.58 * u);
+      ctx.quadraticCurveTo(side * 1.15 * u, -0.16 * u, side * 0.58 * u, 0.14 * u);
       ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(side * 0.2 * u, -0.05 * u); ctx.lineTo(side * 0.95 * u, -0.5 * u); ctx.stroke();
+
+      // Secondary feather vane lines
+      ctx.beginPath();
+      ctx.moveTo(side * 0.25 * u, -0.05 * u); ctx.lineTo(side * 1.05 * u, -0.52 * u);
+      ctx.moveTo(side * 0.45 * u, -0.02 * u); ctx.lineTo(side * 0.95 * u, -0.32 * u);
+      ctx.stroke();
       ctx.restore();
     }
-    // Dangling feet swing with the beat.
+
+    // Dangling feet swinging with flap cycle
     const swing = Math.sin((b.flap || 0) * 0.5) * 0.12 * u;
-    meFoot(-0.3 * u + swing, -0.05 * u, 0.36 * u, 0.22 * u, pal, st, 0, pal.skinDark);
-    meFoot(0.32 * u - swing, -0.05 * u, 0.36 * u, 0.22 * u, pal, st, 0, pal.skinDark);
-    // Helmet-shell body with a cream face band underneath.
-    meSkin(0, -0.72 * u, 0.72 * u, 0.42 * u, pal, st);
-    const dome = ctx.createRadialGradient(-0.3 * u, -1.5 * u, u * 0.1, 0, -1.1 * u, u * 1.05);
-    dome.addColorStop(0, st.ink(pal.light)); dome.addColorStop(0.55, st.ink(pal.body)); dome.addColorStop(1, st.ink(pal.dark));
-    ctx.fillStyle = dome; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
-    ctx.beginPath(); ctx.ellipse(0, -1.05 * u, 0.88 * u, 0.72 * u, 0, Math.PI, Math.PI * 2); ctx.lineTo(0.88 * u, -0.9 * u);
-    ctx.quadraticCurveTo(0, -0.7 * u, -0.88 * u, -0.9 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
-    ctx.beginPath(); ctx.ellipse(0, -1.05 * u, 0.6 * u, 0.42 * u, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
-    // Eyes peek from under the rim; narrowed in a dive.
+    meFoot(-0.3 * u + swing, -0.05 * u, 0.38 * u, 0.24 * u, pal, st, 0, pal.skinDark);
+    meFoot(0.32 * u - swing, -0.05 * u, 0.38 * u, 0.24 * u, pal, st, 0, pal.skinDark);
+
+    // Cream face band underneath
+    meSkin(0, -0.72 * u, 0.74 * u, 0.44 * u, pal, st);
+
+    // Aerodynamic helmet/shell dome
+    const dome = ctx.createRadialGradient(-0.3 * u, -1.55 * u, u * 0.1, 0, -1.1 * u, u * 1.1);
+    dome.addColorStop(0, st.ink(pal.light));
+    dome.addColorStop(0.55, st.ink(pal.body));
+    dome.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = dome;
+    ctx.strokeStyle = st.ink(pal.dark);
+    ctx.lineWidth = st.line;
+    ctx.beginPath();
+    ctx.ellipse(0, -1.05 * u, 0.9 * u, 0.74 * u, 0, Math.PI, Math.PI * 2);
+    ctx.lineTo(0.9 * u, -0.9 * u);
+    ctx.quadraticCurveTo(0, -0.7 * u, -0.9 * u, -0.9 * u);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // Specular sheen along dome crest
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+    ctx.lineWidth = Math.max(1, u * 0.075);
+    ctx.beginPath();
+    ctx.ellipse(-0.15 * u, -1.45 * u, 0.6 * u, 0.28 * u, -0.2, Math.PI * 1.1, Math.PI * 1.85);
+    ctx.stroke();
+
+    // Eyes peeking out under the helmet rim
     const lid = b.flyState === 'dive' ? 0.45 : 0.1;
-    meEye(-0.26 * u, -0.78 * u, 0.15 * u, 0.15 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
-    meEye(0.26 * u, -0.78 * u, 0.15 * u, 0.15 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
-    if (!st.dead) meMouth(0.02 * u, -0.5 * u, 0.32 * u, b.flyState === 'dive' ? 0.5 : 0, '#2a1a0e', false, st);
+    meEye(-0.28 * u, -0.78 * u, 0.16 * u, 0.16 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    meEye(0.28 * u, -0.78 * u, 0.16 * u, 0.16 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    if (!st.dead) meMouth(0.02 * u, -0.5 * u, 0.34 * u, b.flyState === 'dive' ? 0.5 : 0, '#2a1a0e', false, st);
     ctx.restore();
   }
+
   function drawMarioJumping(b, def, u, pal, st) {
     const t = 1 - st.k;
     const ph = b.jumpPhase;
-    // Pose numbers per phase: body squash/stretch, leg bend (0 straight .. 1 folded), lean.
     let sx = 1, sy = 1, bend = 0.55, lean = 0, ear = 0, lid = 0.1;
     const dir = b.jumpDir || 1;
-    if (ph === 'anticipation') { const k = 1 - b.jumpT / def.anticipation; sx = 1 + 0.2 * k; sy = 1 - 0.25 * k; bend = 0.95; ear = -0.5; lid = 0.4; }
-    else if (ph === 'launch') { sx = 0.86; sy = 1.22; bend = 0; ear = 0.4; }
-    else if (ph === 'ascending') { sx = 0.92; sy = 1.1; bend = 0.15; lean = -0.1 * dir; ear = 0.5; }
-    else if (ph === 'apex') { bend = 0.4; ear = 0.2; }
-    else if (ph === 'descending') { sx = 0.96; sy = 1.04; bend = 0.1; lean = 0.08 * dir; ear = -0.2; lid = 0; }
-    else if (ph === 'landing') { const k = b.jumpT / 0.14; sx = 1 + 0.35 * k; sy = 1 - 0.38 * k; bend = 1; ear = -0.6; lid = 0.3; }
-    else if (ph === 'recovery') { const k = b.jumpT / def.recovery; sx = 1 + 0.1 * k; sy = 1 - 0.1 * k; bend = 0.7; }
-    else { const breath = Math.sin(b.breathPhase) * def.animationProfile.breath; sx = 1 - breath * 0.5; sy = 1 + breath; }
-    const sq = st.squash; sx *= 1 + sq * 0.25; sy *= 1 - sq * 0.3;
+
+    if (ph === 'anticipation') {
+      const k = 1 - b.jumpT / def.anticipation;
+      sx = 1 + 0.22 * k; sy = 1 - 0.26 * k; bend = 0.95; ear = -0.55; lid = 0.42;
+    } else if (ph === 'launch') {
+      sx = 0.85; sy = 1.24; bend = 0; ear = 0.45;
+    } else if (ph === 'ascending') {
+      sx = 0.91; sy = 1.12; bend = 0.15; lean = -0.1 * dir; ear = 0.52;
+    } else if (ph === 'apex') {
+      bend = 0.4; ear = 0.2;
+    } else if (ph === 'descending') {
+      sx = 0.95; sy = 1.05; bend = 0.1; lean = 0.08 * dir; ear = -0.22; lid = 0;
+    } else if (ph === 'landing') {
+      const k = b.jumpT / 0.14;
+      sx = 1 + 0.36 * k; sy = 1 - 0.39 * k; bend = 1; ear = -0.62; lid = 0.32;
+    } else if (ph === 'recovery') {
+      const k = b.jumpT / def.recovery;
+      sx = 1 + 0.1 * k; sy = 1 - 0.1 * k; bend = 0.7;
+    } else {
+      const breath = Math.sin(b.breathPhase) * def.animationProfile.breath;
+      sx = 1 - breath * 0.5; sy = 1 + breath;
+    }
+
+    const sq = st.squash;
+    sx *= 1 + sq * 0.25; sy *= 1 - sq * 0.3;
+
     ctx.save();
     if (st.dead) {
       ctx.globalAlpha = clamp(1.4 - t * 1.5, 0, 1);
@@ -10713,88 +11001,127 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       bend = 0.2; lid = 0;
     }
     ctx.rotate(lean);
-    // Legs: hip -> knee -> foot as thick rounded strokes, feet as pads. Bend folds them.
+
+    // Segmented jointed legs with thighs, knees, and padded feet
     const hipY = -0.75 * u * sy, footY = 0;
     const kneeY = lerp(footY - 0.55 * u, hipY + 0.15 * u, bend);
     ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = u * 0.22; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const side of [-1, 1]) {
       const hipX = side * 0.32 * u * sx, kneeX = side * (0.55 + bend * 0.25) * u * sx, footX = side * 0.42 * u * sx;
       ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(kneeX, kneeY); ctx.lineTo(footX, footY - 0.1 * u); ctx.stroke();
-      meFoot(footX + side * 0.05 * u, footY, 0.5 * u, 0.24 * u, pal, st, 0, pal.body);
+      meFoot(footX + side * 0.05 * u, footY, 0.52 * u, 0.26 * u, pal, st, 0, pal.body);
     }
+
     ctx.save();
     ctx.translate(0, -1.15 * u * sy);
     ctx.scale(sx, sy);
-    // Pointed ears swing with the jump.
-    ctx.fillStyle = st.ink(pal.body); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
+
+    // Floppy ears swinging with the jump momentum
     for (const side of [-1, 1]) {
-      ctx.save(); ctx.translate(side * 0.45 * u, -0.5 * u); ctx.rotate(side * (0.35 - ear * 0.5));
-      ctx.beginPath(); ctx.moveTo(-0.16 * u, 0); ctx.lineTo(0, -0.55 * u); ctx.lineTo(0.16 * u, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.save();
+      ctx.translate(side * 0.45 * u, -0.5 * u);
+      ctx.rotate(side * (0.35 - ear * 0.5));
+      ctx.fillStyle = st.ink(pal.body); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.85;
+      ctx.beginPath(); ctx.moveTo(-0.16 * u, 0); ctx.lineTo(0, -0.58 * u); ctx.lineTo(0.16 * u, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // Inner ear canal
+      ctx.fillStyle = st.ink(pal.earInner || '#fbcfe8');
+      ctx.beginPath(); ctx.moveTo(-0.08 * u, -0.05 * u); ctx.lineTo(0, -0.48 * u); ctx.lineTo(0.08 * u, -0.05 * u); ctx.closePath(); ctx.fill();
       ctx.restore();
     }
-    meBlob(0, 0, 0.78 * u, 0.72 * u, pal, st);
-    meSkin(0.08 * u, 0.18 * u, 0.5 * u, 0.38 * u, pal, st);
-    meEye(-0.2 * u, -0.1 * u, 0.17 * u, 0.2 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
-    meEye(0.3 * u, -0.1 * u, 0.17 * u, 0.2 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
-    meMouth(0.12 * u, 0.28 * u, 0.36 * u, ph === 'descending' || ph === 'launch' ? 0.6 : 0, '#2a1a0e', false, st);
+
+    meBlob(0, 0, 0.8 * u, 0.74 * u, pal, st);
+    meSkin(0.08 * u, 0.18 * u, 0.52 * u, 0.4 * u, pal, st);
+    meEye(-0.2 * u, -0.1 * u, 0.18 * u, 0.22 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    meEye(0.3 * u, -0.1 * u, 0.18 * u, 0.22 * u, st, { look: st.look, lid, lidColor: pal.dark, dead: st.dead });
+    meMouth(0.12 * u, 0.28 * u, 0.38 * u, ph === 'descending' || ph === 'launch' ? 0.65 : 0, '#2a1a0e', false, st);
     ctx.restore();
     ctx.restore();
   }
+
   function drawMarioAmbush(b, def, u, pal, st) {
     const t = 1 - st.k;
     const rise = st.dead ? clamp(1 - t * 2.2, 0, 1) : clamp(b.ambushRise || 0, 0, 1);
     const holeW = st.dead ? 0.95 * u * clamp(1.5 - t * 1.5, 0, 1) : 0.95 * u;
-    // The burrow: an earthen mound with a dark hole, drawn in two halves around the body.
-    ctx.fillStyle = st.ink('#6b4a2e'); ctx.strokeStyle = st.ink('#3a2412'); ctx.lineWidth = st.line * 0.8;
-    ctx.beginPath(); ctx.ellipse(0, 0, holeW * 1.25, 0.4 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#10201e';
-    ctx.beginPath(); ctx.ellipse(0, 0, holeW, 0.3 * u, 0, 0, Math.PI * 2); ctx.fill();
+
+    // The earthen burrow mound
+    const mg = ctx.createLinearGradient(0, -0.4 * u, 0, 0.1 * u);
+    mg.addColorStop(0, st.ink('#7c5230'));
+    mg.addColorStop(1, st.ink('#3d2210'));
+    ctx.fillStyle = mg; ctx.strokeStyle = st.ink('#251205'); ctx.lineWidth = st.line * 0.85;
+    ctx.beginPath(); ctx.ellipse(0, 0, holeW * 1.28, 0.42 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Dark cavernous hole interior
+    ctx.fillStyle = '#0a1715';
+    ctx.beginPath(); ctx.ellipse(0, 0, holeW, 0.32 * u, 0, 0, Math.PI * 2); ctx.fill();
+
     if (rise <= 0.001 && st.dead) return;
     const hiddenH = def.hitbox.hiddenH * u, fullH = def.hitbox.h * u;
     const drop = (1 - rise) * (fullH - hiddenH);
     const s = b.ambushState;
     const attacking = s === 'attacking' && !st.dead;
     const dir = Math.sign(b.vx) || 1;
+
     ctx.save();
-    // Nothing below the ground line is visible: it is in the burrow.
-    ctx.beginPath(); ctx.rect(-3 * u, -6 * u, 6 * u, 6 * u); ctx.clip();
+    // Clip at ground level so inside of burrow stays hidden
+    ctx.beginPath(); ctx.rect(-3.5 * u, -6.5 * u, 7 * u, 6.5 * u); ctx.clip();
     ctx.translate(0, drop);
-    if (attacking) { ctx.translate(dir * 0.25 * u, 0); ctx.rotate(dir * 0.14); }
+    if (attacking) { ctx.translate(dir * 0.28 * u, 0); ctx.rotate(dir * 0.15); }
+
     const sq = st.squash;
     ctx.scale(1 + sq * 0.2, 1 - sq * 0.2);
-    // Leafy fins at the sides.
-    ctx.fillStyle = st.ink(pal.dark); ctx.strokeStyle = st.ink('#0b2a27'); ctx.lineWidth = st.line * 0.7;
+
+    // Segmented flexible stalk with side leafy fins
+    ctx.fillStyle = st.ink(pal.stem || pal.dark); ctx.strokeStyle = st.ink(pal.stemDark || '#042f2c'); ctx.lineWidth = st.line * 0.75;
     for (const side of [-1, 1]) {
-      ctx.save(); ctx.translate(side * 0.6 * u, -1.05 * u); ctx.rotate(side * (0.9 + Math.sin(b.breathPhase) * 0.08));
-      ctx.beginPath(); ctx.ellipse(0, -0.35 * u, 0.2 * u, 0.42 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.save();
+      ctx.translate(side * 0.62 * u, -1.05 * u);
+      ctx.rotate(side * (0.92 + Math.sin(b.breathPhase) * 0.09));
+      ctx.beginPath(); ctx.ellipse(0, -0.36 * u, 0.22 * u, 0.44 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.restore();
     }
-    // Tall bulb body, mouth in front with two rows of teeth, slit-pupil eyes on top.
+
     const breath = s === 'hidden' ? 0 : Math.sin(b.breathPhase) * def.animationProfile.breath;
     ctx.save(); ctx.translate(0, -1.3 * u); ctx.scale(1 - breath * 0.5, 1 + breath); ctx.translate(0, 1.3 * u);
-    meBlob(0, -1.3 * u, 0.72 * u, 1.02 * u, pal, st);
-    const open = attacking ? 0.9 : (s === 'active' ? 0.35 : 0.1);
-    const mw = 0.9 * u, mh = (0.12 + open * 0.34) * u;
-    ctx.fillStyle = st.ink('#3a0d1c'); ctx.strokeStyle = st.ink('#0b2a27'); ctx.lineWidth = st.line * 0.8;
+
+    // Bulbous pod head with spotted pattern
+    meBlob(0, -1.3 * u, 0.74 * u, 1.05 * u, pal, st);
+
+    // Spotted skin texture
+    ctx.fillStyle = st.ink(pal.spot || '#99f6e4');
+    ctx.globalAlpha = 0.5;
+    for (const [sx, sy, sr] of [[-0.4, -1.6, 0.12], [0.35, -1.7, 0.1], [-0.2, -0.9, 0.08], [0.42, -1.1, 0.12]]) {
+      ctx.beginPath(); ctx.arc(sx * u, sy * u, sr * u, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
+
+    // Gaping jaws lined with sharp white triangular teeth
+    const open = attacking ? 0.95 : s === 'active' ? 0.38 : 0.1;
+    const mw = 0.94 * u, mh = (0.12 + open * 0.36) * u;
+    ctx.fillStyle = st.ink(pal.mouth || '#4c0519'); ctx.strokeStyle = st.ink(pal.lips || '#042f2c'); ctx.lineWidth = st.line * 0.85;
     ctx.beginPath(); ctx.ellipse(0.15 * u, -1.0 * u, mw * 0.5, mh, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#ffffff';
+
+    ctx.fillStyle = st.ink(pal.tooth || '#ffffff');
+    ctx.strokeStyle = st.ink('#1c0a10'); ctx.lineWidth = Math.max(0.6, u * 0.04);
     for (let i = 0; i < 4; i++) {
       const tx = 0.15 * u - mw * 0.36 + i * mw * 0.24;
-      ctx.beginPath(); ctx.moveTo(tx - 0.07 * u, -1.0 * u - mh); ctx.lineTo(tx, -1.0 * u - mh * 0.35); ctx.lineTo(tx + 0.07 * u, -1.0 * u - mh); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(tx + 0.05 * u, -1.0 * u + mh); ctx.lineTo(tx + 0.12 * u, -1.0 * u + mh * 0.35); ctx.lineTo(tx + 0.19 * u, -1.0 * u + mh); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(tx - 0.08 * u, -1.0 * u - mh); ctx.lineTo(tx, -1.0 * u - mh * 0.35); ctx.lineTo(tx + 0.08 * u, -1.0 * u - mh); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tx + 0.04 * u, -1.0 * u + mh); ctx.lineTo(tx + 0.12 * u, -1.0 * u + mh * 0.35); ctx.lineTo(tx + 0.2 * u, -1.0 * u + mh); ctx.closePath(); ctx.fill(); ctx.stroke();
     }
+
     const blink = s === 'hidden' && Math.sin(b.breathPhase * 1.7) > 0.93;
-    const lid = st.dead ? 0 : (s === 'retreating' ? 0.5 : blink ? 0.95 : 0.1);
-    meEye(-0.3 * u, -2.0 * u, 0.17 * u, 0.2 * u, st, { look: st.look, iris: pal.eye, slit: true, lid, lidColor: pal.dark, dead: st.dead });
-    meEye(0.3 * u, -2.0 * u, 0.17 * u, 0.2 * u, st, { look: st.look, iris: pal.eye, slit: true, lid, lidColor: pal.dark, dead: st.dead });
+    const lid = st.dead ? 0 : s === 'retreating' ? 0.5 : blink ? 0.95 : 0.1;
+    meEye(-0.3 * u, -2.02 * u, 0.18 * u, 0.22 * u, st, { look: st.look, iris: pal.eye, slit: true, lid, lidColor: pal.dark, dead: st.dead });
+    meEye(0.3 * u, -2.02 * u, 0.18 * u, 0.22 * u, st, { look: st.look, iris: pal.eye, slit: true, lid, lidColor: pal.dark, dead: st.dead });
     ctx.restore();
     ctx.restore();
-    // Front lip of the burrow over the body's base.
-    ctx.fillStyle = st.ink('#5a3d24'); ctx.strokeStyle = st.ink('#3a2412'); ctx.lineWidth = st.line * 0.8;
-    ctx.beginPath(); ctx.ellipse(0, 0.02 * u, holeW * 1.25, 0.4 * u, 0, 0, Math.PI); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#10201e';
-    ctx.beginPath(); ctx.ellipse(0, 0, holeW, 0.28 * u, 0, 0, Math.PI); ctx.fill();
+
+    // Front lip of burrow overlapping base
+    ctx.fillStyle = st.ink('#6a4527'); ctx.strokeStyle = st.ink('#251205'); ctx.lineWidth = st.line * 0.85;
+    ctx.beginPath(); ctx.ellipse(0, 0.02 * u, holeW * 1.28, 0.42 * u, 0, 0, Math.PI); ctx.fill(); ctx.stroke();
   }
+
   function drawMarioElite(b, def, u, pal, st) {
     const t = 1 - st.k;
     const ph = mePhase(b);
@@ -10803,9 +11130,9 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const hop = b.hopT > 0 ? Math.sin((b.hopT / 0.28) * Math.PI) * 0.35 * u : 0;
     const stagger = b.hurtT > 0 ? b.hurtT / def.hitStagger : 0;
     const sq = st.squash;
+
     ctx.save();
     if (st.dead) {
-      // Stagger, crack, then sink into a heap.
       const sink = clamp((t - 0.5) / 0.5, 0, 1);
       ctx.globalAlpha = clamp(1.6 - t * 1.6, 0, 1);
       ctx.rotate(-0.18 * clamp(t / 0.3, 0, 1));
@@ -10814,40 +11141,50 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       ctx.rotate(-0.08 * windup - 0.14 * stagger);
       ctx.translate(-0.15 * u * stagger, -hop);
     }
-    // Wide iron boots that alternate on a slow stride.
+
+    // Heavy iron stomper boots
     const stepL = Math.sin(ph), stepR = -stepL;
-    meFoot(-0.55 * u + (moving ? stepL * 0.2 * u : 0), 0, 0.8 * u, 0.36 * u, pal, st, moving ? Math.max(0, stepL) * 0.12 * u : 0, pal.skinDark);
-    meFoot(0.55 * u + (moving ? stepR * 0.2 * u : 0), 0, 0.8 * u, 0.36 * u, pal, st, moving ? Math.max(0, stepR) * 0.12 * u : 0, pal.skinDark);
+    meFoot(-0.56 * u + (moving ? stepL * 0.2 * u : 0), 0, 0.82 * u, 0.38 * u, pal, st, moving ? Math.max(0, stepL) * 0.12 * u : 0, pal.skinDark, '#111827');
+    meFoot(0.56 * u + (moving ? stepR * 0.2 * u : 0), 0, 0.82 * u, 0.38 * u, pal, st, moving ? Math.max(0, stepR) * 0.12 * u : 0, pal.skinDark, '#111827');
+
     ctx.save();
     ctx.scale(1 + sq * 0.2, 1 - sq * 0.22);
-    // Legs, gauntlet fists, belly plate, then the big domed shell with bands and rivets.
-    ctx.strokeStyle = st.ink(pal.skinDark); ctx.lineWidth = u * 0.3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(-0.45 * u, -0.9 * u); ctx.lineTo(-0.5 * u, -0.25 * u); ctx.moveTo(0.45 * u, -0.9 * u); ctx.lineTo(0.5 * u, -0.25 * u); ctx.stroke();
+
+    // Armored iron belly plate
     ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
-    ctx.beginPath(); ctx.ellipse(0.3 * u, -1.15 * u, 0.62 * u, 0.7 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0.3 * u, -1.15 * u, 0.64 * u, 0.72 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Massive reinforced iron carapace with bolted cross-bands
     const shell = ctx.createRadialGradient(-0.5 * u, -2.2 * u, u * 0.1, -0.1 * u, -1.75 * u, u * 1.5);
-    shell.addColorStop(0, st.ink(pal.light)); shell.addColorStop(0.5, st.ink(pal.body)); shell.addColorStop(1, st.ink(pal.dark));
-    ctx.fillStyle = shell; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 1.1;
-    ctx.beginPath(); ctx.ellipse(-0.1 * u, -1.7 * u, 1.15 * u, 1.15 * u, 0, Math.PI * 0.95, Math.PI * 2.05); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.9;
-    for (const ry of [0.75, 0.45]) { ctx.beginPath(); ctx.ellipse(-0.1 * u, -1.7 * u, 1.15 * u * ry, 1.15 * u * ry, 0, Math.PI * 1.02, Math.PI * 1.98); ctx.stroke(); }
-    ctx.fillStyle = st.ink(pal.skin);
-    for (const a of [1.15, 1.4, 1.6, 1.85]) { ctx.beginPath(); ctx.arc(-0.1 * u + Math.cos(a * Math.PI) * 0.95 * u, -1.7 * u + Math.sin(a * Math.PI) * 0.95 * u, 0.07 * u, 0, Math.PI * 2); ctx.fill(); }
-    if (st.dead && t > 0.25) {
-      // Cracks spread across the armour before it gives way.
-      ctx.strokeStyle = '#1c0a0a'; ctx.lineWidth = st.line;
-      ctx.beginPath(); ctx.moveTo(-0.3 * u, -2.6 * u); ctx.lineTo(-0.1 * u, -2.1 * u); ctx.lineTo(-0.45 * u, -1.7 * u); ctx.lineTo(-0.2 * u, -1.2 * u);
-      ctx.moveTo(0.5 * u, -2.4 * u); ctx.lineTo(0.3 * u, -2.0 * u); ctx.lineTo(0.7 * u, -1.6 * u); ctx.stroke();
+    shell.addColorStop(0, st.ink(pal.light));
+    shell.addColorStop(0.5, st.ink(pal.body));
+    shell.addColorStop(1, st.ink(pal.dark));
+    ctx.fillStyle = shell; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 1.15;
+    ctx.beginPath(); ctx.ellipse(-0.1 * u, -1.7 * u, 1.18 * u, 1.18 * u, 0, Math.PI * 0.95, Math.PI * 2.05); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // Metallic reinforcement bands
+    ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.95;
+    for (const ry of [0.75, 0.45]) {
+      ctx.beginPath(); ctx.ellipse(-0.1 * u, -1.7 * u, 1.18 * u * ry, 1.18 * u * ry, 0, Math.PI * 1.02, Math.PI * 1.98); ctx.stroke();
     }
-    // Heavy arm and fist in front.
+
+    // Golden bronze rivets with glints
+    ctx.fillStyle = st.ink(pal.gold || '#f59e0b');
+    for (const a of [1.15, 1.38, 1.62, 1.85]) {
+      const rx0 = -0.1 * u + Math.cos(a * Math.PI) * 0.96 * u, ry0 = -1.7 * u + Math.sin(a * Math.PI) * 0.96 * u;
+      ctx.beginPath(); ctx.arc(rx0, ry0, 0.08 * u, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Heavy iron arm and spiked gauntlet fist
     ctx.strokeStyle = st.ink(pal.skinDark); ctx.lineWidth = u * 0.28; ctx.lineCap = 'round';
     const punch = stagger > 0 ? -0.2 * u : windup * 0.2 * u;
     ctx.beginPath(); ctx.moveTo(0.7 * u, -1.6 * u); ctx.lineTo(1.05 * u + punch, -1.0 * u); ctx.stroke();
     ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.8;
-    ctx.beginPath(); ctx.arc(1.1 * u + punch, -0.95 * u, 0.26 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    // Iron helmet with a visor slit, glowing eyes inside, and two horns.
+    ctx.beginPath(); ctx.arc(1.1 * u + punch, -0.95 * u, 0.28 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Horned iron helmet with dark visor slit and glowing molten ember eyes
     const hx = 0.35 * u, hy = -2.55 * u;
-    ctx.fillStyle = st.ink(pal.dark); ctx.strokeStyle = st.ink('#1c0a0a'); ctx.lineWidth = st.line * 0.8;
+    ctx.fillStyle = st.ink(pal.dark); ctx.strokeStyle = st.ink('#1c0a0a'); ctx.lineWidth = st.line * 0.85;
     for (const side of [-1, 1]) {
       ctx.beginPath(); ctx.moveTo(hx + side * 0.25 * u, hy - 0.35 * u);
       ctx.quadraticCurveTo(hx + side * 0.55 * u, hy - 0.75 * u, hx + side * 0.7 * u, hy - 1.05 * u);
@@ -10856,40 +11193,43 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const helm = ctx.createRadialGradient(hx - 0.25 * u, hy - 0.3 * u, u * 0.05, hx, hy, u * 0.8);
     helm.addColorStop(0, st.ink('#d5d9df')); helm.addColorStop(0.5, st.ink(pal.skin)); helm.addColorStop(1, st.ink(pal.skinDark));
     ctx.fillStyle = helm; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
-    ctx.beginPath(); ctx.ellipse(hx, hy, 0.62 * u, 0.52 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = st.ink('#15171a');
-    ctx.beginPath(); ctx.roundRect(hx - 0.35 * u, hy - 0.08 * u, 0.9 * u, 0.2 * u, 0.06 * u); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, hy, 0.64 * u, 0.54 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Visor slit with burning ember eyes
+    ctx.fillStyle = st.ink('#111827');
+    ctx.beginPath(); ctx.roundRect(hx - 0.36 * u, hy - 0.08 * u, 0.92 * u, 0.2 * u, 0.06 * u); ctx.fill();
     if (!st.dead) {
-      const glow = 0.6 + Math.sin(pet.t * 6 + b.bobPhase) * 0.2 + stagger * 0.4;
-      ctx.fillStyle = `rgba(255, 176, 58, ${glow})`;
-      ctx.beginPath(); ctx.ellipse(hx + 0.02 * u, hy + 0.02 * u, 0.1 * u, 0.06 * u, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(hx + 0.32 * u, hy + 0.02 * u, 0.1 * u, 0.06 * u, 0, 0, Math.PI * 2); ctx.fill();
+      const glow = 0.65 + Math.sin(pet.t * 6 + b.bobPhase) * 0.2 + stagger * 0.4;
+      ctx.fillStyle = `rgba(249, 115, 22, ${glow})`;
+      ctx.beginPath(); ctx.ellipse(hx + 0.02 * u, hy + 0.02 * u, 0.11 * u, 0.07 * u, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(hx + 0.34 * u, hy + 0.02 * u, 0.11 * u, 0.07 * u, 0, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
     ctx.restore();
-    // Health pips over the helmet: its extra hits, visible before the first one lands.
+
+    // Overhead golden studded shield badges showing HP
     if (!st.dead && b.maxHp > 1) {
-      const n = b.maxHp, w = 0.26 * u, gap = 0.08 * u;
+      const n = b.maxHp, w = 0.28 * u, gap = 0.08 * u;
       const x0 = -((n * w + (n - 1) * gap) / 2);
       for (let i = 0; i < n; i++) {
-        ctx.fillStyle = i < b.hp ? '#ffcf3f' : 'rgba(30, 20, 20, 0.6)';
-        ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(0.8, u * 0.04);
+        ctx.fillStyle = i < b.hp ? '#f59e0b' : 'rgba(30, 20, 20, 0.65)';
+        ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(0.9, u * 0.045);
         ctx.beginPath(); ctx.roundRect(x0 + i * (w + gap), -3.6 * u, w, w * 0.9, w * 0.25); ctx.fill(); ctx.stroke();
       }
     }
   }
+
   function drawMarioBossBar(b, def, u) {
-    // A Mario-world health bar: a brick-brown frame with a gold rim, the bar split into one
-    // cell per hit, and the name in a rounded outlined face.
-    const w = Math.max(88, u * 2.6), h = Math.max(7, u * 0.22);
+    const w = Math.max(92, u * 2.65), h = Math.max(8, u * 0.24);
     const y = -def.hitbox.h * u - u * 0.95;
     ctx.save();
-    ctx.fillStyle = '#5b3417'; ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(1, u * 0.05);
+    // Heavy stone/gold platformer frame with embossed border
+    ctx.fillStyle = '#5b3417'; ctx.strokeStyle = '#2a1a0e'; ctx.lineWidth = Math.max(1.2, u * 0.05);
     ctx.beginPath(); ctx.roundRect(-w / 2 - 3, y - 3, w + 6, h + 6, 4); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = '#ffcf3f'; ctx.lineWidth = Math.max(1, u * 0.035);
     ctx.beginPath(); ctx.roundRect(-w / 2 - 1.5, y - 1.5, w + 3, h + 3, 3); ctx.stroke();
-    ctx.fillStyle = '#2a1414';
-    ctx.fillRect(-w / 2, y, w, h);
+
+    ctx.fillStyle = '#1f0d0d'; ctx.fillRect(-w / 2, y, w, h);
     const n = Math.max(1, b.maxHp || 1);
     const cell = w / n;
     for (let i = 0; i < n; i++) {
@@ -10909,6 +11249,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     ctx.fillText(label, 0, y - 5);
     ctx.restore();
   }
+
   function drawMarioBoss(b, def, u, pal, st) {
     const t = 1 - st.k;
     const ph = mePhase(b);
@@ -10921,97 +11262,135 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const charging = s === 'charge';
     const moving = Math.abs(b.vx) > 6;
     let lean = -0.16 * windup + (charging ? 0.14 : 0) - 0.15 * stagger;
-    let mouthOpen = charging ? 0.9 : windup > 0 ? windup * 0.8 : s === 'recover' ? 0.4 + Math.sin(pet.t * 10) * 0.2 : 0.12;
+    let mouthOpen = charging ? 0.95 : windup > 0 ? windup * 0.85 : s === 'recover' ? 0.4 + Math.sin(pet.t * 10) * 0.2 : 0.14;
+
     ctx.save();
     if (st.dead) {
-      // Multi-stage defeat: a stagger with a strobing flash, a lurch up, the fall onto its
-      // shell with the ground shake (particles from updateMarioDeath), then the dissolve.
       const stage = t < 0.25 ? 0 : t < 0.5 ? 1 : t < 0.73 ? 2 : 3;
       if (stage === 0) { lean = -0.2 * (t / 0.25); if (Math.floor(pet.t * 24) % 2 === 0) st.flash = 1; }
       else if (stage === 1) { const k = (t - 0.25) / 0.25; lean = -0.2 - k * 0.35; ctx.translate(0, -Math.sin(k * Math.PI) * u * 0.6); ctx.scale(1 + k * 0.15, 1 - k * 0.35); }
       else if (stage === 2) { lean = -0.55; ctx.translate(Math.sin(pet.t * 60) * u * 0.05, 0); ctx.scale(1.15, 0.65); }
       else { const k = (t - 0.73) / 0.27; lean = -0.55; ctx.globalAlpha = 1 - k; ctx.scale(1.15 + k * 0.2, 0.65 - k * 0.35); }
-      mouthOpen = 0.7;
+      mouthOpen = 0.75;
     }
     ctx.rotate(lean);
     if (stagger > 0 && !st.dead) ctx.translate(-0.2 * u * stagger, 0);
+
     const sq = st.squash;
-    // Big three-toed feet on a wide stance; the stride only cycles while it walks.
+
+    // Massive three-toed clawed feet
     const stepL = Math.sin(ph), stepR = -stepL;
     for (const side of [-1, 1]) {
       const step = side < 0 ? stepL : stepR;
-      const fx = side * 0.75 * u + (moving ? step * 0.25 * u : 0), lift = moving ? Math.max(0, step) * 0.14 * u : 0;
+      const fx = side * 0.76 * u + (moving ? step * 0.25 * u : 0), lift = moving ? Math.max(0, step) * 0.14 * u : 0;
       ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
-      ctx.beginPath(); ctx.ellipse(fx, -0.2 * u - lift, 0.5 * u, 0.24 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(fx, -0.2 * u - lift, 0.52 * u, 0.25 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = st.ink('#f8f4e8');
-      for (const toe of [-0.28, 0, 0.28]) { ctx.beginPath(); ctx.moveTo(fx + toe * u + side * 0.3 * u, -0.22 * u - lift); ctx.lineTo(fx + toe * u + side * 0.55 * u, -0.1 * u - lift); ctx.lineTo(fx + toe * u + side * 0.3 * u, -0.05 * u - lift); ctx.closePath(); ctx.fill(); }
+      for (const toe of [-0.28, 0, 0.28]) {
+        ctx.beginPath(); ctx.moveTo(fx + toe * u + side * 0.3 * u, -0.22 * u - lift);
+        ctx.lineTo(fx + toe * u + side * 0.58 * u, -0.1 * u - lift);
+        ctx.lineTo(fx + toe * u + side * 0.3 * u, -0.05 * u - lift); ctx.closePath(); ctx.fill();
+      }
     }
+
     ctx.save();
     ctx.translate(0, -0.3 * u);
     ctx.scale(1 + sq * 0.15 - breath * 0.4, 1 - sq * 0.18 + breath);
-    // Thick legs, a spiked tail, the shell with cream spikes, then the banded belly.
+
+    // Thick legs and spiked tail
     ctx.strokeStyle = st.ink(pal.body); ctx.lineWidth = u * 0.42; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-0.55 * u, -0.9 * u); ctx.lineTo(-0.7 * u, -0.1 * u); ctx.moveTo(0.55 * u, -0.9 * u); ctx.lineTo(0.7 * u, -0.1 * u); ctx.stroke();
+
     ctx.fillStyle = st.ink(pal.body); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
-    ctx.beginPath(); ctx.moveTo(-1.0 * u, -0.9 * u); ctx.quadraticCurveTo(-1.7 * u, -0.8 * u, -1.95 * u, -0.25 * u); ctx.quadraticCurveTo(-1.5 * u, -0.45 * u, -1.05 * u, -0.45 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-1.0 * u, -0.9 * u); ctx.quadraticCurveTo(-1.75 * u, -0.8 * u, -2.0 * u, -0.25 * u); ctx.quadraticCurveTo(-1.5 * u, -0.45 * u, -1.05 * u, -0.45 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = st.ink(pal.belly);
-    for (const k of [0.35, 0.6]) { ctx.beginPath(); ctx.moveTo(-1.0 * u - k * 0.9 * u, -0.85 * u + k * 0.4 * u); ctx.lineTo(-1.05 * u - k * 0.9 * u, -1.15 * u + k * 0.4 * u); ctx.lineTo(-1.2 * u - k * 0.9 * u, -0.8 * u + k * 0.4 * u); ctx.closePath(); ctx.fill(); }
+    for (const k of [0.35, 0.6]) {
+      ctx.beginPath(); ctx.moveTo(-1.0 * u - k * 0.9 * u, -0.85 * u + k * 0.4 * u); ctx.lineTo(-1.05 * u - k * 0.9 * u, -1.18 * u + k * 0.4 * u); ctx.lineTo(-1.2 * u - k * 0.9 * u, -0.8 * u + k * 0.4 * u); ctx.closePath(); ctx.fill();
+    }
+
+    // Carapace dome with radial gradient
     const shell = ctx.createRadialGradient(-0.8 * u, -2.3 * u, u * 0.1, -0.35 * u, -1.75 * u, u * 1.6);
     shell.addColorStop(0, st.ink(pal.light)); shell.addColorStop(0.5, st.ink(pal.body)); shell.addColorStop(1, st.ink(pal.dark));
-    ctx.fillStyle = shell; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 1.2;
-    ctx.beginPath(); ctx.ellipse(-0.35 * u, -1.75 * u, 1.25 * u, 1.15 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    if (enraged) { ctx.fillStyle = `rgba(255, 60, 40, ${0.15 + Math.sin(pet.t * 8) * 0.12})`; ctx.beginPath(); ctx.ellipse(-0.35 * u, -1.75 * u, 1.25 * u, 1.15 * u, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = shell; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 1.25;
+    ctx.beginPath(); ctx.ellipse(-0.35 * u, -1.75 * u, 1.28 * u, 1.18 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (enraged) {
+      ctx.fillStyle = `rgba(255, 60, 40, ${0.18 + Math.sin(pet.t * 8) * 0.12})`;
+      ctx.beginPath(); ctx.ellipse(-0.35 * u, -1.75 * u, 1.28 * u, 1.18 * u, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Ivory cone spikes with crimson collar rings
     ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line * 0.9;
     for (const a of [1.12, 1.32, 1.52, 1.72]) {
-      const ax = -0.35 * u + Math.cos(a * Math.PI) * 1.2 * u, ay = -1.75 * u + Math.sin(a * Math.PI) * 1.1 * u;
+      const ax = -0.35 * u + Math.cos(a * Math.PI) * 1.22 * u, ay = -1.75 * u + Math.sin(a * Math.PI) * 1.12 * u;
       const nx = Math.cos(a * Math.PI), ny = Math.sin(a * Math.PI);
-      ctx.beginPath(); ctx.moveTo(ax - ny * 0.22 * u, ay + nx * 0.22 * u); ctx.lineTo(ax + nx * 0.55 * u, ay + ny * 0.55 * u); ctx.lineTo(ax + ny * 0.22 * u, ay - nx * 0.22 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax - ny * 0.24 * u, ay + nx * 0.24 * u); ctx.lineTo(ax + nx * 0.58 * u, ay + ny * 0.58 * u); ctx.lineTo(ax + ny * 0.24 * u, ay - nx * 0.24 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
     }
+
+    // Scaled muscular belly
     const belly = ctx.createLinearGradient(0, -2.6 * u, 0, -0.4 * u);
     belly.addColorStop(0, st.ink('#fff3c8')); belly.addColorStop(1, st.ink(pal.skinDark));
     ctx.fillStyle = belly; ctx.strokeStyle = st.ink(pal.dark); ctx.lineWidth = st.line;
-    ctx.beginPath(); ctx.ellipse(0.2 * u, -1.5 * u, 0.98 * u, 1.12 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = st.ink(pal.skinDark); ctx.lineWidth = st.line * 0.8;
-    for (const yy of [-2.05, -1.65, -1.25, -0.85]) { ctx.beginPath(); ctx.moveTo(-0.55 * u, yy * u); ctx.quadraticCurveTo(0.2 * u, (yy + 0.12) * u, 0.95 * u, yy * u); ctx.stroke(); }
-    // Arms with spiked cuffs and clawed hands; raised for the wind-up, forward in a charge.
-    const armLift = windup * 0.5 - (charging ? 0.2 : 0) + stagger * 0.3;
-    for (const [ax, ay, front] of [[-0.6, -2.0, false], [0.85, -1.85, true]]) {
-      const hx = ax * u + (front ? 0.55 : -0.3) * u + (charging ? 0.25 * u : 0), hy = ay * u + 0.8 * u - armLift * u;
-      ctx.strokeStyle = st.ink(front ? pal.body : pal.dark); ctx.lineWidth = u * 0.36; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(ax * u, ay * u); ctx.lineTo(hx, hy); ctx.stroke();
-      ctx.fillStyle = st.ink('#2a2a2e'); ctx.strokeStyle = st.ink('#111');
-      ctx.lineWidth = st.line * 0.7;
-      ctx.beginPath(); ctx.ellipse(hx - (hx - ax * u) * 0.25, hy - (hy - ay * u) * 0.25, 0.26 * u, 0.2 * u, Math.atan2(hy - ay * u, hx - ax * u), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark);
-      ctx.beginPath(); ctx.arc(hx, hy, 0.3 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = st.ink('#f8f4e8');
-      for (const c of [-0.2, 0, 0.2]) { ctx.beginPath(); ctx.moveTo(hx + c * u, hy + 0.05 * u); ctx.lineTo(hx + c * u + 0.12 * u, hy + 0.35 * u); ctx.lineTo(hx + c * u + 0.2 * u, hy); ctx.closePath(); ctx.fill(); }
+    ctx.beginPath(); ctx.ellipse(0.2 * u, -1.5 * u, 1.0 * u, 1.14 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = st.ink(pal.skinDark); ctx.lineWidth = st.line * 0.85;
+    for (const yy of [-2.05, -1.65, -1.25, -0.85]) {
+      ctx.beginPath(); ctx.moveTo(-0.55 * u, yy * u); ctx.quadraticCurveTo(0.2 * u, (yy + 0.12) * u, 0.95 * u, yy * u); ctx.stroke();
     }
-    // Head: red mane, horns, green skull, cream muzzle with fangs, angry brows, tracked eyes.
-    const hx0 = 0.75 * u, hy0 = -2.85 * u + Math.sin(b.breathPhase * breathRate) * 0.05 * u + windup * 0.15 * u;
-    ctx.fillStyle = st.ink(enraged ? '#ff4a2a' : '#d92d1e'); ctx.strokeStyle = st.ink('#5a0f0a'); ctx.lineWidth = st.line * 0.8;
+
+    // Arms with spiked leather wristbands and clawed hands
+    const armLift = windup * 0.52 - (charging ? 0.22 : 0) + stagger * 0.3;
+    for (const [ax, ay, front] of [[-0.6, -2.0, false], [0.85, -1.85, true]]) {
+      const hx = ax * u + (front ? 0.56 : -0.3) * u + (charging ? 0.26 * u : 0), hy = ay * u + 0.8 * u - armLift * u;
+      ctx.strokeStyle = st.ink(front ? pal.body : pal.dark); ctx.lineWidth = u * 0.38; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(ax * u, ay * u); ctx.lineTo(hx, hy); ctx.stroke();
+
+      ctx.fillStyle = st.ink('#2a2a2e'); ctx.strokeStyle = st.ink('#111'); ctx.lineWidth = st.line * 0.7;
+      ctx.beginPath(); ctx.ellipse(hx - (hx - ax * u) * 0.25, hy - (hy - ay * u) * 0.25, 0.28 * u, 0.22 * u, Math.atan2(hy - ay * u, hx - ax * u), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      ctx.fillStyle = st.ink(pal.skin); ctx.strokeStyle = st.ink(pal.dark);
+      ctx.beginPath(); ctx.arc(hx, hy, 0.32 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = st.ink('#f8f4e8');
+      for (const c of [-0.2, 0, 0.2]) {
+        ctx.beginPath(); ctx.moveTo(hx + c * u, hy + 0.05 * u); ctx.lineTo(hx + c * u + 0.14 * u, hy + 0.36 * u); ctx.lineTo(hx + c * u + 0.22 * u, hy); ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // Head: red fiery mane, swept horns, green skull, snout with nostrils and fangs
+    const hx0 = 0.76 * u, hy0 = -2.88 * u + Math.sin(b.breathPhase * breathRate) * 0.05 * u + windup * 0.15 * u;
+    // Fiery red flowing mane
+    ctx.fillStyle = st.ink(enraged ? '#ff4a2a' : '#d92d1e'); ctx.strokeStyle = st.ink('#5a0f0a'); ctx.lineWidth = st.line * 0.85;
     ctx.beginPath(); ctx.moveTo(hx0 - 0.4 * u, hy0 - 0.5 * u);
-    for (let i = 0; i < 5; i++) { const a = -0.95 * Math.PI + i * 0.2 * Math.PI; ctx.lineTo(hx0 - 0.5 * u + Math.cos(a) * 1.05 * u, hy0 + 0.1 * u + Math.sin(a) * 1.05 * u); ctx.lineTo(hx0 - 0.5 * u + Math.cos(a + 0.1 * Math.PI) * 0.7 * u, hy0 + 0.1 * u + Math.sin(a + 0.1 * Math.PI) * 0.7 * u); }
-    ctx.lineTo(hx0 - 0.8 * u, hy0 + 0.6 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+    for (let i = 0; i < 5; i++) {
+      const a = -0.95 * Math.PI + i * 0.2 * Math.PI;
+      ctx.lineTo(hx0 - 0.5 * u + Math.cos(a) * 1.08 * u, hy0 + 0.1 * u + Math.sin(a) * 1.08 * u);
+      ctx.lineTo(hx0 - 0.5 * u + Math.cos(a + 0.1 * Math.PI) * 0.72 * u, hy0 + 0.1 * u + Math.sin(a + 0.1 * Math.PI) * 0.72 * u);
+    }
+    ctx.lineTo(hx0 - 0.82 * u, hy0 + 0.6 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // Curved swept-back horns
     ctx.fillStyle = st.ink(pal.belly); ctx.strokeStyle = st.ink(pal.dark);
     for (const side of [-0.35, 0.35]) {
-      ctx.beginPath(); ctx.moveTo(hx0 + side * u - 0.16 * u, hy0 - 0.4 * u); ctx.quadraticCurveTo(hx0 + side * u + side * 0.3 * u, hy0 - 0.9 * u, hx0 + side * u + side * 0.55 * u, hy0 - 1.2 * u);
-      ctx.quadraticCurveTo(hx0 + side * u + side * 0.2 * u, hy0 - 0.75 * u, hx0 + side * u + 0.18 * u, hy0 - 0.45 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx0 + side * u - 0.16 * u, hy0 - 0.4 * u);
+      ctx.quadraticCurveTo(hx0 + side * u + side * 0.3 * u, hy0 - 0.92 * u, hx0 + side * u + side * 0.56 * u, hy0 - 1.22 * u);
+      ctx.quadraticCurveTo(hx0 + side * u + side * 0.2 * u, hy0 - 0.76 * u, hx0 + side * u + 0.18 * u, hy0 - 0.45 * u); ctx.closePath(); ctx.fill(); ctx.stroke();
     }
-    meBlob(hx0, hy0, 0.78 * u, 0.64 * u, pal, st);
-    meSkin(hx0 + 0.45 * u, hy0 + 0.2 * u, 0.5 * u, 0.36 * u, pal, st);
-    ctx.fillStyle = st.ink(pal.dark);
-    ctx.beginPath(); ctx.arc(hx0 + 0.8 * u, hy0 + 0.08 * u, 0.05 * u, 0, Math.PI * 2); ctx.fill();
-    meMouth(hx0 + 0.42 * u, hy0 + 0.48 * u, 0.85 * u, mouthOpen, '#3a0d1c', true, st);
-    const lid = st.dead ? 0.7 : stagger > 0 ? 0.8 : windup > 0 ? 0.35 : 0.12;
-    meEye(hx0 - 0.05 * u, hy0 - 0.12 * u, 0.2 * u, 0.24 * u, st, { look: st.look, iris: pal.eye, lid, lidColor: pal.dark, dead: st.dead && t > 0.5 });
-    meEye(hx0 + 0.42 * u, hy0 - 0.15 * u, 0.2 * u, 0.24 * u, st, { look: st.look, iris: pal.eye, lid, lidColor: pal.dark, dead: st.dead && t > 0.5 });
+
+    meBlob(hx0, hy0, 0.8 * u, 0.66 * u, pal, st);
+    meSkin(hx0 + 0.46 * u, hy0 + 0.2 * u, 0.52 * u, 0.38 * u, pal, st);
+    // Nostrils
+    ctx.fillStyle = st.ink(pal.dark); ctx.beginPath(); ctx.arc(hx0 + 0.82 * u, hy0 + 0.08 * u, 0.05 * u, 0, Math.PI * 2); ctx.fill();
+    meMouth(hx0 + 0.44 * u, hy0 + 0.48 * u, 0.88 * u, mouthOpen, '#3a0d1c', true, st);
+
+    const lid = st.dead ? 0.72 : stagger > 0 ? 0.8 : windup > 0 ? 0.35 : 0.12;
+    meEye(hx0 - 0.05 * u, hy0 - 0.12 * u, 0.21 * u, 0.25 * u, st, { look: st.look, iris: pal.eye, lid, lidColor: pal.dark, dead: st.dead && t > 0.5 });
+    meEye(hx0 + 0.44 * u, hy0 - 0.15 * u, 0.21 * u, 0.25 * u, st, { look: st.look, iris: pal.eye, lid, lidColor: pal.dark, dead: st.dead && t > 0.5 });
+
     const browDrop = 0.06 * u * (enraged ? 2 : 1) + windup * 0.08 * u;
-    meBrow(hx0 - 0.3 * u, hy0 - 0.46 * u, hx0 + 0.08 * u, hy0 - 0.36 * u + browDrop, st.line * 2, st.ink('#d92d1e'));
-    meBrow(hx0 + 0.3 * u, hy0 - 0.36 * u + browDrop, hx0 + 0.66 * u, hy0 - 0.46 * u, st.line * 2, st.ink('#d92d1e'));
+    meBrow(hx0 - 0.32 * u, hy0 - 0.48 * u, hx0 + 0.08 * u, hy0 - 0.38 * u + browDrop, st.line * 2.1, st.ink('#d92d1e'));
+    meBrow(hx0 + 0.32 * u, hy0 - 0.38 * u + browDrop, hx0 + 0.68 * u, hy0 - 0.48 * u, st.line * 2.1, st.ink('#d92d1e'));
     ctx.restore();
     ctx.restore();
   }
+
   const MARIO_ENEMY_RENDERERS = {
     walker: drawMarioWalker,
     shell: drawMarioShell,
@@ -11021,6 +11400,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     elite: drawMarioElite,
     boss: drawMarioBoss,
   };
+
   function drawMarioEnemy(b) {
     const def = marioEnemyClass(b.enemyId);
     const u = marioEnemyUnit(def);

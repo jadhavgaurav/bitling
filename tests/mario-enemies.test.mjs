@@ -858,3 +858,39 @@ test('the control room snapshot reports the enemy pack, current enemy, kill coun
   assert.ok(result.after.enemiesDefeated >= 1, 'defeating an enemy must increment the day-stamped counter the panel shows');
   assert.match(result.withBoss.bossState, /^Engaged: /);
 });
+
+test('every Mario enemy exhibits rich 3D shading, highlights, and distinctive color depth matching the 3D aesthetic', async (t) => {
+  const result = await withPage(t, () => {
+    const api = window.__marioEnemyTest;
+    window.__bitling.marioForceStage(3);
+    window.__bitling.advance(0.1);
+    const colorStats = {};
+    const { width, height } = api.canvas;
+    for (const kind of ['walker', 'shell', 'flying', 'jumping', 'ambush', 'elite', 'boss']) {
+      api.bugs.length = 0;
+      window.__bitling.marioSpawnEnemy(kind);
+      const b = api.bugs[0];
+      b.x = 160;
+      api.ctx.clearRect(0, 0, width, height);
+      api.drawBugs();
+      const px = api.ctx.getImageData(0, 0, width, height).data;
+      const uniqueHues = new Set();
+      let opaqueCount = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] > 100) {
+          opaqueCount++;
+          // Quantize 12-bit color: 4 bits each for r, g, b
+          const q = ((px[i] >> 4) << 8) | ((px[i + 1] >> 4) << 4) | (px[i + 2] >> 4);
+          uniqueHues.add(q);
+        }
+      }
+      colorStats[kind] = { opaqueCount, colorCount: uniqueHues.size };
+    }
+    return colorStats;
+  });
+  for (const [kind, stats] of Object.entries(result)) {
+    assert.ok(stats.opaqueCount > 100, `${kind} must paint a substantial silhouette (${stats.opaqueCount}px)`);
+    assert.ok(stats.colorCount >= 10, `${kind} must have multi-stop 3D shading and highlights, not flat debug color (${stats.colorCount} quantized colors)`);
+  }
+});
+

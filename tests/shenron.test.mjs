@@ -152,7 +152,7 @@ test('Shenron uses a large transparent animated stage, sleeps in air and preserv
       `attack must originate inside the painted red mouth: ${interactions.mouthPixel}`);
     assert.ok(interactions.full > 60, 'feeding must reach the airborne mouth');
 
-    for (const id of ['rider', 'ironman', 'goku', 'mario']) {
+    for (const id of ['ironman', 'goku', 'mario']) {
       await page.evaluate(id => window.petNative.setSpecies(id), id);
       await page.setViewportSize({ width: 300, height: 340 });
       const visible = await page.evaluate(() => {

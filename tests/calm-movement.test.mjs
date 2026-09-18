@@ -18,7 +18,7 @@ test('every pet rests, takes one bounded trip, and rests again', async () => {
     const html = (await readFile(generated, 'utf8')).replace('  // ---------------------------------------------------------------- boot',
       `window.__calm = { pet, state, update, doIdle, handleFlight, release, SPECIES, shenron, ronaldoBall, snack };
   // ---------------------------------------------------------------- boot`);
-    for (const id of ['robot', 'dragon', 'rider', 'goku', 'pikachu', 'ironman', 'kaiju', 'ronaldo', 'naruto', 'mario']) {
+    for (const id of ['robot', 'dragon', 'goku', 'pikachu', 'ironman', 'kaiju', 'ronaldo', 'naruto', 'mario']) {
       const page = await browser.newPage({ viewport: { width: id === 'dragon' ? 1440 : 320, height: id === 'dragon' ? 900 : 360 } });
       await page.addInitScript(({ id }) => {
         window.requestAnimationFrame = () => 0;

@@ -59,6 +59,7 @@ final class GitWatcher {
         let gitDir: URL
         var headLogSize: UInt64
         var stashLogSize: UInt64
+        var worktreeLogSizes: [String: UInt64]
         var remoteLogSizes: [String: UInt64]
         var lastCommitDate: Date?
         var lastActivity: Date
@@ -282,6 +283,7 @@ final class GitWatcher {
             workTree: workTree, gitDir: gitDir,
             headLogSize: fileSize(headLog),
             stashLogSize: fileSize(gitDir.appendingPathComponent("logs/refs/stash")),
+            worktreeLogSizes: worktreeLogSizes(gitDir),
             remoteLogSizes: remoteLogSizes(gitDir),
             lastCommitDate: lastReflogDate(headLog),
             lastActivity: (try? headLog.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast,
@@ -294,6 +296,24 @@ final class GitWatcher {
 
     private func fileSize(_ url: URL) -> UInt64 {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64) ?? 0
+    }
+
+    /// Linked worktrees keep their own HEAD reflog under `.git/worktrees/<name>/logs/HEAD`;
+    /// the main `logs/HEAD` never sees their commits. Agents that do their work in a
+    /// worktree (`.claude/worktrees/...`) were therefore invisible here twice over: the
+    /// worktree directory itself is under a dot-folder, which the scan skips, and its
+    /// commits never touch the reflog this repo does watch. Pushes still showed up, because
+    /// remote reflogs live in the shared common dir - hence "0 commits, 2 pushes".
+    private func worktreeLogSizes(_ gitDir: URL) -> [String: UInt64] {
+        var sizes: [String: UInt64] = [:]
+        let base = gitDir.appendingPathComponent("worktrees")
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) else { return sizes }
+        for entry in entries {
+            let log = entry.appendingPathComponent("logs/HEAD")
+            guard FileManager.default.fileExists(atPath: log.path) else { continue }
+            sizes[log.path] = fileSize(log)
+        }
+        return sizes
     }
 
     private func remoteLogSizes(_ gitDir: URL) -> [String: UInt64] {
@@ -331,14 +351,19 @@ final class GitWatcher {
     }
 
     private static func parseReflogLine(_ line: String) -> ReflogLine? {
-        // "<old> <new> Name <email> <unix-ts> <tz>\t<message>"
+        // "<old> <new> Name <email> <unix-ts> <tz>\t<message>", except the trailing tab and
+        // message are optional: a ref update performed with no reflog message (plain
+        // `git update-ref`, and anything driving git through a library rather than the
+        // porcelain) writes the line ending at the timezone. Those are still real HEAD
+        // moves - requiring the tab here silently discarded every one of them, so commits
+        // made by such a tool never reached the counters at all.
         let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
-        guard parts.count == 2 else { return nil }
         let head = parts[0].split(separator: " ")
         guard head.count >= 4 else { return nil }
         let tsIndex = head.count - 2
         let ts = TimeInterval(head[tsIndex]) ?? 0
-        return ReflogLine(oldHash: String(head[0]), newHash: String(head[1]), date: Date(timeIntervalSince1970: ts), message: String(parts[1]))
+        return ReflogLine(oldHash: String(head[0]), newHash: String(head[1]), date: Date(timeIntervalSince1970: ts),
+                          message: parts.count == 2 ? String(parts[1]) : "")
     }
 
     private func currentBranch(_ gitDir: URL) -> String {
@@ -385,9 +410,29 @@ final class GitWatcher {
                 }
             }
 
-            // Remote reflogs: every poll for repos active in the last 15 minutes, every 30 seconds otherwise.
+            // Worktree and remote reflogs both cost a directory listing, so they share the
+            // same cadence: every poll for repos active in the last 15 minutes, every 30
+            // seconds otherwise.
             let recentlyActive = Date().timeIntervalSince(repo.lastActivity) < 15 * 60
             if !recentlyActive && pollCount % 15 != 0 { tracked[key] = repo; continue }
+
+            // Linked worktrees: same treatment as HEAD, one reflog per live worktree.
+            let worktreeSizes = worktreeLogSizes(repo.gitDir)
+            for (path, newSize) in worktreeSizes {
+                guard let old = repo.worktreeLogSizes[path] else { continue }   // first sighting: baseline only
+                guard newSize > old else { continue }
+                let text = readTail(URL(fileURLWithPath: path), from: old)
+                for raw in text.split(separator: "\n") {
+                    guard let line = Self.parseReflogLine(String(raw)) else { continue }
+                    guard line.date > watchingSince else { continue }
+                    guard let event = classify(line, repo: repo) else { continue }
+                    repo.lastActivity = Date()
+                    lastActiveRepo = key
+                    emit(event)
+                }
+            }
+            repo.worktreeLogSizes = worktreeSizes
+
             let remoteSizes = remoteLogSizes(repo.gitDir)
             for (path, newSize) in remoteSizes {
                 let url = URL(fileURLWithPath: path)
@@ -422,7 +467,19 @@ final class GitWatcher {
             String(msg.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
         }
         var event: GitEvent?
-        if msg.hasPrefix("commit (amend):") {
+        if msg.isEmpty {
+            // No action text to read, so ask the objects what happened: if the old tip is a
+            // parent of the new one, HEAD grew by a commit; anything else is just HEAD being
+            // moved around (a checkout or reset) and is not worth reporting. One git call,
+            // and only on this rare path.
+            guard let out = runGit(["log", "-1", "--format=%P%n%s", line.newHash], in: repo.workTree) else { return nil }
+            let lines = out.split(separator: "\n", omittingEmptySubsequences: false)
+            let parents = lines.first.map { $0.split(separator: " ").map(String.init) } ?? []
+            guard parents.contains(where: { $0.hasPrefix(line.oldHash) || line.oldHash.hasPrefix($0) }) else { return nil }
+            let subject = lines.count > 1 ? String(lines[1]) : ""
+            event = GitEvent(kind: parents.count > 1 ? "merge" : "commit", repo: repo.name, branch: branch,
+                             message: subject, hash: line.newHash)
+        } else if msg.hasPrefix("commit (amend):") {
             event = GitEvent(kind: "amend", repo: repo.name, branch: branch, message: after("commit (amend):"), hash: line.newHash)
         } else if msg.hasPrefix("commit (initial):") {
             event = GitEvent(kind: "commit", repo: repo.name, branch: branch, message: after("commit (initial):"), hash: line.newHash)

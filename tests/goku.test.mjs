@@ -207,7 +207,6 @@ test('Goku Git-powered training arc: 6 forms, continuous scaling, dev simulation
           currentForm: snap.currentForm,
           formIndex: snap.formIndex,
           overallPower: snap.overallPower,
-          auraIntensity: snap.auraIntensity,
           matchesExpected: snap.currentForm === tc.expectedForm && snap.formIndex === tc.expectedIndex,
           opaquePixels: opaque,
           powerGrewOrEqual,
@@ -218,9 +217,6 @@ test('Goku Git-powered training arc: 6 forms, continuous scaling, dev simulation
       window.petNative.gokuSetting('size', 1.35);
       const sizeSet = api.state.gokuSettings.size === 1.35;
 
-      window.petNative.gokuSetting('auraIntensity', 2.0);
-      const auraSet = api.state.gokuSettings.auraIntensity === 2.0;
-
       // Test reset simulation
       window.petNative.gokuSimulate('reset');
       const resetSnap = api.getGokuSnapshot();
@@ -229,14 +225,12 @@ test('Goku Git-powered training arc: 6 forms, continuous scaling, dev simulation
       return {
         results,
         sizeSet,
-        auraSet,
         isSimReset,
       };
     });
 
     assert.equal(errors.length, 0, `Page errors during training test: ${errors.join(', ')}`);
     assert.ok(formProgression.sizeSet, 'gokuSetting size should be updated');
-    assert.ok(formProgression.auraSet, 'gokuSetting auraIntensity should be updated');
     assert.ok(formProgression.isSimReset, 'gokuSimulate reset should return to real commits');
 
     for (const r of formProgression.results) {

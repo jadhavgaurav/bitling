@@ -321,6 +321,8 @@
       <div class="goku-stats">
         <div><span class="stat-k">Enemy Pack:</span> <span class="stat-v" id="gEnemyPack">Goku Combat</span></div>
         <div><span class="stat-k">Current Enemy:</span> <span class="stat-v" id="gCurrentEnemy">None</span></div>
+        <div><span class="stat-k">Combat State:</span> <span class="stat-v" id="gCombatState">IDLE</span></div>
+        <div><span class="stat-k">Active Attack:</span> <span class="stat-v" id="gActiveAttack">None</span></div>
         <div><span class="stat-k">Defeated Today:</span> <span class="stat-v" id="gEnemiesDefeated">0</span></div>
         <div><span class="stat-k">Boss:</span> <span class="stat-v" id="gBossState">None</span></div>
       </div>
@@ -356,6 +358,18 @@
           <button type="button" class="goku-preset" data-spawn="fast">Dasher</button>
           <button type="button" class="goku-preset" data-spawn="elite">Brute</button>
           <button type="button" class="goku-preset" data-spawn="boss">Warlord (Boss)</button>
+        </div>
+      </div>
+
+      <div class="goku-sim">
+        <div class="goku-sim-title">Dev: Combat Actions</div>
+        <div class="goku-presets">
+          <button type="button" class="goku-preset" data-goku-action="forceAttack:kamehameha">Kamehameha</button>
+          <button type="button" class="goku-preset" data-goku-action="forceAttack:kiball">Ki Blast</button>
+          <button type="button" class="goku-preset" data-goku-action="forceAttack:melee">Melee Rush</button>
+          <button type="button" class="goku-preset" data-goku-action="forceTransform">Transform</button>
+          <button type="button" class="goku-preset" data-goku-action="testUI">Test UI Dodge</button>
+          <button type="button" class="goku-preset" data-goku-action="resetCombat">Reset Combat</button>
         </div>
       </div>
     </div>
@@ -957,6 +971,10 @@
       if (fCurrentEnemyEl) fCurrentEnemyEl.textContent = goku.currentEnemy || 'None';
       const fDefeatedEl = $('#gEnemiesDefeated');
       if (fDefeatedEl) fDefeatedEl.textContent = String(goku.enemiesDefeated ?? 0);
+      const fCombatStateEl = $('#gCombatState');
+      if (fCombatStateEl) fCombatStateEl.textContent = goku.combatState ? goku.combatState.toUpperCase() : 'IDLE';
+      const fActiveAttackEl = $('#gActiveAttack');
+      if (fActiveAttackEl) fActiveAttackEl.textContent = goku.activeAttack || 'None';
       const fBossEl = $('#gBossState');
       if (fBossEl) fBossEl.textContent = goku.bossState || 'None';
 
@@ -1071,6 +1089,11 @@
     const spawnPreset = e.target.closest('[data-spawn]');
     if (spawnPreset) {
       send('action', `goku:spawn:${spawnPreset.dataset.spawn}`);
+      return;
+    }
+    const gokuActionBtn = e.target.closest('[data-goku-action]');
+    if (gokuActionBtn) {
+      send('action', `goku:${gokuActionBtn.dataset.gokuAction}`);
       return;
     }
     const tPreset = e.target.closest('[data-thorsim]');

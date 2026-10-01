@@ -754,11 +754,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             js("petNative.shenronSetting(\(jsString(String(parts[1]))), \(value))")
         case _ where action.hasPrefix("goku:"):
             let parts = action.split(separator: ":", omittingEmptySubsequences: false)
-            if parts.count >= 3 {
+            if parts.count == 2 {
+                let sub = String(parts[1])
+                if sub == "forceTransform" {
+                    js("petNative.gokuForceTransform()")
+                } else if sub == "testUI" {
+                    js("petNative.gokuTestUI()")
+                } else if sub == "resetCombat" {
+                    js("petNative.gokuResetCombat()")
+                }
+            } else if parts.count >= 3 {
                 let sub = String(parts[1])
                 let val = String(parts[2])
                 if sub == "simulate" {
-                    if val == "off" || val == "clear" {
+                    if val == "off" || val == "clear" || val == "reset" {
                         js("petNative.gokuSimulate(null)")
                     } else if let n = Int(val) {
                         js("petNative.gokuSimulate(\(n))")
@@ -768,6 +777,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     // pack (fighter/flying/fast/elite/boss) instead of the weighted
                     // random pick, mirroring "simulate" above.
                     js("petNative.gokuSpawnEnemy(\(jsString(val)))")
+                } else if sub == "forceAttack" {
+                    js("petNative.gokuForceAttack(\(jsString(val)))")
+                } else if sub == "forceForm" {
+                    if let n = Int(val) {
+                        js("petNative.gokuForceForm(\(n))")
+                    }
+                } else if sub == "forceTransform" {
+                    js("petNative.gokuForceTransform()")
+                } else if sub == "testUI" {
+                    js("petNative.gokuTestUI()")
+                } else if sub == "resetCombat" {
+                    js("petNative.gokuResetCombat()")
                 } else if let d = Double(val), d.isFinite {
                     js("petNative.gokuSetting(\(jsString(sub)), \(d))")
                 }

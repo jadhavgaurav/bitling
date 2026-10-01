@@ -1478,7 +1478,17 @@
     for (const e of pool) { roll -= e.weight; if (roll <= 0) return e; }
     return pool[pool.length - 1];
   }
-  function gokuEnemyClass(id) { return GOKU_ENEMIES[id] || GOKU_ENEMIES.fighter; }
+  const GOKU_ENEMY_ALIASES = Object.freeze({
+    grunt: 'fighter',
+    flyer: 'flying',
+    assassin: 'fast',
+    brute: 'elite',
+    energy: 'flying',
+  });
+  function gokuEnemyClass(id) {
+    const canonical = GOKU_ENEMY_ALIASES[id] || id;
+    return GOKU_ENEMIES[canonical] || GOKU_ENEMIES.fighter;
+  }
   function gokuScaledStats(def) {
     const p = getGokuPower();
     const growth = 1 + p.formIndex * 0.10;
@@ -1489,16 +1499,69 @@
     return { hp, speed };
   }
 
+  const GOKU_MAX_PROJECTILES = 8;
+  const GOKU_GRAVITY = 620;
+  const GOKU_EVADE_DUR = 0.32;   // afterimage fade reads this, so both must agree
+
   let gokuSimulatedCommits = null;
   const gokuState = {
+    // Animation & movement state
+    state: 'idle',           // idle, walk, run, jump_anticipation, jump_launch, jump_rise, jump_apex, jump_fall, landing, hover, fly, alert, charge, melee, kiball, kamehameha, hit, evade, transform, powerup
+    stateTimer: 0,
+    targetVx: 0,
+    vx: 0,
+    vy: 0,
+    facing: 1,
+    turnT: 0,
+
+    // Jump physics
+    jumpH: 0,
+    jumpVy: 0,
+    jumpPhase: 'ground',
+    jumpAnticipationT: 0,
+    landT: 0,
+
+    // Procedural secondary motion
+    breathePhase: 0,
+    chestOffset: 0,
+    shoulderOffset: 0,
+    landingSquash: 0,
+
+    // Transformation sequence
     transformT: 0,
     transformFlash: 0,
+    transformPhase: 'none',   // none, pre_transform, buildup, anticipation, escalation, reveal, release, settle
     transformPrevForm: 0,
     transformTargetForm: 0,
+    transformAuraScale: 1.0,
+
+    // Powerup flair
     powerUpT: 0,
     powerUpCooldown: 35,
-    lightningArcs: [],
     trainingAction: 'idle',
+
+    // Combat
+    combatState: 'peaceful',  // peaceful, alert, engaging, attacking, evading, hit_stun, recovering
+    alertBug: null,
+    alertT: 0,
+    attackStyle: 'none',      // none, melee, kiball, kamehameha
+    attackTimer: 0,
+    meleeHitT: 0,
+    meleeCooldown: 0,
+    strikePhase: 'idle',
+    strikeTarget: null,
+
+    // Projectiles
+    projectiles: [],          // active ki blast projectiles
+
+    // Hit reactions & Ultra Instinct evasion
+    hitT: 0,
+    hitType: 'none',          // light, heavy, boss
+    invincibleT: 0,           // i-frames
+    recoilVx: 0,
+    evadeT: 0,
+    evadeOffset: { x: 0, y: 0 },
+    evadeCooldown: 0,
   };
 
   function setGokuSimulatedCommits(val) {
@@ -1532,13 +1595,16 @@
       const span = form.maxCommits - form.minCommits;
       formProgress = span > 0 ? clamp((commits - form.minCommits) / span, 0, 1) : 0;
     } else {
-      formProgress = clamp((commits - 51) / 49, 0, 1);
+      formProgress = clamp((commits - 41) / 39, 0, 1);
     }
 
     const settings = state.gokuSettings || { size: 1, animIntensity: 1, auraIntensity: 1, speed: 1, attackFreq: 1 };
 
+    // Continuous bounded scaling: smoothly increases within each form and across forms
     const overallPower = clamp(commits / 75, 0, 1.5);
-    const auraIntensity = clamp((form.baseAura + formProgress * form.auraMultiplier) * (settings.auraIntensity || 1), 0, 3.5);
+    // `?? 1`, not `|| 1`: auraIntensity's slider range starts at 0.0, and `||` turned a
+    // deliberate 0 back into full strength, so the aura could never be dialled off.
+    const auraIntensity = clamp((form.baseAura + formProgress * form.auraMultiplier) * (settings.auraIntensity ?? 1), 0, 3.5);
     const attackPower = clamp((form.baseAttack + formProgress * form.attackMultiplier), 0.1, 2.5);
     const attackFrequency = clamp((form.baseFreq + formProgress * form.freqMultiplier) * (settings.attackFreq || 1), 0.5, 3.5);
     const movementIntensity = clamp((form.baseSpeed + formProgress * form.speedMultiplier) * (settings.speed || 1), 0.5, 3.5);
@@ -1561,12 +1627,10 @@
 
   function getGokuSnapshot() {
     const p = getGokuPower();
-    // Control-room combat readout. Screen-wide swarm mode still hands Goku the host's
-    // plain beetles (the native overlay that draws them hasn't been given the enemy pack),
-    // so this only reports pack-flavored names for bugs actually spawned by spawnBug here.
-    let currentEnemy = 'None', bossState = 'None';
+    let currentEnemy = 'None', bossState = 'None', activeEnemyCount = 0;
     if (state.species === 'goku') {
       const activeBugs = swarmOn() ? hostBugs : bugs.filter((b) => b.alive);
+      activeEnemyCount = activeBugs.length;
       if (activeBugs.length) {
         let nearest = activeBugs[0], bestD = Infinity;
         for (const b of activeBugs) {
@@ -1595,6 +1659,9 @@
       currentEnemy,
       enemiesDefeated: state.gokuKillsToday || 0,
       bossState,
+      combatState: gokuState.combatState,
+      activeEnemies: activeEnemyCount,
+      activeAttack: pet.zapStyle || 'None',
     };
   }
 
@@ -1612,8 +1679,10 @@
   function triggerGokuTransformation(fromIndex, toIndex) {
     gokuState.transformT = 3.6;
     gokuState.transformFlash = 1.0;
+    gokuState.transformPhase = 'pre_transform';
     gokuState.transformPrevForm = fromIndex;
     gokuState.transformTargetForm = toIndex;
+    gokuState.transformAuraScale = 1.2;
     const form = GOKU_CONFIG.forms[toIndex];
     pet.knee = 0.8;
     pet.happy = 1.8;
@@ -1633,6 +1702,69 @@
     }
   }
 
+  function triggerGokuEvade(enemy) {
+    gokuState.evadeT = GOKU_EVADE_DUR;
+    gokuState.evadeCooldown = 0.7;
+    const dir = enemy && enemy.x < pet.x ? 1 : -1;
+    gokuState.evadeOffset = { x: dir * petR() * 0.5, y: -petR() * 0.4 };
+    spawn('spark', pet.x, pet.y - petR(), 5, { spread: 8, vx: dir * 60, vy: -40, size: 7, hue: 210, dur: 0.35 });
+    say(pick(["Too slow.", "Evaded.", "Not quite.", "..."]), 1000);
+    audio.pop();
+  }
+
+  function triggerGokuHit(enemy) {
+    if (gokuState.invincibleT > 0 || state.asleep || pet.held || pet.carried) return;
+    const p = getGokuPower();
+    if (p.formIndex === 5) {
+      triggerGokuEvade(enemy);
+      return;
+    }
+    const isBoss = enemy && enemy.boss;
+    const isElite = enemy && enemy.enemyId === 'elite';
+    gokuState.hitT = 0.35;
+    gokuState.hitType = isBoss ? 'boss' : (isElite ? 'heavy' : 'light');
+    gokuState.invincibleT = 1.0;
+    const dir = enemy && enemy.x < pet.x ? 1 : -1;
+    gokuState.recoilVx = dir * (isBoss ? 160 : (isElite ? 110 : 75));
+    pet.surprise = Math.max(pet.surprise, 0.5);
+    pet.knee = 0.6;
+    spawn('spark', pet.x, pet.y - petR(), 5, { spread: 6, vx: dir * 50, vy: -50, size: 7, hue: 15, dur: 0.4 });
+    say(pick(["Ouch!", "Whoa, solid hit!", "Nice strike!", "Not bad!"]), 1100);
+    audio.pop();
+  }
+
+  function spawnGokuKiBlast(target) {
+    const r = petR();
+    const p = getGokuPower();
+    const ox = pet.x + pet.facing * r * 1.05;
+    const oy = pet.y - r * 1.22;
+    const tx = target ? target.x : (pet.x + pet.facing * 180);
+    const ty = target ? (groundY - 9 * scale - (target.altitude || 0)) : oy;
+    const dx = tx - ox, dy = ty - oy;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+    const speed = clamp(480 * p.movementIntensity, 420, 750);
+    const vx = (dx / dist) * speed, vy = (dy / dist) * speed;
+    const hue = p.formIndex === 5 ? 210 : (p.formIndex >= 2 ? 50 : 45);
+    if (gokuState.projectiles.length >= GOKU_MAX_PROJECTILES) gokuState.projectiles.shift();
+    gokuState.projectiles.push({
+      x: ox, y: oy, vx, vy, t: 0, maxT: 2.2,
+      radius: r * 0.22 * (0.8 + p.attackPower * 0.3),
+      hue, formIndex: p.formIndex, trailT: 0
+    });
+    spawn('spark', ox, oy, 4, { spread: 4, vx: vx * 0.15, vy: vy * 0.15, size: 6, hue, dur: 0.25 });
+    audio.pop();
+  }
+
+  function triggerGokuMelee(target) {
+    if (gokuState.meleeCooldown > 0 || !target || !target.alive) return;
+    gokuState.strikePhase = 'windup';
+    gokuState.meleeHitT = 0.32;
+    gokuState.meleeCooldown = 0.9;
+    gokuState.strikeTarget = target;
+    pet.facing = target.x < pet.x ? -1 : 1;
+    pet.knee = 0.5;
+  }
+
   function updateGokuSimulation(dt) {
     const today = dayStamp();
     if (state.commitsDay !== today) {
@@ -1642,13 +1774,44 @@
       say("New day. Let's train!", 3000);
       saveState();
     }
+    const r = petR();
+    const p = getGokuPower();
+
+    // Procedural secondary motion
+    gokuState.breathePhase += dt * 3.2;
+    gokuState.chestOffset = Math.sin(gokuState.breathePhase) * 1.5;
+
+    // Transformation timeline
     if (gokuState.transformT > 0) {
       gokuState.transformT -= dt;
-      if (gokuState.transformT <= 0) gokuState.transformT = 0;
+      const prog = clamp(1 - gokuState.transformT / 3.6, 0, 1);
+      if (prog < 0.2) {
+        gokuState.transformPhase = 'pre_transform';
+      } else if (prog < 0.45) {
+        gokuState.transformPhase = 'buildup';
+        if (Math.random() < 0.3) {
+          spawn('spark', pet.x + rand(-r, r), pet.y - r + rand(-r, r), 1, { spread: 4, vx: -rand(-30, 30), vy: -rand(20, 60), size: 6, hue: 48, dur: 0.4 });
+        }
+      } else if (prog < 0.65) {
+        gokuState.transformPhase = 'escalation';
+        pet.shake = Math.max(pet.shake, 0.25);
+        gokuState.transformAuraScale = 1.6;
+      } else if (prog < 0.85) {
+        gokuState.transformPhase = 'reveal';
+      } else {
+        gokuState.transformPhase = 'settle';
+      }
+      if (gokuState.transformT <= 0) {
+        gokuState.transformT = 0;
+        gokuState.transformPhase = 'none';
+        gokuState.transformAuraScale = 1.0;
+      }
     }
     if (gokuState.transformFlash > 0) {
       gokuState.transformFlash = Math.max(0, gokuState.transformFlash - dt * 2.5);
     }
+
+    // Powerup flair
     if (gokuState.powerUpT > 0) {
       gokuState.powerUpT -= dt;
       if (gokuState.powerUpT <= 0) gokuState.powerUpT = 0;
@@ -1656,6 +1819,116 @@
       gokuState.powerUpCooldown -= dt;
       if (gokuState.powerUpCooldown <= 0 && !pet.carried && !pet.held && pet.zapCharge <= 0 && pet.zap <= 0 && !state.asleep) {
         triggerGokuPowerUp();
+      }
+    }
+
+    // Invulnerability & Hit Stun
+    if (gokuState.invincibleT > 0) gokuState.invincibleT = Math.max(0, gokuState.invincibleT - dt);
+    if (gokuState.hitT > 0) {
+      gokuState.hitT = Math.max(0, gokuState.hitT - dt);
+      pet.x = clamp(pet.x + gokuState.recoilVx * dt, petHalfWidth(), W - petHalfWidth());
+      pet.ax = pet.x;
+      gokuState.recoilVx *= Math.pow(0.04, dt);
+    }
+
+    // Ultra Instinct Evasion cooldown
+    if (gokuState.evadeT > 0) gokuState.evadeT = Math.max(0, gokuState.evadeT - dt);
+    if (gokuState.evadeCooldown > 0) gokuState.evadeCooldown = Math.max(0, gokuState.evadeCooldown - dt);
+
+    // Alert timing
+    if (gokuState.alertT > 0) {
+      gokuState.alertT = Math.max(0, gokuState.alertT - dt);
+      if (gokuState.alertT <= 0) gokuState.alertBug = null;
+    }
+
+    // Jump & landing recovery
+    if (gokuState.landT > 0) gokuState.landT = Math.max(0, gokuState.landT - dt);
+    if (gokuState.jumpH > 0 || gokuState.jumpVy !== 0) {
+      gokuState.jumpVy += GOKU_GRAVITY * dt;
+      gokuState.jumpH = Math.max(0, gokuState.jumpH - gokuState.jumpVy * dt);
+      if (gokuState.jumpVy < -40) gokuState.jumpPhase = 'rise';
+      else if (Math.abs(gokuState.jumpVy) <= 40) gokuState.jumpPhase = 'apex';
+      else gokuState.jumpPhase = 'fall';
+      if (gokuState.jumpH <= 0) {
+        gokuState.jumpH = 0;
+        gokuState.jumpVy = 0;
+        gokuState.jumpPhase = 'ground';
+        gokuState.landT = 0.22;
+        spawn('dust', pet.x, groundY - 3, 3, { spread: r * 0.4, vx: 35, vy: -15, size: 6, dur: 0.3 });
+      }
+    }
+
+    // Melee attack sequence
+    if (gokuState.meleeCooldown > 0) gokuState.meleeCooldown = Math.max(0, gokuState.meleeCooldown - dt);
+    if (gokuState.meleeHitT > 0) {
+      gokuState.meleeHitT -= dt;
+      if (gokuState.strikePhase === 'windup' && gokuState.meleeHitT < 0.22) {
+        gokuState.strikePhase = 'strike';
+        const target = gokuState.strikeTarget;
+        if (target && target.alive) {
+          squashBug(target, true, false);
+          spawn('spark', target.x, groundY - 9 * scale - (target.altitude || 0), 6, { spread: 8, vx: pet.facing * 80, vy: -60, size: 7, hue: 45, dur: 0.35 });
+        }
+      } else if (gokuState.meleeHitT < 0.1) {
+        gokuState.strikePhase = 'recovery';
+      }
+      if (gokuState.meleeHitT <= 0) {
+        gokuState.strikePhase = 'idle';
+        gokuState.strikeTarget = null;
+      }
+    }
+
+    // Traveling Ki Blast projectiles simulation
+    for (let i = gokuState.projectiles.length - 1; i >= 0; i--) {
+      const proj = gokuState.projectiles[i];
+      proj.x += proj.vx * dt;
+      proj.y += proj.vy * dt;
+      proj.t += dt;
+
+      proj.trailT = (proj.trailT || 0) - dt;
+      if (proj.trailT <= 0) {
+        proj.trailT = 0.04;
+        spawn('spark', proj.x, proj.y, 1, { spread: 2, vx: -proj.vx * 0.1, vy: -15, size: proj.radius * 0.55, hue: proj.hue, dur: 0.2 });
+      }
+
+      // Check boundary limits
+      if (proj.t > proj.maxT || proj.x < -40 || proj.x > W + 40 || proj.y < -40 || proj.y > H + 40) {
+        gokuState.projectiles.splice(i, 1);
+        continue;
+      }
+
+      // Collision check against active enemies
+      let hitBug = null;
+      for (const b of bugs) {
+        if (!b.alive) continue;
+        const by = groundY - 9 * scale - (b.altitude || 0);
+        const def = (b.enemyId && b.pack === 'goku') ? gokuEnemyClass(b.enemyId) : null;
+        const enemyR = def ? (14 * def.sizeMul * scale) : (18 * scale);
+        if (Math.hypot(proj.x - b.x, proj.y - by) < (proj.radius + enemyR)) {
+          hitBug = b;
+          break;
+        }
+      }
+      if (hitBug) {
+        squashBug(hitBug, false, true);
+        spawn('spark', proj.x, proj.y, 8, { spread: 10, vx: Math.sign(proj.vx) * 80, vy: -70, size: 8, hue: proj.hue, dur: 0.4 });
+        gokuState.projectiles.splice(i, 1);
+      }
+    }
+
+    // Tactical combat check: if live enemies are near, manage alert and melee opportunities
+    const activeBugs = bugs.filter((b) => b.alive);
+    if (activeBugs.length > 0 && !state.asleep && !pet.held && !pet.carried) {
+      let nearest = activeBugs[0], minD = Infinity;
+      for (const b of activeBugs) {
+        const d = Math.abs(b.x - pet.x);
+        if (d < minD) { minD = d; nearest = b; }
+      }
+      if (minD < r * 2.8 && gokuState.alertT <= 0 && pet.zapCharge <= 0 && pet.zap <= 0) {
+        triggerGokuAlert(nearest);
+      }
+      if (minD < r * 1.3 && gokuState.meleeCooldown <= 0 && gokuState.meleeHitT <= 0 && pet.zapCharge <= 0 && pet.zap <= 0) {
+        triggerGokuMelee(nearest);
       }
     }
   }
@@ -4546,58 +4819,170 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     if (Math.hypot(snack.x - mx, snack.y - my) < r * 1.05 && !pet.held) eatSnack();
   }
 
-  // Movement and light combat-approach behavior for Goku's own enemy pack. Kept entirely
-  // in this one function so the shared per-bug loop only ever asks `b.enemyId` and
-  // dispatches here - every other species' bugs never take this path, and lifecycle
-  // (spawn, cleanup, screen bounds, splice-on-death) stays owned by updateBugs itself.
+  // ---------------------------------------------------------------- Goku's enemy pack: behaviors
+  // Dedicated behaviors for Goku's enemies: tactical martial-arts grunts, diving/shooting wisps,
+  // speed-dash assassins, heavy ground-slam brutes, and a multi-phase enraged Warlord boss.
+  function updateGokuGrunt(b, dt, r, def) {
+    b.hopT = Math.max(0, (b.hopT || 0) - dt);
+    b.attackCd = Math.max(0, (b.attackCd || 0) - dt);
+    if (b.hurtT > 0) return;
+
+    const dist = Math.abs(b.x - pet.x);
+    if (dist < 38 * scale && b.attackCd <= 0 && !state.asleep && !pet.held && !pet.carried) {
+      // Wind up and punch
+      b.attackWindup = 0.22;
+      b.attackCd = rand(1.8, 3.2);
+      b.vx = (Math.sign(pet.x - b.x) || 1) * def.speed * 1.5;
+    }
+
+    if (b.attackWindup > 0) {
+      b.attackWindup -= dt;
+      if (b.attackWindup <= 0) {
+        // Strike check
+        if (Math.abs(b.x - pet.x) < 32 * scale && Math.abs((groundY - 1) - pet.y) < r * 1.2) {
+          triggerGokuHit(b);
+        }
+      }
+    } else {
+      b.x += b.vx * dt;
+      if (Math.random() < 0.01) b.vx *= -1;
+      const away = b.x - pet.x;
+      if (Math.abs(away) < r * 1.8 && Math.random() < 0.02) {
+        b.vx = Math.sign(away || 1) * def.speed * (Math.random() < 0.5 ? -1.5 : 1.2);
+      }
+      if (b.hopT <= 0 && Math.random() < 0.005) b.hopT = 0.35;
+    }
+  }
+
+  function updateGokuFlyer(b, dt, r, def) {
+    b.bobPhase = (b.bobPhase || 0) + dt * 2.4;
+    b.altitude = clamp(b.altitude + Math.sin(b.bobPhase) * 10 * dt, def.altitudeRange[0], def.altitudeRange[1]);
+    b.attackCd = Math.max(0, (b.attackCd || 0) - dt);
+    if (b.hurtT > 0) return;
+
+    b.x += b.vx * dt;
+    if (b.attackCd <= 0 && !state.asleep && !pet.held && !pet.carried) {
+      b.attackCd = rand(2.2, 4.0);
+      const by = groundY - 9 * scale - b.altitude;
+      const ang = Math.atan2((pet.y - r * 0.6) - by, pet.x - b.x);
+      spawn('spark', b.x, by, 3, { spread: 3, vx: Math.cos(ang) * 120, vy: Math.sin(ang) * 120, size: 7, hue: 190, dur: 0.55 });
+      // If close to line of fire, Goku reacts
+      if (Math.hypot(pet.x - b.x, (pet.y - r * 0.6) - by) < r * 2.0) {
+        triggerGokuHit(b);
+      }
+    }
+  }
+
+  function updateGokuAssassin(b, dt, r, def) {
+    b.dashCd = Math.max(0, (b.dashCd || 0) - dt);
+    if (b.hurtT > 0) return;
+
+    if (b.dashCd <= 0 && (b.dashT || 0) <= 0) {
+      b.dashT = 0.38;
+      b.dashCd = rand(1.1, 2.3);
+      const toward = Math.sign(pet.x - b.x) || (Math.random() < 0.5 ? -1 : 1);
+      b.vx = toward * def.speed * 1.85;
+      audio.pop();
+    }
+    if (b.dashT > 0) {
+      b.dashT -= dt;
+      if (Math.random() < 0.6) spawn('dust', b.x, groundY - 4, 1, { spread: 4, vx: -b.vx * 0.1, vy: -10, size: 5, dur: 0.25 });
+      // Contact check during high-speed dash
+      if (Math.abs(b.x - pet.x) < 28 * scale && Math.abs((groundY - 1) - pet.y) < r * 1.2) {
+        triggerGokuHit(b);
+      }
+    } else {
+      b.vx = (Math.sign(b.vx) || 1) * def.speed;
+      if (Math.random() < 0.02) b.vx *= -1;
+    }
+    b.x += b.vx * dt;
+  }
+
+  function updateGokuBrute(b, dt, r, def) {
+    b.slamCd = Math.max(0, (b.slamCd || 0) - dt);
+    if (b.hurtT > 0) return;
+
+    const dist = Math.abs(b.x - pet.x);
+    if (dist < 46 * scale && b.slamCd <= 0 && !state.asleep && !pet.held && !pet.carried) {
+      b.slamT = 0.45;
+      b.slamCd = rand(2.5, 4.2);
+      b.targetVx = 0;
+    }
+
+    if (b.slamT > 0) {
+      b.slamT -= dt;
+      if (b.slamT <= 0.15 && !b.slamHit) {
+        b.slamHit = true;
+        audio.pop();
+        pet.shake = Math.max(pet.shake, 0.22);
+        spawn('dust', b.x, groundY - 3, 5, { spread: 18 * scale, vx: 50, vy: -20, size: 8, dur: 0.4 });
+        if (Math.abs(b.x - pet.x) < 55 * scale && Math.abs((groundY - 1) - pet.y) < r * 1.2) {
+          triggerGokuHit(b);
+        }
+      }
+      if (b.slamT <= 0) b.slamHit = false;
+    } else {
+      b.x += b.vx * dt;
+      if (Math.random() < 0.01) b.vx *= -1;
+    }
+  }
+
+  function updateGokuBoss(b, dt, r, def) {
+    b.bossCd = Math.max(0, (b.bossCd || 0) - dt);
+    b.enraged = (b.hp / b.maxHp) <= 0.45;
+    const speedMult = b.enraged ? 1.45 : 1.0;
+    if (b.hurtT > 0) return;
+
+    if (b.bossCd <= 0 && (b.chargeT || 0) <= 0) {
+      b.chargeT = 0.55;
+      b.bossCd = b.enraged ? rand(1.8, 3.0) : rand(3.0, 5.0);
+      const dir = Math.sign(pet.x - b.x) || (Math.random() < 0.5 ? -1 : 1);
+      b.vx = dir * def.speed * speedMult * 2.6;
+      pet.shake = Math.max(pet.shake, b.enraged ? 0.35 : 0.2);
+      audio.pop();
+    }
+
+    if (b.chargeT > 0) {
+      b.chargeT -= dt;
+      b.x += b.vx * dt;
+      if (Math.random() < 0.5) {
+        spawn('flame', b.x, groundY - 15, 2, { spread: 12, vx: -b.vx * 0.15, vy: -30, size: 9, hue: b.enraged ? 5 : 28, dur: 0.35 });
+      }
+      if (Math.abs(b.x - pet.x) < 42 * scale && Math.abs((groundY - 1) - pet.y) < r * 1.4) {
+        triggerGokuHit(b);
+      }
+    } else {
+      b.x += (Math.sign(b.vx) || 1) * def.speed * speedMult * dt;
+      if (Math.random() < 0.008) b.vx *= -1;
+    }
+  }
+
+  const GOKU_ENEMY_BEHAVIORS = {
+    fighter: updateGokuGrunt,
+    grunt: updateGokuGrunt,
+    flying: updateGokuFlyer,
+    flyer: updateGokuFlyer,
+    fast: updateGokuAssassin,
+    assassin: updateGokuAssassin,
+    elite: updateGokuBrute,
+    brute: updateGokuBrute,
+    boss: updateGokuBoss,
+  };
+
   function updateGokuEnemy(b, dt, r) {
     if (b.hurtT > 0) {
       b.hurtT = Math.max(0, b.hurtT - dt);
-      b.x += b.knockVx * dt;
-      b.knockVx *= Math.pow(0.02, dt);
+      b.x += (b.knockVx || 0) * dt;
+      b.knockVx = (b.knockVx || 0) * Math.pow(0.02, dt);
     }
     const def = gokuEnemyClass(b.enemyId);
     const edge = Math.max(18 * scale, petHalfWidth() - petR() * 0.55);
-    const stunned = b.hurtT > 0;
-    if (def.id === 'flying') {
-      b.bobPhase += dt * 2.4;
-      b.altitude = clamp(b.altitude + Math.sin(b.bobPhase) * 8 * dt, def.altitudeRange[0], def.altitudeRange[1]);
-      if (!stunned) {
-        b.x += b.vx * dt;
-        b.attackCd -= dt;
-        if (b.attackCd <= 0 && !state.asleep && !pet.held && !pet.carried) {
-          b.attackCd = rand(2.4, 4.4);
-          const by = groundY - 9 * scale - b.altitude;
-          const ang = Math.atan2((pet.y - r * 0.6) - by, pet.x - b.x);
-          spawn('spark', b.x, by, 1, { spread: 2, vx: Math.cos(ang) * 90, vy: Math.sin(ang) * 90, size: 6, hue: 190, dur: 0.55 });
-        }
-      }
-    } else if (def.id === 'fast') {
-      b.dashCd -= dt;
-      if (!stunned && b.dashCd <= 0 && b.dashT <= 0) { b.dashT = 0.35; b.dashCd = rand(1.2, 2.6); b.vx = (Math.sign(b.vx) || 1) * def.speed * 1.8; }
-      if (b.dashT > 0) {
-        b.dashT -= dt;
-        if (Math.random() < 0.5) spawn('dust', b.x, groundY - 4, 1, { spread: 4, vx: 10, vy: -10, size: 5, dur: 0.25 });
-      } else if (!stunned) {
-        b.vx = (Math.sign(b.vx) || 1) * def.speed;
-      }
-      if (!stunned) { b.x += b.vx * dt; if (Math.random() < 0.02) b.vx *= -1; }
-    } else {
-      // fighter / elite / boss: a walk cycle in the same spirit as the shared beetle's,
-      // slower and heavier per class, plus an occasional hop (fighter only) for personality.
-      b.hopT = Math.max(0, (b.hopT || 0) - dt);
-      if (!stunned) {
-        b.x += b.vx * dt;
-        if (Math.random() < (def.id === 'boss' ? 0.003 : 0.01)) b.vx *= -1;
-        const away = b.x - pet.x;
-        if (def.id !== 'boss' && Math.abs(away) < r * 1.8 && Math.random() < 0.02) {
-          b.vx = Math.sign(away || 1) * def.speed * (Math.random() < 0.5 ? -1.6 : 1.2);
-        }
-        if (def.id === 'fighter' && b.hopT <= 0 && Math.random() < 0.004) b.hopT = 0.35;
-      }
-    }
-    if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx); }
-    if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx); }
+
+    const fn = GOKU_ENEMY_BEHAVIORS[b.enemyId] || updateGokuGrunt;
+    fn(b, dt, r, def);
+
+    if (b.x < edge) { b.x = edge; b.vx = Math.abs(b.vx || def.speed); }
+    if (b.x > W - edge) { b.x = W - edge; b.vx = -Math.abs(b.vx || def.speed); }
     b.facing = Math.sign(b.vx) || b.facing || 1;
     const canStomp = state.hatched && !state.asleep && !pet.held && !pet.carried && pet.grounded;
     if (def.grounded && canStomp && Math.abs(b.x - pet.x) < r * 0.62) squashBug(b, true);
@@ -5180,6 +5565,14 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
             } else {
               squashBug(live, false, true);
             }
+          } else if (state.species === 'goku') {
+            pet.zapLocal = true;
+            if (shotStyle === 'kiball') {
+              spawnGokuKiBlast(aim.host ? null : live);
+            } else {
+              squashBug(live, false, true);
+            }
+            if (aim.host) native({ type: 'zap', id: aim.id, eyes, style: shotStyle });
           } else if (aim.host) {
             // The host draws the real beam across the desktop; keep only the muzzle flash here.
             pet.zapLocal = false;
@@ -5675,6 +6068,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     updateRonaldoBall(dt);
     updateMarioSimulation(dt);
     updateThorSimulation(dt);
+    if (state.species === 'goku' && state.hatched) updateGokuSimulation(dt);
 
     pet.idleAt -= dt;
     if (pet.idleAt <= 0) { doIdle(); pet.idleAt = rand(25, 40); }
@@ -6308,6 +6702,57 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     }
   }
 
+  function drawGokuProjectiles() {
+    if (!gokuState.projectiles || gokuState.projectiles.length === 0) return;
+    ctx.save();
+    for (const p of gokuState.projectiles) {
+      const alpha = clamp(p.life !== undefined ? p.life * 4 : (1 - p.t / p.maxT), 0, 1);
+      const rad = p.radius || 10;
+      const ang = Math.atan2(p.vy, p.vx);
+      const hue = p.hue || 48;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(ang);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = alpha;
+
+      // Glowing comet trail
+      const trailLen = rad * 3.6;
+      const trailGrad = ctx.createLinearGradient(-trailLen, 0, rad * 0.5, 0);
+      trailGrad.addColorStop(0, `hsla(${hue}, 100%, 50%, 0)`);
+      trailGrad.addColorStop(0.5, `hsla(${hue}, 100%, 65%, ${0.5 * alpha})`);
+      trailGrad.addColorStop(1, '#ffffff');
+      ctx.fillStyle = trailGrad;
+      ctx.beginPath();
+      ctx.moveTo(-trailLen, 0);
+      ctx.lineTo(0, -rad * 0.75);
+      ctx.lineTo(rad * 0.6, 0);
+      ctx.lineTo(0, rad * 0.75);
+      ctx.closePath();
+      ctx.fill();
+
+      // Ki orb core
+      const coreGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, rad);
+      coreGrad.addColorStop(0, '#ffffff');
+      coreGrad.addColorStop(0.45, `hsla(${hue}, 100%, 75%, 0.9)`);
+      coreGrad.addColorStop(1, `hsla(${hue}, 100%, 50%, 0)`);
+      ctx.fillStyle = coreGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, rad, 0, Math.PI * 2);
+      ctx.fill();
+
+      // High-energy white nucleus
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, rad * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   function drawGoku() {
     const asleep = state.asleep;
     const charging = pet.zapCharge > 0 && !asleep;
@@ -6315,6 +6760,10 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const isBoss = pet.zapBoss || false;
     const isKame = (pet.zapStyle === 'kamehameha') || isBoss;
     const grow = charging ? clamp(1 - pet.zapCharge / (pet.zapFull || 0.9), 0, 1) : 0;
+    const p = getGokuPower();
+
+    // 1. Draw any world-space Ki blast projectiles
+    drawGokuProjectiles();
 
     // Drag / Flight detection & silky smooth velocity tracking
     const isCarried = !!(pet.carried || pet.held);
@@ -6329,11 +6778,13 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     // Exponential smoothing on velocity to eliminate jitter and flickering
     pet.gokuSpeed = (pet.gokuSpeed || 0) * 0.84 + rawSpeed * 0.16;
 
-    // Immediately face the drag / flight direction (positive vx is right, negative vx is left)
+    // Immediately face the drag / flight direction
     if (charging || firing) {
       if (pet.zapX !== undefined && Math.abs(pet.zapX - pet.x) > 2) {
         pet.facing = pet.zapX < pet.x ? -1 : 1;
       }
+    } else if (gokuState.strikeTarget && gokuState.strikeTarget.alive) {
+      pet.facing = gokuState.strikeTarget.x < pet.x ? -1 : 1;
     } else if (isCarried && Math.abs(vx) > 12) {
       pet.facing = vx < 0 ? -1 : 1;
     } else if (isDesktopFlying && Math.abs(pet.flyVX) > 0.15) {
@@ -6343,8 +6794,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     }
     const f = pet.facing || 1;
 
-    // Aerodynamic banking / pitch in local coordinates (+X is Goku's forward direction)
-    // Forward motion dips nose aerodynamically into the wind; climbing lifts nose up; diving dips nose down
+    // Aerodynamic banking / pitch in local coordinates
     const forwardV = vx * f;
     let targetPitch = 0;
     if (charging || firing) {
@@ -6363,13 +6813,17 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     }
     pet.gokuPitch = (pet.gokuPitch || 0) * 0.78 + targetPitch * 0.22;
 
-    // Zero-flicker flying stance: while carried or in flight, Goku is heroically surfing on Flying Nimbus!
-    const isFlying = isCarried || pet.walking || pet.gokuSpeed > 30 || isDesktopFlying || (pet.mode === 'fly' && Math.hypot(vx, vy) > 30);
+    // Flight and stance detection
+    const isFlying = isCarried || pet.walking || pet.gokuSpeed > 30 || isDesktopFlying || (pet.mode === 'fly' && Math.hypot(vx, vy) > 30) || (pet.y < groundY - 12);
+    const isPowering = gokuState.transformT > 0 || gokuState.powerUpT > 0;
+    const isMelee = gokuState.meleeHitT > 0;
+
     const gokuFormKeys = ['kid', 'base', 'ssj', 'ssj2', 'ssj3', 'ui'];
-    const gokuFormSprites = gokuFormImages[gokuFormKeys[getGokuPower().formIndex] || 'kid'] || gokuFormImages.kid;
+    const gokuFormSprites = gokuFormImages[gokuFormKeys[p.formIndex] || 'kid'] || gokuFormImages.kid;
     let sprite = gokuFormSprites.idle;
     let scaleMult = 2.5;
     let yOffset = 0.86;
+
     if (charging && isKame) {
       sprite = gokuFormSprites.kameCharge;
       scaleMult = 2.65;
@@ -6382,6 +6836,19 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       sprite = gokuFormSprites.kiBlast;
       scaleMult = 3.05;
       yOffset = 0.86;
+    } else if (isPowering || isMelee) {
+      // Powering up and striking both use the braced standing pose. The attack sprites are
+      // off limits here: kameCharge has a lit Kamehameha orb painted into the art and
+      // kiBlast a thrown blast, so either one announces an attack that is not happening -
+      // a power-up fires on an ambient 30-75s timer and on every commit, which is why an
+      // idle Goku was flashing the Kamehameha wind-up at random. The aura already swells
+      // for isPowering, and the melee strike already lunges, so the pose only has to say
+      // "braced", and hold still while it does: the previous melee sprite alternated on
+      // sin(meleeHitT * 30), flipping three times inside a 0.32s strike while
+      // drawPosedSprite cross-faded over 0.1s, so it never resolved into a pose at all.
+      sprite = gokuFormSprites.fly;
+      scaleMult = 2.75;
+      yOffset = 0.88;
     } else if (isFlying) {
       sprite = gokuFormSprites.fly;
       scaleMult = 2.75;
@@ -6391,78 +6858,78 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     stageBody({ shadow: false, bob: isCarried ? 0.01 : 0.05, bobRate: 2.2, sway: isCarried ? 0 : 0.02 }, (r, t) => {
       ctx.save();
 
-      // Neutralize squash/stretch deformation from stageBody so the pixel art stays pristine and unwarped
+      // Neutralize squash/stretch deformation from stageBody so the pixel art stays pristine
       const sx = (1 - pet.sq * 0.85) * (1 - pet.stretch * 0.6);
       const sy = (1 + pet.sq) * (1 + pet.stretch);
       if (Math.abs(sx) > 0.05 && Math.abs(sy) > 0.05) {
         ctx.scale(1 / sx, 1 / sy);
       }
 
+      // Procedural landing squash
+      const landSq = gokuState.landT > 0 ? (gokuState.landT / 0.22) * 0.22 : (gokuState.landingSquash || 0);
+      if (landSq > 0.01) {
+        ctx.scale(1 + landSq * 0.22, 1 - landSq * 0.22);
+      }
+
       // Flip for facing direction (f = 1 faces right, f = -1 faces left)
       ctx.scale(f, 1);
 
-      // Aerodynamic pitch into flight direction
-      ctx.rotate(pet.gokuPitch);
+      // Aerodynamic pitch into flight direction or hit recoil
+      let pitch = pet.gokuPitch;
+      if (gokuState.hitT > 0) {
+        pitch -= (gokuState.hitT / 0.35) * 0.18;
+      }
+      ctx.rotate(pitch);
 
+      // Melee lunge offset
+      if (isMelee) {
+        const lunge = Math.sin((gokuState.meleeHitT / 0.32) * Math.PI) * r * 0.35;
+        ctx.translate(lunge, 0);
+      }
 
-      // -------------------------------------------------------- Kamehameha Aura (Charging/Firing)
-      if ((charging || firing) && isKame) {
-        const power = firing ? 1 : grow;
+      // No aura layer. Every form's aura was a radial-gradient sphere painted behind the
+      // sprite, and on a dark desktop it read as a glowing ball stuck to the pet rather
+      // than as ki. The form art already carries the identity it was duplicating: the
+      // Super Saiyan sheets are drawn with their own glow, and the SSJ2/SSJ3 sheets have
+      // the electric arcs painted in. Same mistake the procedural Flying Nimbus made,
+      // drawing over art that already had it.
+
+      // -------------------------------------------------------- Ultra Instinct Evade Afterimages
+      if (gokuState.evadeT > 0 && sprite && sprite.complete) {
         ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const auraR = r * (1.8 + power * 0.9);
-        const glow = ctx.createRadialGradient(0, -r * 0.35, r * 0.2, 0, -r * 0.35, auraR);
-        glow.addColorStop(0, `hsla(192, 100%, 86%, ${0.55 * power})`);
-        glow.addColorStop(0.35, `hsla(205, 100%, 65%, ${0.32 * power})`);
-        glow.addColorStop(0.75, `hsla(215, 100%, 55%, ${0.14 * power})`);
-        glow.addColorStop(1, 'hsla(215, 100%, 50%, 0)');
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.ellipse(0, -r * 0.35, auraR * 1.15, auraR * 1.35, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Electric Ki lightning sparks
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(1.4, r * 0.05);
-        for (let i = 0; i < 6; i++) {
-          const ph = (t * 6 + i * 1.05) % (Math.PI * 2);
-          const dist1 = r * (0.6 + Math.sin(ph) * 0.2);
-          const dist2 = auraR * 0.85;
-          const ang = (i / 6) * Math.PI * 2 + Math.sin(t * 12 + i) * 0.3;
-          ctx.beginPath();
-          ctx.moveTo(Math.cos(ang) * dist1, -r * 0.35 + Math.sin(ang) * dist1);
-          ctx.lineTo(Math.cos(ang + 0.25) * (dist1 + dist2) * 0.5, -r * 0.35 + Math.sin(ang + 0.25) * (dist1 + dist2) * 0.5);
-          ctx.lineTo(Math.cos(ang) * dist2, -r * 0.35 + Math.sin(ang) * dist2);
-          ctx.stroke();
-        }
-        ctx.restore();
-
-      // -------------------------------------------------------- Small Bug Ki Blast Golden Aura
-      } else if ((charging || firing) && !isKame) {
-        const power = firing ? 1 : grow;
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const auraR = r * (1.3 + power * 0.6);
-        const glow = ctx.createRadialGradient(r * 0.4, -r * 0.3, r * 0.1, r * 0.4, -r * 0.3, auraR);
-        glow.addColorStop(0, `hsla(55, 100%, 90%, ${0.7 * power})`);
-        glow.addColorStop(0.4, `hsla(45, 100%, 65%, ${0.38 * power})`);
-        glow.addColorStop(0.8, `hsla(30, 100%, 50%, ${0.15 * power})`);
-        glow.addColorStop(1, 'hsla(30, 100%, 45%, 0)');
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(r * 0.4, -r * 0.3, auraR, 0, Math.PI * 2);
-        ctx.fill();
+        const ghostProg = gokuState.evadeT / GOKU_EVADE_DUR;
+        ctx.globalAlpha = ghostProg * 0.45;
+        const targetW = r * scaleMult;
+        const targetH = targetW * (sprite.naturalHeight / sprite.naturalWidth);
+        ctx.translate(-24 * ghostProg, -12 * ghostProg);
+        drawPosedSprite('goku', sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
         ctx.restore();
       }
 
-      // -------------------------------------------------------- Sprite Rendering
+      // -------------------------------------------------------- Sprite Rendering with Breathing & Hit Flash
       if (sprite && sprite.complete && sprite.naturalWidth > 0) {
         const sw = sprite.naturalWidth;
         const sh = sprite.naturalHeight;
-
         const targetW = r * scaleMult;
         const targetH = targetW * (sh / sw);
-        drawPosedSprite('goku', sprite, -targetW / 2, -targetH * yOffset, targetW, targetH);
+
+        // Breathing chest offset (applied when not in active combat actions)
+        const breathY = (!charging && !firing && !isMelee && !isPowering) ? (gokuState.chestOffset || 0) : 0;
+        const jumpY = -(gokuState.jumpH || 0);
+
+        ctx.save();
+        // Hit reaction damage flash
+        if (gokuState.hitT > 0) {
+          if (Math.floor(gokuState.hitT * 25) % 2 === 0) {
+            ctx.filter = 'brightness(2.4) contrast(1.5)';
+          }
+        } else if (gokuState.invincibleT > 0) {
+          if (Math.floor(gokuState.invincibleT * 20) % 2 === 0) {
+            ctx.globalAlpha = 0.55;
+          }
+        }
+        drawPosedSprite('goku', sprite, -targetW / 2, -targetH * yOffset + breathY + jumpY, targetW, targetH);
+        ctx.restore();
       } else {
         // Vector fallback
         ctx.fillStyle = '#fed732';
@@ -6531,21 +6998,8 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         ctx.restore();
       }
 
-      // 3. Kamehameha Charging Ki Sphere at Hip
-      if (charging && isKame) {
-        ctx.save();
-        const pulse = r * (0.28 + grow * 0.24 + Math.sin(t * 30) * 0.06);
-        const kg = ctx.createRadialGradient(r * 0.02, -r * 1.20, 2, r * 0.02, -r * 1.20, pulse);
-        kg.addColorStop(0, '#ffffff');
-        kg.addColorStop(0.35, '#85f0ff');
-        kg.addColorStop(0.75, 'rgba(0, 170, 255, 0.75)');
-        kg.addColorStop(1, 'rgba(0, 80, 255, 0)');
-        ctx.fillStyle = kg;
-        ctx.beginPath();
-        ctx.arc(r * 0.02, -r * 1.20, pulse, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
+      // No drawn ki sphere at the hip while charging: the kameCharge sprite is already
+      // painted with the cupped-hands orb, so this put a second glowing ball on top of it.
 
       // 4. Kamehameha Firing Muzzle Bloom
       if (firing && isKame) {
@@ -6564,7 +7018,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         ctx.restore();
       }
 
-      // 5. Ki Blast Orb (Small Bugs)
+      // 5. Ki Blast Orb (Small Ki shots)
       if (firing && !isKame) {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
@@ -6581,7 +7035,25 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         ctx.restore();
       }
 
-      // 6. Sleeping Zzz (when asleep)
+      // 6. Melee Impact Burst (Punch / Kick impact)
+      if (isMelee && gokuState.strikePhase === 'strike') {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1.8, r * 0.05);
+        const hitX = r * 1.1;
+        const hitY = -r * 0.9;
+        for (let i = 0; i < 6; i++) {
+          const ang = (i / 6) * Math.PI * 2 + t * 5;
+          ctx.beginPath();
+          ctx.moveTo(hitX, hitY);
+          ctx.lineTo(hitX + Math.cos(ang) * r * 0.45, hitY + Math.sin(ang) * r * 0.45);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 7. Sleeping Zzz (when asleep)
       if (asleep) {
         ctx.save();
         ctx.fillStyle = '#ffffff';
@@ -10307,6 +10779,383 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       default: return { body: '#e2703a', dark: '#7a331a', glow: '#ffd36b' };
     }
   }
+  function drawGokuGrunt(b, u, pal, ink, flash) {
+    const hop = b.hopT > 0 ? Math.sin((1 - b.hopT / 0.35) * Math.PI) * u * 0.6 : 0;
+    ctx.save();
+    ctx.translate(0, -hop);
+
+    // Stance: martial arts crouching legs
+    ctx.fillStyle = ink(pal.dark);
+    ctx.beginPath();
+    ctx.roundRect(-u * 0.65, -u * 0.9, u * 0.55, u * 0.95, u * 0.2);
+    ctx.roundRect(u * 0.15, -u * 0.85, u * 0.55, u * 0.9, u * 0.2);
+    ctx.fill();
+
+    // Gi tunic torso
+    ctx.fillStyle = ink(pal.body);
+    ctx.beginPath();
+    ctx.roundRect(-u * 0.7, -u * 1.75, u * 1.4, u * 1.05, u * 0.25);
+    ctx.fill();
+
+    // Dark waist sash / belt
+    ctx.fillStyle = ink('#1e293b');
+    ctx.fillRect(-u * 0.72, -u * 1.15, u * 1.44, u * 0.28);
+
+    // Head with spiky hair tufts
+    ctx.fillStyle = ink(pal.dark);
+    ctx.beginPath();
+    ctx.arc(0, -u * 2.15, u * 0.65, 0, Math.PI * 2);
+    ctx.fill();
+    // Hair spikes
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.6, -u * 2.4);
+    ctx.lineTo(-u * 0.2, -u * 2.9);
+    ctx.lineTo(0.1, -u * 2.45);
+    ctx.lineTo(u * 0.45, -u * 2.85);
+    ctx.lineTo(u * 0.6, -u * 2.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Face / skin
+    ctx.fillStyle = ink('#fbcfe8');
+    ctx.beginPath();
+    ctx.arc(u * 0.15, -u * 2.1, u * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fierce eye
+    ctx.fillStyle = ink('#0f172a');
+    ctx.beginPath();
+    ctx.arc(u * 0.28, -u * 2.12, u * 0.09, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Red headband tied around forehead
+    ctx.strokeStyle = ink('#ef4444');
+    ctx.lineWidth = Math.max(1.5, u * 0.22);
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.45, -u * 2.28);
+    ctx.lineTo(u * 0.52, -u * 2.22);
+    ctx.stroke();
+
+    // Fluttering headband ribbon tails
+    const ribbonWave = Math.sin(pet.t * 8 + b.x * 0.05) * u * 0.25;
+    ctx.lineWidth = Math.max(1.2, u * 0.14);
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.45, -u * 2.28);
+    ctx.quadraticCurveTo(-u * 0.95, -u * 2.4 + ribbonWave, -u * 1.4, -u * 2.2 + ribbonWave * 1.2);
+    ctx.moveTo(-u * 0.45, -u * 2.25);
+    ctx.quadraticCurveTo(-u * 0.85, -u * 2.15 + ribbonWave, -u * 1.3, -u * 1.95 + ribbonWave);
+    ctx.stroke();
+
+    // Guard arms & white hand wraps
+    ctx.fillStyle = ink('#f8fafc');
+    if (b.punchT > 0) {
+      // Forward lunging punch
+      const punchExt = Math.sin(clamp(b.punchT / 0.2, 0, 1) * Math.PI) * u * 0.8;
+      ctx.beginPath();
+      ctx.arc(u * 0.8 + punchExt, -u * 1.45, u * 0.32, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Raised fists in guard
+      ctx.beginPath();
+      ctx.arc(u * 0.45, -u * 1.55, u * 0.25, 0, Math.PI * 2);
+      ctx.arc(u * 0.15, -u * 1.35, u * 0.24, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawGokuFlyer(b, u, pal, ink, flash) {
+    const bob = Math.sin(b.bobPhase || 0) * u * 0.18;
+    ctx.save();
+    ctx.translate(0, bob);
+
+    // Glowing plasma aura sheath
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = pal.glow;
+    ctx.globalAlpha = 0.35 + Math.sin(pet.t * 6) * 0.12;
+    ctx.beginPath();
+    ctx.arc(0, -u * 1.2, u * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Crystalline swept energy wings (flapping gently with flight)
+    const wingFlap = Math.sin(pet.t * 10 + (b.bobPhase || 0)) * 0.28;
+    ctx.fillStyle = ink(pal.dark);
+    ctx.strokeStyle = pal.glow;
+    ctx.lineWidth = 1.4;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(s * u * 0.25, -u * 1.2);
+      ctx.lineTo(s * u * 1.6, -u * 1.8 + s * wingFlap * u);
+      ctx.lineTo(s * u * 1.3, -u * 0.9 + s * wingFlap * u * 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Trailing Ki plasma ribbons
+    ctx.strokeStyle = pal.glow;
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = 0.65;
+    for (const s of [-0.4, 0.4]) {
+      ctx.beginPath();
+      ctx.moveTo(s * u, -u * 0.7);
+      ctx.quadraticCurveTo(s * u * 1.5 - u * 0.6, -u * 0.3 + Math.sin(pet.t * 12 + s) * u * 0.25, s * u * 1.8 - u * 1.2, 0);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Glowing plasma core
+    ctx.fillStyle = ink(pal.body);
+    ctx.beginPath();
+    ctx.arc(0, -u * 1.2, u * 0.78, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner bright ocular core
+    ctx.fillStyle = flash > 0 ? '#ffffff' : pal.glow;
+    ctx.beginPath();
+    ctx.arc(u * 0.15, -u * 1.2, u * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawGokuAssassin(b, u, pal, ink, flash) {
+    // Dash trail ghosts
+    if (b.dashT > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = pal.glow;
+      for (let g = 1; g <= 2; g++) {
+        ctx.beginPath();
+        ctx.ellipse(-u * g * 0.75, -u * 1.0, u * 0.45, u * 0.7, -0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Sleek low-profile ninja torso & cowl
+    ctx.fillStyle = ink(pal.dark);
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.95, 0);
+    ctx.lineTo(-u * 0.4, -u * 1.55);
+    ctx.lineTo(u * 0.85, -u * 1.15);
+    ctx.lineTo(u * 0.55, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Hooded head
+    ctx.fillStyle = ink(pal.body);
+    ctx.beginPath();
+    ctx.ellipse(u * 0.2, -u * 1.35, u * 0.48, u * 0.38, -0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Glowing twin violet visor slit / eyes
+    ctx.fillStyle = '#f0abfc';
+    ctx.beginPath();
+    ctx.arc(u * 0.45, -u * 1.38, u * 0.12, 0, Math.PI * 2);
+    ctx.arc(u * 0.22, -u * 1.42, u * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dual wrist energy blades (vivid violet/magenta Ki blades)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = '#c084fc';
+    ctx.lineWidth = Math.max(1.8, u * 0.22);
+    ctx.shadowColor = '#e879f9';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(u * 0.5, -u * 0.9);
+    ctx.lineTo(u * 1.6, -u * 1.25);
+    ctx.moveTo(u * 0.15, -u * 0.7);
+    ctx.lineTo(u * 1.2, -u * 0.85);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawGokuBrute(b, u, pal, ink, flash) {
+    // Heavy armored juggernaut: segmented obsidian and crimson plate
+    // Armored legs
+    ctx.fillStyle = ink('#1c1917');
+    ctx.beginPath();
+    ctx.roundRect(-u * 0.95, -u * 0.95, u * 0.75, u * 0.95, u * 0.2);
+    ctx.roundRect(u * 0.2, -u * 0.95, u * 0.75, u * 0.95, u * 0.2);
+    ctx.fill();
+
+    // Heavy torso carapace
+    ctx.fillStyle = ink(pal.dark);
+    ctx.beginPath();
+    ctx.roundRect(-u * 1.15, -u * 2.05, u * 2.3, u * 1.25, u * 0.35);
+    ctx.fill();
+
+    // Crimson armor chest plates
+    ctx.fillStyle = ink(pal.body);
+    ctx.beginPath();
+    ctx.roundRect(-u * 0.9, -u * 1.95, u * 0.8, u * 0.9, u * 0.2);
+    ctx.roundRect(u * 0.1, -u * 1.95, u * 0.8, u * 0.9, u * 0.2);
+    ctx.fill();
+
+    // Horned helmet head
+    ctx.fillStyle = ink(pal.dark);
+    ctx.beginPath();
+    ctx.arc(0, -u * 2.35, u * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Helmet horns
+    ctx.fillStyle = ink('#78716c');
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.65, -u * 2.4);
+    ctx.lineTo(-u * 1.2, -u * 3.0);
+    ctx.lineTo(-u * 0.4, -u * 2.65);
+    ctx.closePath();
+    ctx.moveTo(u * 0.65, -u * 2.4);
+    ctx.lineTo(u * 1.2, -u * 3.0);
+    ctx.lineTo(u * 0.4, -u * 2.65);
+    ctx.closePath();
+    ctx.fill();
+
+    // Glowing amber chest power reactor core
+    ctx.save();
+    ctx.shadowColor = pal.glow;
+    ctx.shadowBlur = u * (0.6 + Math.sin(pet.t * 7) * 0.2);
+    ctx.fillStyle = pal.glow;
+    ctx.beginPath();
+    ctx.arc(0, -u * 1.45, u * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Massive armored gauntlets
+    ctx.fillStyle = ink('#44403c');
+    ctx.beginPath();
+    ctx.arc(u * 0.95, -u * 1.15, u * 0.45, 0, Math.PI * 2);
+    ctx.arc(-u * 0.85, -u * 1.15, u * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Health pips above head
+    if (b.maxHp > 1) {
+      const pipCount = b.maxHp;
+      const pipW = Math.min(10, (u * 2.2) / pipCount);
+      const totalW = pipCount * pipW;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(-totalW / 2 - 1, -u * 3.4 - 1, totalW + 2, 5);
+      for (let i = 0; i < pipCount; i++) {
+        ctx.fillStyle = (i < b.hp) ? '#22c55e' : '#475569';
+        ctx.fillRect(-totalW / 2 + i * pipW, -u * 3.4, pipW - 1, 3);
+      }
+    }
+  }
+
+  function drawGokuBoss(b, u, pal, ink, flash) {
+    const isEnraged = (b.hp / b.maxHp) <= 0.45;
+
+    // Full Boss Health Bar
+    const bw = 96, bh = 7;
+    ctx.fillStyle = 'rgba(15, 15, 20, 0.92)';
+    ctx.fillRect(-bw / 2 - 2, -u * 3.8 - 2, bw + 4, bh + 4);
+    ctx.strokeStyle = isEnraged ? '#ff0033' : '#f59e0b';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-bw / 2 - 2, -u * 3.8 - 2, bw + 4, bh + 4);
+
+    const hpPct = clamp((b.hp || 1) / (b.maxHp || 1), 0, 1);
+    ctx.fillStyle = isEnraged ? '#dc2626' : '#ef4444';
+    ctx.fillRect(-bw / 2, -u * 3.8, bw * hpPct, bh);
+
+    ctx.font = 'bold 9px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    const bossTitle = (b.label || 'WARLORD') + (isEnraged ? ' [ENRAGED!]' : '');
+    ctx.fillText(bossTitle, 0, -u * 3.8 - 6);
+
+    // Enraged fiery crimson/black aura
+    if (isEnraged) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const rageGrad = ctx.createRadialGradient(0, -u * 1.5, u * 0.3, 0, -u * 1.5, u * 2.4);
+      rageGrad.addColorStop(0, 'rgba(255, 30, 30, 0.7)');
+      rageGrad.addColorStop(0.5, 'rgba(220, 38, 38, 0.35)');
+      rageGrad.addColorStop(1, 'rgba(120, 0, 0, 0)');
+      ctx.fillStyle = rageGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, -u * 1.5, u * 2.2, u * 2.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Crimson lightning sparks
+      ctx.strokeStyle = '#ff8888';
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < 4; i++) {
+        const ang = (i / 4) * Math.PI * 2 + pet.t * 6;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ang) * u * 0.8, -u * 1.5 + Math.sin(ang) * u * 0.8);
+        ctx.lineTo(Math.cos(ang) * u * 1.8, -u * 1.5 + Math.sin(ang) * u * 1.8);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Flowing battle cape behind
+    const capeFlutter = Math.sin(pet.t * 6) * u * 0.35;
+    ctx.fillStyle = ink('#881337');
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.9, -u * 2.2);
+    ctx.lineTo(-u * 1.8 - Math.abs(b.vx || 0) * 0.05, -u * 0.2 + capeFlutter);
+    ctx.lineTo(-u * 0.4, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Dark warlord torso carapace
+    ctx.fillStyle = ink(pal.dark);
+    ctx.beginPath();
+    ctx.roundRect(-u * 1.45, -u * 2.8, u * 2.9, u * 2.2, u * 0.5);
+    ctx.fill();
+
+    // Spiked regal shoulder pauldrons with gold inlay
+    ctx.fillStyle = ink(pal.body);
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(s * u * 0.8, -u * 2.6);
+      ctx.lineTo(s * u * 1.8, -u * 3.1);
+      ctx.lineTo(s * u * 1.4, -u * 2.3);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Crowned warlord helmet
+    ctx.fillStyle = ink(pal.dark);
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.9, -u * 2.8);
+    ctx.lineTo(0, -u * 3.65);
+    ctx.lineTo(u * 0.9, -u * 2.8);
+    ctx.closePath();
+    ctx.fill();
+
+    // Glowing forehead crest & scouter eye
+    ctx.save();
+    ctx.shadowColor = pal.glow;
+    ctx.shadowBlur = u * 0.8;
+    ctx.fillStyle = isEnraged ? '#ff0044' : '#ffffff';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(s * u * 0.4, -u * 2.25, u * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  const GOKU_ENEMY_RENDERERS = {
+    fighter: drawGokuGrunt,
+    flying: drawGokuFlyer,
+    fast: drawGokuAssassin,
+    elite: drawGokuBrute,
+    boss: drawGokuBoss,
+    grunt: drawGokuGrunt,
+    flyer: drawGokuFlyer,
+    assassin: drawGokuAssassin,
+    brute: drawGokuBrute,
+    energy: drawGokuFlyer,
+  };
+
   function drawGokuEnemy(b) {
     const def = gokuEnemyClass(b.enemyId);
     const u = 8 * def.sizeMul * scale;
@@ -10328,99 +11177,14 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       return;
     }
 
-    if (def.id === 'boss') {
-      const bw = 84, bh = 6;
-      ctx.fillStyle = 'rgba(18, 20, 26, 0.85)';
-      ctx.fillRect(-bw / 2 - 1, -u * 3.6 - 1, bw + 2, bh + 2);
-      ctx.fillStyle = '#ef4444';
-      const hpPct = clamp((b.hp || 1) / (b.maxHp || 1), 0, 1);
-      ctx.fillRect(-bw / 2, -u * 3.6, bw * hpPct, bh);
-      ctx.font = 'bold 9px ui-monospace, Menlo, monospace';
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.fillText(b.label || def.name, 0, -u * 3.6 - 5);
-    }
-
     ctx.scale(b.facing || 1, 1);
     const flash = b.hurtT > 0 ? clamp(b.hurtT / def.hitStagger, 0, 1) : 0;
     if (flash > 0) ctx.translate(Math.sin(pet.t * 60) * u * 0.15 * flash, 0);
     const ink = (fallback) => (flash > 0 ? '#ffffff' : fallback);
 
-    if (def.id === 'flying') {
-      const bob = Math.sin(b.bobPhase || 0) * u * 0.15;
-      ctx.save();
-      ctx.translate(0, bob);
-      ctx.globalAlpha = 0.35;
-      ctx.fillStyle = pal.glow;
-      ctx.beginPath(); ctx.arc(0, -u * 1.1, u * 1.5, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = pal.dark;
-      ctx.lineWidth = 1.4;
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(s * u * 0.3, -u * 1.1);
-        ctx.quadraticCurveTo(s * u * 1.4, -u * 1.5 + Math.sin(pet.t * 8) * u * 0.2, s * u * 1.9, -u * 1.0);
-        ctx.stroke();
-      }
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 1.1, u * 0.85, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = flash > 0 ? '#ffffff' : pal.glow;
-      ctx.beginPath(); ctx.arc(0, -u * 1.1, u * 0.32, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    } else if (def.id === 'fast') {
-      if (b.dashT > 0) {
-        ctx.strokeStyle = pal.glow;
-        ctx.globalAlpha = 0.6;
-        ctx.lineWidth = u * 0.3;
-        ctx.beginPath(); ctx.moveTo(-u * 1.6, -u * 0.6); ctx.lineTo(-u * 0.6, -u * 0.6); ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath();
-      ctx.moveTo(-u * 0.9, 0); ctx.lineTo(-u * 0.3, -u * 1.35); ctx.lineTo(u * 0.9, -u * 1.0); ctx.lineTo(u * 0.5, 0);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.ellipse(u * 0.15, -u * 1.15, u * 0.5, u * 0.4, -0.3, 0, Math.PI * 2); ctx.fill();
-    } else if (def.id === 'elite') {
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.roundRect(-u * 0.95, -u * 1.9, u * 1.9, u * 1.9, u * 0.4); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 2.15, u * 0.75, 0, Math.PI * 2); ctx.fill();
-      ctx.save();
-      ctx.shadowColor = pal.glow;
-      ctx.shadowBlur = u * (0.5 + Math.sin(pet.t * 6) * 0.15);
-      ctx.fillStyle = pal.glow;
-      ctx.beginPath(); ctx.arc(0, -u * 1.05, u * 0.32, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    } else if (def.id === 'boss') {
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.roundRect(-u * 1.4, -u * 2.7, u * 2.8, u * 2.7, u * 0.5); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.moveTo(-u, -u * 2.7); ctx.lineTo(0, -u * 3.5); ctx.lineTo(u, -u * 2.7); ctx.closePath(); ctx.fill();
-      ctx.save();
-      ctx.shadowColor = pal.glow;
-      ctx.shadowBlur = u * 0.6;
-      ctx.fillStyle = '#fff';
-      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * u * 0.4, -u * 2.15, u * 0.14, 0, Math.PI * 2); ctx.fill(); }
-      ctx.restore();
-      ctx.strokeStyle = pal.glow;
-      ctx.globalAlpha = 0.5 + Math.sin(pet.t * 4) * 0.2;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(0, -u * 1.3, u * 1.9, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-    } else {
-      const hop = b.hopT > 0 ? Math.sin((1 - b.hopT / 0.35) * Math.PI) * u * 0.6 : 0;
-      ctx.save();
-      ctx.translate(0, -hop);
-      ctx.fillStyle = ink(pal.dark);
-      ctx.beginPath(); ctx.roundRect(-u * 0.6, -u * 1.5, u * 1.2, u * 1.4, u * 0.3); ctx.fill();
-      ctx.fillStyle = ink(pal.body);
-      ctx.beginPath(); ctx.arc(0, -u * 1.65, u * 0.55, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = pal.glow;
-      ctx.beginPath(); ctx.arc(u * 0.75, -u * 0.9, u * 0.28, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(-u * 0.55, -u * 0.55, u * 0.22, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
+    const renderer = GOKU_ENEMY_RENDERERS[def.id] || GOKU_ENEMY_RENDERERS.fighter;
+    renderer(b, u, pal, ink, flash);
+
     ctx.restore();
   }
 
@@ -11595,6 +12359,9 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
           triggerShenronCommitGrowth();
         } else if (state.species === 'thor') {
           triggerThorCommitEnergy();
+        } else if (state.species === 'goku') {
+          checkGokuFormTransition();
+          triggerGokuPowerUp();
         }
         let said = msg.trim() ? `commit: ${shortMessage(msg)}` : line('commitPlain');
         if (/\b(fix|fixes|fixed|bug|hotfix)\b/.test(lower)) { said = line('commitFix'); releaseBugs(1, [shortMessage(msg).slice(0, 22)]); }
@@ -11621,6 +12388,10 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
         state.lastCommitAt = now();
         spawnDrop('merge', 'merge');
         spawn('spark', pet.x, pet.y - petR(), 16, { spread: petR(), vx: 120, vy: -120, size: 9, hue: 275, dur: 1.4 });
+        if (state.species === 'goku') {
+          checkGokuFormTransition();
+          triggerGokuPowerUp();
+        }
         say(branch ? lineFor('merged', { b: branch }) : line('mergedPlain'), 3000);
         pet.happy = 1.5;
         break;
@@ -12254,6 +13025,39 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     gokuForceForm(idx) {
       const i = clamp(Math.round(Number(idx) || 0), 0, GOKU_CONFIG.forms.length - 1);
       setGokuSimulatedCommits(GOKU_CONFIG.forms[i].minCommits);
+    },
+    gokuForceAttack(style) {
+      if (state.species !== 'goku') return;
+      if (style === 'melee') {
+        const activeBugs = bugs.filter((b) => b.alive);
+        triggerGokuMelee(activeBugs[0] || null);
+      } else {
+        triggerSpecialAttack(style || 'kamehameha');
+      }
+    },
+    gokuForceTransform() {
+      if (state.species !== 'goku') return;
+      const cur = getGokuPower().formIndex;
+      const nextForm = (cur + 1) % GOKU_CONFIG.forms.length;
+      setGokuSimulatedCommits(GOKU_CONFIG.forms[nextForm].minCommits);
+      triggerGokuTransformation(cur, nextForm);
+    },
+    gokuTestUI() {
+      if (state.species !== 'goku') return;
+      setGokuSimulatedCommits(GOKU_CONFIG.forms[5].minCommits);
+      triggerGokuEvade();
+    },
+    gokuResetCombat() {
+      if (state.species !== 'goku') return;
+      bugs.length = 0;
+      gokuState.combatState = 'idle';
+      gokuState.projectiles.length = 0;
+      gokuState.meleeHitT = 0;
+      gokuState.hitT = 0;
+      gokuState.evadeT = 0;
+      pet.zapCharge = 0;
+      pet.zap = 0;
+      pet.zapAim = null;
     },
     // Dev/test only: spawn a specific Mario enemy class instead of leaving it to the
     // weighted random pick, so the whole pack can be exercised without waiting on real

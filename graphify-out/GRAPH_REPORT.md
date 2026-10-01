@@ -1,16 +1,16 @@
 # Graph Report - Bitling  (2026-09-18)
 
 ## Corpus Check
-- 169 files · ~880,303 words
+- 169 files · ~890,501 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1257 nodes · 2285 edges · 159 communities (102 shown, 57 thin omitted)
+- 1257 nodes · 2285 edges · 160 communities (102 shown, 58 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 144 edges (avg confidence: 0.79)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f5ad933f`
+- Built from commit: `d2727759`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -38,7 +38,7 @@
 - workflows/graphify.md
 - GitHub Without the gh CLI
 - render
-- Godzilla Plan Verification Results
+- Godzilla Reference and Motion Implementation Plan
 - 2026-09-09-shenron.md
 - String
 - check_bubble_gap.mjs
@@ -69,7 +69,7 @@
 - Parachute/Parafoil Throw Animation
 - Git Push Rocket Reaction
 - macOS Permission Request Prompt
-- Godzilla Reference and Motion Implementation Plan
+- Working Alongside Other Agents
 - .application
 - Bitling for Windows
 - build.sh script
@@ -123,6 +123,7 @@
 - /tmp/ironman_data.json (Iron Man asset bundle)
 - Check Speech Bubble Gap QA Tool
 - Make App Icon
+- Bool
 
 ## God Nodes (most connected - your core abstractions)
 1. `AppDelegate` - 87 edges
@@ -137,16 +138,16 @@
 10. `ClaudeWatcher` - 23 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Concurrent Goku Attack Renderer Edit (preserved)` --references--> `Goku (Kid Goku)`  [AMBIGUOUS]
-  docs/superpowers/plans/2026-09-08-godzilla-reference.md → README.md
 - `reach and half Are Measured, Never Guessed` --semantically_similar_to--> `62/38 Stance-Recovery Gait Design`  [INFERRED] [semantically similar]
   AGENTS.md → docs/superpowers/plans/2026-09-08-godzilla-reference.md
 - `Measure the Thing the User Can See` --semantically_similar_to--> `Native Orange-Fire Renderer Regression Fixed`  [INFERRED] [semantically similar]
   AGENTS.md → docs/superpowers/plans/2026-09-08-godzilla-reference.md
+- `Concurrent Goku Attack Renderer Edit (preserved)` --references--> `Goku (Kid Goku)`  [AMBIGUOUS]
+  docs/superpowers/plans/2026-09-08-godzilla-reference.md → README.md
+- `line(key) Shuffle Bag Keyed by Species+Phrase` --conceptually_related_to--> `Pikachu (Electric Mouse)`  [INFERRED]
+  AGENTS.md → README.md
 - `kaijuPose() function` --conceptually_related_to--> `Rumble (Atomic Titan / Kaiju)`  [INFERRED]
   AGENTS.md → README.md
-- `Native Orange-Fire Renderer Regression Fixed` --conceptually_related_to--> `Rumble (Atomic Titan / Kaiju)`  [INFERRED]
-  docs/superpowers/plans/2026-09-08-godzilla-reference.md → README.md
 
 ## Import Cycles
 - None detected.
@@ -157,7 +158,7 @@
 - **Godzilla is verified across three independent layers: pure gait math (unit), full browser rendering/host-bridge (integration), and the native Swift overlay renderer (native)** — tests_kaiju_test, tests_kaiju_browser_test, tests_kaiju_native_test [INFERRED 0.80]
 - **Three Regressions Fixed During Godzilla Plan Review** — godzilla_verification_results, godzilla_native_orange_fire_bug, godzilla_hovering_shadow_bug, godzilla_throw_bounds_bug [EXTRACTED 0.85]
 
-## Communities (159 total, 57 thin omitted)
+## Communities (160 total, 58 thin omitted)
 
 ### Community 0 - "OverlayView"
 Cohesion: 0.13
@@ -196,8 +197,8 @@ Cohesion: 0.50
 Nodes (4): Release Notes Template, Universal Binary arch Check (lipo), Release GitHub Actions Workflow, Build From Source Instructions
 
 ### Community 10 - "Pet Species Roster Table"
-Cohesion: 0.18
-Nodes (13): line(key) Shuffle Bag Keyed by Species+Phrase, Bitling (The Little Machine), CR7 (Cristiano Ronaldo), Ember (Baby Dragon), Goku (Kid Goku), Iron Man (Armored Avenger), Mario (Super Mario), Naruto (Ninja of the Leaf) (+5 more)
+Cohesion: 0.25
+Nodes (8): Bitling (The Little Machine), CR7 (Cristiano Ronaldo), Ember (Baby Dragon), Iron Man (Armored Avenger), Mario (Super Mario), Naruto (Ninja of the Leaf), Nimbo (Cloud Fighter), Pet Species Roster Table
 
 ### Community 12 - "GitWatcher"
 Cohesion: 0.08
@@ -208,8 +209,8 @@ Cohesion: 0.18
 Nodes (11): bitling CLI command, Bug and Boss Hunting System, Three CI/Deploy Data Sources, Optional Claude Code Hooks, Claude Code Session Reactions, What Connects to Where (privacy/network), Control Room UI Description, Screen-Wide Desktop Bug Overlay (+3 more)
 
 ### Community 14 - "Working on Bitling (AGENTS.md)"
-Cohesion: 0.14
-Nodes (15): Adding a Pet (SPECIES registration), Assets and Likeness Policy, Before You Say It Works (verification gate), canFire Grounded Gate, defineSpecies() function, Floater Can Hit the Ceiling, Generated Files Must Not Be Hand-Edited, The Launch Race (build.sh timing bug) (+7 more)
+Cohesion: 0.16
+Nodes (14): Assets and Likeness Policy, Before You Say It Works (verification gate), canFire Grounded Gate, Floater Can Hit the Ceiling, Generated Files Must Not Be Hand-Edited, The Launch Race (build.sh timing bug), Movement Rules (limb hinge, trail, canFire), Working on Bitling (AGENTS.md) (+6 more)
 
 ### Community 16 - "Pattern: every named pose must render without a thrown error and must paint a minimum count of opaque pixels (species not invisible/degenerate)"
 Cohesion: 0.11
@@ -224,16 +225,16 @@ Cohesion: 0.09
 Nodes (19): Action, Application, App, MouseHook, MSLLHOOKSTRUCT, POINT, DllImport, int (+11 more)
 
 ### Community 21 - "GitHub Without the gh CLI"
-Cohesion: 0.50
-Nodes (4): apiData(_:) function, GitHub OAuth Device-Flow Fallback, GitHub Without the gh CLI, Ad-Hoc Re-Signing Invalidates Keychain Access
+Cohesion: 0.24
+Nodes (7): Adding a Pet (SPECIES registration), apiData(_:) function, defineSpecies() function, GitHub OAuth Device-Flow Fallback, GitHub Without the gh CLI, Ad-Hoc Re-Signing Invalidates Keychain Access, resize() Runs Before Late Species Definitions
 
 ### Community 22 - "render"
 Cohesion: 0.29
 Nodes (9): Cocoa, NSBezierPath, render(), rgb(), rounded(), CGFloat, Data, Int (+1 more)
 
-### Community 23 - "Godzilla Plan Verification Results"
-Cohesion: 0.29
-Nodes (7): Measure the Thing the User Can See, petNative bridge API, Verifying Without Screen Capture, Hovering-Shadow Regression Fixed, Native Orange-Fire Renderer Regression Fixed, Inflated Throw Bounds Fixed, Godzilla Plan Verification Results
+### Community 23 - "Godzilla Reference and Motion Implementation Plan"
+Cohesion: 0.18
+Nodes (13): Anything Derived From the Art Must Be Measured Off the Art, kaijuPose() function, Kaiju Breath Mispositioned From Hard-Coded Constant, Measure the Thing the User Can See, line(key) Shuffle Bag Keyed by Species+Phrase, Hovering-Shadow Regression Fixed, Native Orange-Fire Renderer Regression Fixed, Reference Illustration Audit (color/shape mismatches) (+5 more)
 
 ### Community 25 - "String"
 Cohesion: 0.15
@@ -307,9 +308,9 @@ Nodes (7): AuthException, ClaudeHooks, HooksException, JsonObject, string, Hooks
 Cohesion: 0.27
 Nodes (3): GitEvent, GitStatus, JsonObject
 
-### Community 54 - "Godzilla Reference and Motion Implementation Plan"
-Cohesion: 0.25
-Nodes (8): Anything Derived From the Art Must Be Measured Off the Art, kaijuPose() function, Kaiju Breath Mispositioned From Hard-Coded Constant, Non-Unique String-Replace Corruption Bug, Working Alongside Other Agents, Concurrent Goku Attack Renderer Edit (preserved), Reference Illustration Audit (color/shape mismatches), Godzilla Reference and Motion Implementation Plan
+### Community 54 - "Working Alongside Other Agents"
+Cohesion: 0.40
+Nodes (5): Non-Unique String-Replace Corruption Bug, Working Alongside Other Agents, Concurrent Goku Attack Renderer Edit (preserved), Goku (Kid Goku), Walker vs Floater Movement Types
 
 ### Community 56 - "Bitling for Windows"
 Cohesion: 0.29
@@ -352,12 +353,12 @@ Cohesion: 0.13
 Nodes (13): ControlPanel, .isOpen, Bool, NSWindow, Void, WKNavigation, WKScriptMessage, WKUserContentController (+5 more)
 
 ### Community 121 - "AppDelegate"
-Cohesion: 0.12
+Cohesion: 0.14
 Nodes (14): AppDelegate, Date, GitStatus, Int, Timer, WKNavigation, WKUserContentController, WKWebView (+6 more)
 
 ### Community 123 - "PetWindow"
-Cohesion: 0.14
-Nodes (9): PetWindow, .canBecomeKey, .canBecomeMain, Bool, TimeInterval, Void, NSApplication, NSEvent (+1 more)
+Cohesion: 0.25
+Nodes (7): PetWindow, .canBecomeKey, .canBecomeMain, TimeInterval, Void, NSEvent, NSWindow
 
 ### Community 128 - "app.js"
 Cohesion: 0.27
@@ -370,14 +371,14 @@ Nodes (11): copyToClipboard(), fallbackCopy(), openPetModal(), PETS_DATA, render
 ## Knowledge Gaps
 - **234 isolated node(s):** `HERE`, `PAGE`, `SEED`, `args`, `wanted` (+229 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **57 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Goku (Kid Goku)` and `Concurrent Goku Attack Renderer Edit (preserved)`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **Why does `AppDelegate` connect `AppDelegate` to `OverlayView`, `ClaudeWatcher`, `ActivityEntry`, `.userContentController`, `ControlPanel`, `GitWatcher`, `Flight`, `.js`, `.application`, `String`, `PetWindow`, `CIWatcher`?**
+- **Why does `AppDelegate` connect `AppDelegate` to `OverlayView`, `ClaudeWatcher`, `ActivityEntry`, `.userContentController`, `ControlPanel`, `GitWatcher`, `PetWindow`, `.js`, `.application`, `String`, `Flight`, `CIWatcher`, `Bool`?**
   _High betweenness centrality (0.082) - this node is a cross-community bridge._
 - **Why does `AppController` connect `AppController` to `CIWatcher`, `ClaudeWatcher`, `.Js`, `ControlPanelWindow`, `ActivityLog`, `GitWatcher`, `ClaudeHooks`, `GitEvent`, `PetWindow`, `MouseHook`, `AppSettings`?**
   _High betweenness centrality (0.044) - this node is a cross-community bridge._

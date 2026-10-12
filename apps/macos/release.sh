@@ -13,7 +13,8 @@ VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resour
 DMG="build/Bitling-$VERSION.dmg"
 STAGE=build/dmg
 
-INSTALL=0 ./build.sh
+# BITLING_RELEASE keeps the local development identity out of anything distributed.
+INSTALL=0 BITLING_RELEASE=1 ./build.sh
 
 echo "-> staging disk image"
 rm -rf "$STAGE" "$DMG"

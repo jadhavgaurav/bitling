@@ -7,7 +7,9 @@
 #
 # The default build is a universal binary (Apple Silicon + Intel) so the app can be
 # handed to anyone. Signing is ad hoc unless a Developer ID is available: set
-# SIGN_ID="Developer ID Application: Your Name (TEAMID)" to sign properly.
+# SIGN_ID="Developer ID Application: Your Name (TEAMID)" to sign properly. For your own
+# builds, ./setup-signing.sh creates a local identity that this script then prefers, so
+# macOS does not ask for folder access again after every rebuild.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -62,6 +64,13 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 if [[ -n "${SIGN_ID:-}" ]]; then
   echo "-> signing with $SIGN_ID"
   codesign --force --deep --options runtime --timestamp --sign "$SIGN_ID" "$APP"
+elif [[ -z "${BITLING_RELEASE:-}" && -f "$HOME/.bitling-signing/bitling-signing.keychain-db" ]]; then
+  # The identity from ./setup-signing.sh. Unlike an ad hoc signature, which changes with
+  # every build, it keeps macOS's folder and keychain approvals across rebuilds.
+  LOCAL_KEYCHAIN="$HOME/.bitling-signing/bitling-signing.keychain-db"
+  echo "-> signing with the local development identity"
+  security unlock-keychain -p "$(<"$HOME/.bitling-signing/keychain-password")" "$LOCAL_KEYCHAIN"
+  codesign --force --deep --keychain "$LOCAL_KEYCHAIN" --sign "Bitling Local Signing" "$APP"
 else
   echo "-> signing (ad hoc: first launch on another Mac needs Open Anyway)"
   codesign --force --deep --sign - "$APP" >/dev/null

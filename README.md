@@ -359,6 +359,13 @@ bundle, installs `/Applications/Bitling.app`, and links the `bitling` command. U
 `INSTALL=0 ./apps/macos/build.sh` to build without installing, or `NATIVE=1` to skip the second
 architecture while developing.
 
+An ad-hoc signature changes with every build, so macOS treats each rebuild as a new app and
+asks again for folder access (Desktop, Documents, Downloads) and for keychain approvals. If you
+rebuild often, run `./apps/macos/setup-signing.sh` once. It creates a local code-signing
+identity in its own keychain at `~/.bitling-signing`, `build.sh` then prefers it, and each
+question is asked once instead of after every build. `./apps/macos/setup-signing.sh --remove`
+deletes it, and `release.sh` never uses it.
+
 To check changes on macOS, use Node.js 22.13+ and Google Chrome:
 
 ```bash

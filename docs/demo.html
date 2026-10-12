@@ -181,6 +181,8 @@
   .quota-fill.warning { background: #eab308 !important; }
   .quota-val { font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; width: 26px; text-align: right; color: rgba(255,255,255,0.95); }
   .quota-sub { font-size: 8.5px; color: rgba(255, 255, 255, 0.6); margin-top: 1px; margin-bottom: 2px; line-height: 1.1; padding-left: 20px; }
+  .quota-note { font-size: 8.5px; color: #f59e0b; margin-top: 3px; padding-left: 20px; line-height: 1.15; }
+  .quota-note[hidden] { display: none !important; }
   .quota-div { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 5px 0; }
   html.desktop .quota-hud { display: block; }
 </style>
@@ -230,6 +232,7 @@
         <span class="quota-val" id="quotaClaudeWkVal">--%</span>
       </div>
       <div class="quota-sub" id="quotaClaudeWkSub">no recent data</div>
+      <div class="quota-note" id="quotaClaudeNote" hidden></div>
     </div>
     <div class="quota-div" id="quotaDivider"></div>
     <div class="quota-sec" id="quotaCodexSec">
@@ -249,6 +252,7 @@
         <span class="quota-val" id="quotaCodexWkVal">--%</span>
       </div>
       <div class="quota-sub" id="quotaCodexWkSub">no recent data</div>
+      <div class="quota-note" id="quotaCodexNote" hidden></div>
     </div>
   </div>
 
@@ -12706,9 +12710,12 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     fill.classList.toggle('critical', left <= 10);
     fill.classList.toggle('warning', left > 10 && left <= 25);
     val.textContent = `${Math.round(left)}%`;
+    // A reset time read out of an old log is as old as the log, so a countdown is shown only
+    // beside a fresh reading. Beside a stale one it would look current and be wrong.
+    const stale = !!win.asOf && now - win.asOf > QUOTA_STALE_MS;
     let note = '';
-    if (win.resetsAt && win.resetsAt > now) note = ` · resets in ${quotaSpan(win.resetsAt - now)}`;
-    else if (win.asOf && now - win.asOf > QUOTA_STALE_MS) note = ` · logged ${quotaSpan(now - win.asOf)} ago`;
+    if (stale) note = ` · logged ${quotaSpan(now - win.asOf)} ago`;
+    else if (win.resetsAt && win.resetsAt > now) note = ` · resets in ${quotaSpan(win.resetsAt - now)}`;
     sub.textContent = `${Math.round(left)}% left${note}`;
   }
 
@@ -12734,6 +12741,12 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     paintQuotaRow('quotaClaudeWk', claude.weekly);
     paintQuotaRow('quotaCodex5h', codex.fiveHour);
     paintQuotaRow('quotaCodexWk', codex.weekly);
+    for (const [id, provider] of [['#quotaClaudeNote', claude], ['#quotaCodexNote', codex]]) {
+      const note = $(id);
+      if (!note) continue;
+      note.hidden = !provider.liveStatus;
+      note.textContent = provider.liveStatus ? `Not live: ${provider.liveStatus}` : '';
+    }
   }
 
   function handleQuotaUpdate(data) {

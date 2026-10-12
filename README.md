@@ -366,6 +366,19 @@ identity in its own keychain at `~/.bitling-signing`, `build.sh` then prefers it
 question is asked once instead of after every build. `./apps/macos/setup-signing.sh --remove`
 deletes it, and `release.sh` never uses it.
 
+### Usage limits on the pet
+
+Hover the pet to see your 5 hour and weekly Claude and Codex limits. Each figure is live when it
+can be, and otherwise comes from what the tool logged, with its age printed beside it.
+
+- **Codex** is asked through `codex app-server`, which answers with its own sign-in. Bitling
+  reads no Codex credential.
+- **Claude** is asked through the same endpoint Claude Code's `/usage` uses. That needs the
+  sign-in token Claude Code keeps in your login keychain, so macOS asks once whether Bitling may
+  read it. The token is never logged, stored or written anywhere, is sent only to
+  `api.anthropic.com`, and is never refreshed (that could sign Claude Code out).
+- Both can be switched off in the control room, under Live Claude usage and Live Codex usage.
+
 To check changes on macOS, use Node.js 22.13+ and Google Chrome:
 
 ```bash
@@ -411,7 +424,7 @@ apps/macos/Sources/main.swift          window, drag and physics, menu bar, bridg
 apps/macos/Sources/GitWatcher.swift    repository discovery and reflog tailing
 apps/macos/Sources/CIWatcher.swift     gh runs and deployments, pytest caches
 apps/macos/Sources/ClaudeWatcher.swift Claude Code transcript tailing
-apps/macos/Sources/QuotaWatcher.swift  Claude and Codex usage limits, read from what each tool logs
+apps/macos/Sources/QuotaWatcher.swift  Claude and Codex usage limits, live where possible, else from their logs
 apps/macos/Sources/ControlPanel.swift  the control room window and the activity log
 apps/macos/web/panel.html              the control room UI
 apps/macos/web/bitling.html            the creature: drawing, animation, personality

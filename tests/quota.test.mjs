@@ -69,6 +69,23 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
     assert.equal(hud.codexWkSub, 'no recent data', 'a window nobody recorded is not shown as 100% left');
     assert.equal(hud.codexWkWidth, '0%');
     assert.ok(!/NaN|undefined|null|turns|gpt-/i.test(hud.all), `no stray placeholder text: ${hud.all}`);
+
+    const stale = await page.evaluate(() => {
+      const now = Date.now(), hour = 3600000;
+      window.petNative.quotaUpdate({ showClaude: true, showCodex: true,
+        claude: { plan: 'Max 20x', liveStatus: 'keychain access was declined', fiveHour: { usedPercent: 10, asOf: now - 2 * hour } },
+        codex: { plan: 'Plus', weekly: { usedPercent: 16, resetsAt: now + 5 * 24 * hour, asOf: now - 50 * hour } } });
+      window.__quota.showQuotaHud(3000);
+      const text = id => document.querySelector(id).textContent;
+      return { codexWk: text('#quotaCodexWkSub'), claudeNote: text('#quotaClaudeNote'),
+               claudeNoteHidden: document.querySelector('#quotaClaudeNote').hidden,
+               codexNoteHidden: document.querySelector('#quotaCodexNote').hidden };
+    });
+    assert.equal(stale.codexWk, '84% left · logged 2d 2h ago',
+      'a reset time out of a two day old log must not be shown as a live countdown');
+    assert.equal(stale.claudeNote, 'Not live: keychain access was declined');
+    assert.equal(stale.claudeNoteHidden, false);
+    assert.equal(stale.codexNoteHidden, true, 'no note when nothing is wrong');
   } finally {
     await browser.close();
     await rm(directory, { recursive: true, force: true });
@@ -157,8 +174,30 @@ test('the HUD expires, and sits above the speech bubble instead of covering it',
 // homes instead of re-implementing its rules here.
 const DRIVER = `import Foundation
 let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
-let data = QuotaReader.read(home: URL(fileURLWithPath: CommandLine.arguments[1]))
-print(String(decoding: try! enc.encode(data), as: UTF8.self))
+func json(_ object: Any) -> String { String(decoding: try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), as: UTF8.self) }
+func window(_ w: QuotaWindow?) -> Any {
+    guard let w else { return NSNull() }
+    return ["used": w.usedPercent, "resetsAt": w.resetsAt as Any? ?? NSNull(), "asOf": w.asOf]
+}
+let args = CommandLine.arguments
+let now = Date(timeIntervalSince1970: 1_791_790_000)
+switch args[1] {
+case "files":
+    print(String(decoding: try! enc.encode(QuotaReader.read(home: URL(fileURLWithPath: args[2]))), as: UTF8.self))
+case "claude-usage":
+    let data = try! Data(contentsOf: URL(fileURLWithPath: args[2]))
+    if let r = ClaudeUsageParser.parse(data, fetchedAt: now) { print(json(["fiveHour": window(r.fiveHour), "weekly": window(r.weekly)])) } else { print("nil") }
+case "codex-usage":
+    let data = try! Data(contentsOf: URL(fileURLWithPath: args[2]))
+    let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+    if let r = CodexUsageParser.parse(object, fetchedAt: now) { print(json(["plan": r.plan as Any? ?? NSNull(), "fiveHour": window(r.fiveHour), "weekly": window(r.weekly)])) } else { print("nil") }
+case "credential":
+    let data = try! Data(contentsOf: URL(fileURLWithPath: args[2]))
+    if let c = ClaudeCredential.parse(data) {
+        print(json(["parsed": true, "expired": c.isExpired(at: now), "printed": "\\(c)", "described": c.description]))
+    } else { print(json(["parsed": false])) }
+default: print("unknown mode")
+}
 `;
 
 async function swiftAvailable() {
@@ -172,7 +211,7 @@ test('the native reader returns only recorded figures: right bucket, right accou
     await writeFile(join(directory, 'main.swift'), DRIVER);
     const binary = join(directory, 'reader');
     await run('swiftc', ['-O', '-swift-version', '5', 'apps/macos/Sources/QuotaWatcher.swift', join(directory, 'main.swift'), '-o', binary]);
-    const read = async home => JSON.parse((await run(binary, [home])).stdout);
+    const read = async home => JSON.parse((await run(binary, ['files', home])).stdout);
     const now = Date.now(), sec = Math.floor(now / 1000), minute = 60000, hour = 3600000;
 
     // ---- Claude: matched to the signed-in organisation, newest sample, no invented reset
@@ -235,6 +274,68 @@ test('the native reader returns only recorded figures: right bucket, right accou
     const empty = join(directory, 'empty-home'); await mkdir(empty);
     r = await read(empty);
     assert.deepEqual(r, { claude: {}, codex: {} }, 'no tools, no plan, no windows');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('live readings are parsed from the real response shapes, and the Claude token never prints', async (t) => {
+  if (!(await swiftAvailable())) return t.skip('swiftc is not installed');
+  const directory = await mkdtemp(join(tmpdir(), 'bitling-quota-live-'));
+  try {
+    await writeFile(join(directory, 'main.swift'), DRIVER);
+    const binary = join(directory, 'reader');
+    await run('swiftc', ['-O', '-swift-version', '5', 'apps/macos/Sources/QuotaWatcher.swift', join(directory, 'main.swift'), '-o', binary]);
+    const ask = async (mode, body) => {
+      const file = join(directory, `${mode}.json`);
+      await writeFile(file, JSON.stringify(body));
+      const out = (await run(binary, [mode, file])).stdout.trim();
+      return out === 'nil' ? null : JSON.parse(out);
+    };
+    const fetchedAt = 1_791_790_000_000;
+
+    // Claude: utilization is a percent, an idle window is null, and nothing is clamped past 100.
+    let r = await ask('claude-usage', {
+      five_hour: { utilization: 37.0, resets_at: '2026-10-12T09:30:00.123456+00:00' },
+      seven_day: { utilization: 26.0, resets_at: '2026-10-17T10:00:00+00:00' }, seven_day_opus: null });
+    assert.equal(r.fiveHour.used, 37);
+    assert.equal(r.weekly.used, 26);
+    assert.equal(r.fiveHour.resetsAt, Date.parse('2026-10-12T09:30:00.123Z'), 'fractional-second resets parse');
+    assert.equal(r.weekly.resetsAt, Date.parse('2026-10-17T10:00:00Z'));
+    assert.equal(r.fiveHour.asOf, fetchedAt, 'a live reading is dated when it was fetched');
+    r = await ask('claude-usage', { five_hour: null, seven_day: { utilization: 140, resets_at: '2026-10-17T10:00:00+00:00' } });
+    assert.equal(r.fiveHour.used, 0, 'a null window is an untouched one');
+    assert.equal(r.fiveHour.resetsAt, null);
+    assert.equal(r.weekly.used, 100, 'clamped');
+    assert.equal(await ask('claude-usage', { error: 'nope' }), null, 'an unrecognised body is a failure, not zeros');
+
+    // Codex: the shape account/rateLimits/read really returned, with the "codex" bucket chosen.
+    const bucket = (limitId, p, s) => ({ limitId, limitName: null,
+      primary: { usedPercent: p, windowDurationMins: 300, resetsAt: 1791791842 },
+      secondary: { usedPercent: s, windowDurationMins: 10080, resetsAt: 1792378642 },
+      credits: { hasCredits: false, unlimited: false, balance: '0' }, planType: 'plus', rateLimitReachedType: null });
+    r = await ask('codex-usage', { rateLimits: bucket('codex', 4, 1), rateLimitsByLimitId: { codex: bucket('codex', 4, 1) }, rateLimitResetCredits: { availableCount: 0, credits: [] } });
+    assert.equal(r.plan, 'Plus');
+    assert.equal(r.fiveHour.used, 4);
+    assert.equal(r.weekly.used, 1);
+    assert.equal(r.fiveHour.resetsAt, 1791791842000, 'seconds become ms');
+    assert.equal(r.weekly.resetsAt, 1792378642000);
+    r = await ask('codex-usage', { rateLimits: bucket('premium', 90, 90), rateLimitsByLimitId: { premium: bucket('premium', 90, 90), codex: bucket('codex', 4, 1) } });
+    assert.equal(r.fiveHour.used, 4, 'the codex bucket wins when several are present');
+    r = await ask('codex-usage', { rateLimits: bucket('codex', 7, 2) });
+    assert.equal(r.fiveHour.used, 7, 'the single-bucket form still works');
+    assert.equal(await ask('codex-usage', { rateLimits: bucket('premium', 90, 90) }), null, 'a non-codex bucket alone is not codex usage');
+
+    // The token: parsed, expiry judged, and never present in anything printable.
+    const secret = 'sk-ant-oat01-THIS-MUST-NEVER-APPEAR';
+    let c = await ask('credential', { claudeAiOauth: { accessToken: secret, expiresAt: fetchedAt + 3600000 } });
+    assert.equal(c.parsed, true);
+    assert.equal(c.expired, false);
+    assert.ok(!c.printed.includes(secret) && !c.described.includes(secret), `token leaked into its own description: ${c.printed}`);
+    c = await ask('credential', { claudeAiOauth: { accessToken: secret, expiresAt: fetchedAt - 1000 } });
+    assert.equal(c.expired, true, 'an expired token is recognised so it is never sent');
+    assert.equal((await ask('credential', { claudeAiOauth: { accessToken: '' } })).parsed, false);
+    assert.equal((await ask('credential', { somethingElse: true })).parsed, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

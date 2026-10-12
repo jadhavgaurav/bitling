@@ -194,6 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var swarmEnabled = UserDefaults.standard.object(forKey: "swarmOnDesktop") as? Bool ?? true
     private var showClaudeQuota = UserDefaults.standard.object(forKey: "showClaudeQuota") as? Bool ?? true
     private var showCodexQuota = UserDefaults.standard.object(forKey: "showCodexQuota") as? Bool ?? true
+    private var claudeLiveUsage = UserDefaults.standard.object(forKey: "claudeLiveUsage") as? Bool ?? true
+    private var codexLiveUsage = UserDefaults.standard.object(forKey: "codexLiveUsage") as? Bool ?? true
     private var lastSwarmCount = -1
     private var recentEvents: [String: Date] = [:]
 
@@ -293,6 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         claude.onEvent = { [weak self] event in self?.deliverGitEvent(event) }
         claude.start()
         quota.onUpdate = { [weak self] _ in self?.renderQuota() }
+        quota.claudeLiveEnabled = claudeLiveUsage
+        quota.codexLiveEnabled = codexLiveUsage
         quota.start()
         overlay.onKill = { [weak self] beetle in
             guard let self else { return }
@@ -753,6 +757,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "swarm": swarmEnabled,
                 "showClaudeQuota": showClaudeQuota,
                 "showCodexQuota": showCodexQuota,
+                "claudeLiveUsage": claudeLiveUsage,
+                "codexLiveUsage": codexLiveUsage,
                 "petVisible": window.isVisible,
                 "size": Double(petSizeScale),
                 "dock": dockIconEnabled,
@@ -778,6 +784,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             showClaudeQuota.toggle()
             UserDefaults.standard.set(showClaudeQuota, forKey: "showClaudeQuota")
             renderQuota()
+        case "toggleClaudeLive":
+            claudeLiveUsage.toggle()
+            UserDefaults.standard.set(claudeLiveUsage, forKey: "claudeLiveUsage")
+            quota.claudeLiveEnabled = claudeLiveUsage
+            panel.refresh()
+        case "toggleCodexLive":
+            codexLiveUsage.toggle()
+            UserDefaults.standard.set(codexLiveUsage, forKey: "codexLiveUsage")
+            quota.codexLiveEnabled = codexLiveUsage
+            panel.refresh()
         case "toggleCodexQuota":
             showCodexQuota.toggle()
             UserDefaults.standard.set(showCodexQuota, forKey: "showCodexQuota")
@@ -992,7 +1008,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             window.map { "\(label) \(Int((100 - $0.usedPercent).rounded()))% left" }
         }
         let parts = [left("5h", provider.fiveHour), left("week", provider.weekly)].compactMap { $0 }
-        return parts.isEmpty ? "\(name): no recent usage data" : "\(name): " + parts.joined(separator: " · ")
+        let base = parts.isEmpty ? "\(name): no recent usage data" : "\(name): " + parts.joined(separator: " · ")
+        // Say so when the figures come from the logs because live data could not be had.
+        return provider.liveStatus.map { "\(base) (\($0))" } ?? base
     }
 
     private func updateQuotaMenu() {

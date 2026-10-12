@@ -493,6 +493,14 @@
         <span class="k">Codex limits<small>5 hour and weekly usage, on the pet and in the menu</small></span>
         <span class="v"><i class="sw" id="swCodexQuota"></i></span>
       </button>
+      <button class="row tall" data-act="toggleClaudeLive">
+        <span class="k">Live Claude usage<small>Asks Anthropic for your real figures. Reads Claude Code's sign-in from the keychain; macOS asks once</small></span>
+        <span class="v"><i class="sw" id="swClaudeLive"></i></span>
+      </button>
+      <button class="row tall" data-act="toggleCodexLive">
+        <span class="k">Live Codex usage<small>Asks the codex command for your real figures. No sign-in is read</small></span>
+        <span class="v"><i class="sw" id="swCodexLive"></i></span>
+      </button>
     </div>
 
     <div class="rule">This pet</div>
@@ -931,7 +939,7 @@
     cl.textContent = `${active} active`;
     cl.className = 'n ' + (active ? 'good' : 'off');
     sw('#swGit', w.gitHooks); sw('#swClaude', w.claudeHooks); sw('#swSwarm', w.swarm);
-    sw('#swClaudeQuota', w.showClaudeQuota !== false); sw('#swCodexQuota', w.showCodexQuota !== false);
+    sw('#swClaudeQuota', w.showClaudeQuota !== false); sw('#swCodexQuota', w.showCodexQuota !== false); sw('#swClaudeLive', w.claudeLiveUsage !== false); sw('#swCodexLive', w.codexLiveUsage !== false);
     sw('#swSound', p.sound); sw('#swLogin', w.login); sw('#swDock', w.dock);
     const size = Number(w.size ?? 1);
     for (const b of document.querySelectorAll('#sizes button')) {

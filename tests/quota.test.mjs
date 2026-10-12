@@ -53,8 +53,12 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
         codex5hVal: text('#quotaCodex5hVal'), codex5hSub: text('#quotaCodex5hSub'),
         codexWkVal: text('#quotaCodexWkVal'), codexWkSub: text('#quotaCodexWkSub'), codexWkWidth: document.querySelector('#quotaCodexWkFill').style.width,
         all: document.querySelector('#quotaHud').textContent,
+        logos: [...document.querySelectorAll('#quotaHud img.quota-logo')].map(i => ({ ok: i.complete && i.naturalWidth === 64, provider: i.closest('.quota-sec').id })),
       };
     });
+    assert.deepEqual(hud.logos, [{ ok: true, provider: 'quotaClaudeSec' }, { ok: true, provider: 'quotaCodexSec' }],
+      'each provider shows its own logo, and both images decode');
+    assert.ok(!/[\u26A1\u{1F300}]/u.test(hud.all), 'the emoji stand-ins are gone');
     assert.equal(hud.hidden, false);
     assert.equal(hud.claudePlan, 'Max 20x');
     assert.equal(hud.codexPlan, 'Plus');

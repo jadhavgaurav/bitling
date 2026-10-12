@@ -129,6 +129,45 @@
   /* width:max-content keeps the bubble from being squeezed into a column when the pet
      stands near the right edge of the window. */
   html.desktop .bubble{white-space:normal;width:max-content;max-width:calc(100vw - 16px);text-align:center;font-size:15px;padding:6px 11px;line-height:1.25}
+  .quota-hud {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, -100%);
+    background: rgba(18, 20, 32, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 13px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 8px 11px;
+    width: 200px;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+  }
+  html.desktop .quota-hud[hidden], .quota-hud[hidden], .quota-sec[hidden], .quota-div[hidden] { display: none !important; }
+  .quota-sec { display: flex; flex-direction: column; gap: 1px; }
+  .quota-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+  .quota-badge { font-size: 11px; font-weight: 700; }
+  .claude-badge { color: #f59e0b; }
+  .codex-badge { color: #10b981; }
+  .quota-plan { font-size: 9px; color: rgba(255, 255, 255, 0.5); font-weight: 500; }
+  .quota-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 2px; }
+  .quota-lbl { font-size: 9.5px; font-weight: 600; color: rgba(255, 255, 255, 0.6); width: 17px; }
+  .quota-meter { flex: 1; height: 5px; background: rgba(255, 255, 255, 0.14); border-radius: 99px; overflow: hidden; margin: 0 3px; }
+  .quota-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+  .claude-fill { background: linear-gradient(90deg, #f59e0b, #d97706); }
+  .codex-fill { background: linear-gradient(90deg, #10b981, #059669); }
+  .quota-fill.critical { background: #ef4444 !important; }
+  .quota-fill.warning { background: #eab308 !important; }
+  .quota-val { font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; width: 26px; text-align: right; color: rgba(255,255,255,0.95); }
+  .quota-sub { font-size: 8.5px; color: rgba(255, 255, 255, 0.6); margin-top: 1px; margin-bottom: 2px; line-height: 1.1; padding-left: 20px; }
+  .quota-div { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 5px 0; }
+  html.desktop .quota-hud { display: block; }
 </style>
 
 <div id="app">
@@ -158,6 +197,45 @@
   </header>
 
   <div id="bubble" class="bubble" hidden></div>
+  <div id="quotaHud" class="quota-hud" hidden>
+    <div class="quota-sec" id="quotaClaudeSec">
+      <div class="quota-hdr">
+        <span class="quota-badge claude-badge">⚡ Claude</span>
+        <span class="quota-plan" id="quotaClaudePlan"></span>
+      </div>
+      <div class="quota-row">
+        <span class="quota-lbl">5h</span>
+        <div class="quota-meter"><div class="quota-fill claude-fill" id="quotaClaude5hFill" style="width:0%"></div></div>
+        <span class="quota-val" id="quotaClaude5hVal">--%</span>
+      </div>
+      <div class="quota-sub" id="quotaClaude5hSub">no recent data</div>
+      <div class="quota-row">
+        <span class="quota-lbl">Wk</span>
+        <div class="quota-meter"><div class="quota-fill claude-fill" id="quotaClaudeWkFill" style="width:0%"></div></div>
+        <span class="quota-val" id="quotaClaudeWkVal">--%</span>
+      </div>
+      <div class="quota-sub" id="quotaClaudeWkSub">no recent data</div>
+    </div>
+    <div class="quota-div" id="quotaDivider"></div>
+    <div class="quota-sec" id="quotaCodexSec">
+      <div class="quota-hdr">
+        <span class="quota-badge codex-badge">🌀 Codex</span>
+        <span class="quota-plan" id="quotaCodexPlan"></span>
+      </div>
+      <div class="quota-row">
+        <span class="quota-lbl">5h</span>
+        <div class="quota-meter"><div class="quota-fill codex-fill" id="quotaCodex5hFill" style="width:0%"></div></div>
+        <span class="quota-val" id="quotaCodex5hVal">--%</span>
+      </div>
+      <div class="quota-sub" id="quotaCodex5hSub">no recent data</div>
+      <div class="quota-row">
+        <span class="quota-lbl">Wk</span>
+        <div class="quota-meter"><div class="quota-fill codex-fill" id="quotaCodexWkFill" style="width:0%"></div></div>
+        <span class="quota-val" id="quotaCodexWkVal">--%</span>
+      </div>
+      <div class="quota-sub" id="quotaCodexWkSub">no recent data</div>
+    </div>
+  </div>
 
   <nav class="card dock" id="dock" aria-label="Care actions">
     <button type="button" id="feedBtn" disabled>
@@ -3851,6 +3929,7 @@
     const reaction = startPetReaction();
     pet.tilt = reaction === 'nod' ? 0.16 : pet.tilt;
     pet.sq = -0.04; pet.sqv = 0;
+    if (typeof showQuotaHud === 'function') showQuotaHud(4500);
     const willSay = Math.random() < 0.6;
     if (state.species === 'pikachu') audio.pikaPika();
     else if (state.species === 'goku') audio.tone(180, 280, 0.16, 'triangle', 0.025);
@@ -6045,6 +6124,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     }
 
     if (bubbleUntil && performance.now() > bubbleUntil) { bubble.hidden = true; bubbleUntil = 0; }
+    let bubbleTopEdge = null;
     if (!bubble.hidden) {
       const r = state.hatched ? petR() : eggR();
       // How far the drawing actually reaches above pet.y, measured off the canvas rather
@@ -6062,7 +6142,29 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       const cy = Math.max(bh + 6, top);
       bubble.style.left = `${Math.round(cx)}px`;
       bubble.style.top = `${Math.round(cy)}px`;
+      bubbleTopEdge = cy - bh;
       bubble.style.setProperty('--tail', `${Math.round(clamp(pet.x - (cx - half), 14, Math.max(14, bw - 14)))}px`);
+    }
+
+    const qHud = $('#quotaHud');
+    if (quotaHudUntil && performance.now() > quotaHudUntil) {
+      if (qHud) qHud.hidden = true;
+      quotaHudUntil = 0;
+    }
+    if (qHud && !qHud.hidden) {
+      const r = state.hatched ? petR() : eggR();
+      const reach = state.hatched ? species().reach(stageOf(state)) : 1.95;
+      const lift = r * (reach + 0.35) + (pet.mode === 'fly' ? 8 : 0) + 12;
+      const top = (state.hatched ? pet.y : groundY) - lift;
+      const bw = qHud.offsetWidth || 200, bh = qHud.offsetHeight || 135;
+      const half = bw / 2;
+      const cx = W > bw + 12 ? clamp(pet.x, half + 6, W - half - 6) : W / 2;
+      // The bubble and the HUD hang from the same point above the pet, so when the pet is
+      // talking the HUD sits on top of the bubble instead of covering it.
+      const bottom = bubbleTopEdge === null ? top : Math.min(top, bubbleTopEdge - 8);
+      const cy = Math.max(bh + 6, bottom);
+      qHud.style.left = `${Math.round(cx)}px`;
+      qHud.style.top = `${Math.round(cy)}px`;
     }
 
     skyTimer -= dt;
@@ -12553,6 +12655,92 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       branch: String(info.branch || ''),
       minutesSinceCommit: Number.isFinite(Number(info.minutesSinceCommit)) ? Number(info.minutesSinceCommit) : -1,
     };
+  }
+
+  // ---------------------------------------------------------------- usage limits
+  // The host sends only what Claude and Codex have recorded: a used percent per window, an
+  // exact reset time where the tool wrote one, and when the reading was taken. Nothing is
+  // assumed here, so a missing window shows as "no recent data" rather than as 100% left.
+  let latestQuotaData = null;
+  let quotaHudUntil = 0;
+  // Claude Desktop samples about every 15 minutes while it runs; anything older than this
+  // gets its age printed next to it.
+  const QUOTA_STALE_MS = 20 * 60 * 1000;
+
+  function quotaSpan(ms) {
+    const minutes = Math.max(1, Math.round(ms / 60000));
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 48) return `${hours}h ${minutes % 60}m`;
+    return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+  }
+
+  function paintQuotaRow(prefix, win) {
+    const fill = $(`#${prefix}Fill`), val = $(`#${prefix}Val`), sub = $(`#${prefix}Sub`);
+    if (!fill || !val || !sub) return;
+    if (!win || !Number.isFinite(win.usedPercent)) {
+      fill.style.width = '0%';
+      fill.classList.remove('critical', 'warning');
+      val.textContent = '--';
+      sub.textContent = 'no recent data';
+      return;
+    }
+    const left = Math.max(0, Math.min(100, 100 - win.usedPercent));
+    const now = Date.now();
+    fill.style.width = `${left}%`;
+    fill.classList.toggle('critical', left <= 10);
+    fill.classList.toggle('warning', left > 10 && left <= 25);
+    val.textContent = `${Math.round(left)}%`;
+    let note = '';
+    if (win.resetsAt && win.resetsAt > now) note = ` · resets in ${quotaSpan(win.resetsAt - now)}`;
+    else if (win.asOf && now - win.asOf > QUOTA_STALE_MS) note = ` · logged ${quotaSpan(now - win.asOf)} ago`;
+    sub.textContent = `${Math.round(left)}% left${note}`;
+  }
+
+  function paintQuota() {
+    const data = latestQuotaData;
+    if (!data) return;
+    const showClaude = data.showClaude !== false, showCodex = data.showCodex !== false;
+    const secClaude = $('#quotaClaudeSec'), secCodex = $('#quotaCodexSec'), div = $('#quotaDivider');
+    if (secClaude) secClaude.hidden = !showClaude;
+    if (secCodex) secCodex.hidden = !showCodex;
+    if (div) div.hidden = !showClaude || !showCodex;
+    if (!showClaude && !showCodex) {
+      const hud = $('#quotaHud');
+      if (hud) hud.hidden = true;
+      quotaHudUntil = 0;
+      return;
+    }
+    const claude = data.claude || {}, codex = data.codex || {};
+    const claudePlan = $('#quotaClaudePlan'), codexPlan = $('#quotaCodexPlan');
+    if (claudePlan) claudePlan.textContent = claude.plan || '';
+    if (codexPlan) codexPlan.textContent = codex.plan || '';
+    paintQuotaRow('quotaClaude5h', claude.fiveHour);
+    paintQuotaRow('quotaClaudeWk', claude.weekly);
+    paintQuotaRow('quotaCodex5h', codex.fiveHour);
+    paintQuotaRow('quotaCodexWk', codex.weekly);
+  }
+
+  function handleQuotaUpdate(data) {
+    if (!data) return;
+    latestQuotaData = data;
+    const hud = $('#quotaHud');
+    if (hud && !hud.hidden) paintQuota();
+  }
+
+  function showQuotaHud(dur = 3500) {
+    const hud = $('#quotaHud');
+    if (!hud || !latestQuotaData) return;
+    if (latestQuotaData.showClaude === false && latestQuotaData.showCodex === false) {
+      hud.hidden = true;
+      quotaHudUntil = 0;
+      return;
+    }
+    // Repaint on every show so the countdowns and "logged ... ago" are current, not as
+    // they were when the host last sent a reading.
+    paintQuota();
+    hud.hidden = false;
+    quotaHudUntil = performance.now() + dur;
   }
 
   // ---------------------------------------------------------------- hud

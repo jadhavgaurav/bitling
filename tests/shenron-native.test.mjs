@@ -56,7 +56,7 @@ delegate.verifyShenronStage()
     await writeFile(sourcePath, source.slice(0, start) + probe);
     await run('swiftc', ['-swift-version', '5', '-framework', 'Cocoa', '-framework', 'WebKit',
       '-framework', 'ServiceManagement', '-framework', 'Security', sourcePath,
-      ...['GitWatcher', 'CIWatcher', 'ClaudeWatcher', 'Overlay', 'ControlPanel', 'GitHubAuth'].map(n => `apps/macos/Sources/${n}.swift`), '-o', executable]);
+      ...['GitWatcher', 'CIWatcher', 'ClaudeWatcher', 'QuotaWatcher', 'Overlay', 'ControlPanel', 'GitHubAuth'].map(n => `apps/macos/Sources/${n}.swift`), '-o', executable]);
     const { stdout } = await run(executable);
     assert.match(stdout, /click-through passed/);
   } finally { await rm(directory, { recursive: true, force: true }); }

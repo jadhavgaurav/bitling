@@ -192,6 +192,7 @@ def build(source: Path, target: Path) -> None:
         "    if (on === hoverOn && now - hoverSentAt < 500) return;\n"
         "    hoverOn = on; hoverSentAt = now;\n"
         "    native({ type: 'hover', on });\n"
+        "    if (on && typeof showQuotaHud === 'function') showQuotaHud(3000);\n"
         "  }\n",
     )
     s = patch(
@@ -454,6 +455,7 @@ def build(source: Path, target: Path) -> None:
         "      pushState(true);\n"
         "    },\n"
         "    gitStatus(info) { handleGitStatus(info); },\n"
+        "    quotaUpdate(data) { if (typeof handleQuotaUpdate === 'function') handleQuotaUpdate(data); },\n"
         "    swarmMode(on) { hostSwarm = !!on; if (!hostSwarm) hostBugs = []; },\n"
         "    swarm(list) { hostBugs = Array.isArray(list) ? list : []; },\n"
         "    killed(boss) { countKill(true, !!boss); pet.happy = boss ? 2 : 0.8; },\n"

@@ -404,6 +404,7 @@ apps/macos/Sources/main.swift          window, drag and physics, menu bar, bridg
 apps/macos/Sources/GitWatcher.swift    repository discovery and reflog tailing
 apps/macos/Sources/CIWatcher.swift     gh runs and deployments, pytest caches
 apps/macos/Sources/ClaudeWatcher.swift Claude Code transcript tailing
+apps/macos/Sources/QuotaWatcher.swift  Claude and Codex usage limits, read from what each tool logs
 apps/macos/Sources/ControlPanel.swift  the control room window and the activity log
 apps/macos/web/panel.html              the control room UI
 apps/macos/web/bitling.html            the creature: drawing, animation, personality

@@ -483,6 +483,18 @@
       </button>
     </div>
 
+    <div class="rule">AI Usage Limits</div>
+    <div class="rows">
+      <button class="row tall" data-act="toggleClaudeQuota">
+        <span class="k">Claude limits<small>5 hour and weekly usage, on the pet and in the menu</small></span>
+        <span class="v"><i class="sw" id="swClaudeQuota"></i></span>
+      </button>
+      <button class="row tall" data-act="toggleCodexQuota">
+        <span class="k">Codex limits<small>5 hour and weekly usage, on the pet and in the menu</small></span>
+        <span class="v"><i class="sw" id="swCodexQuota"></i></span>
+      </button>
+    </div>
+
     <div class="rule">This pet</div>
     <div class="rows">
       <button class="row" data-act="rename">
@@ -919,6 +931,7 @@
     cl.textContent = `${active} active`;
     cl.className = 'n ' + (active ? 'good' : 'off');
     sw('#swGit', w.gitHooks); sw('#swClaude', w.claudeHooks); sw('#swSwarm', w.swarm);
+    sw('#swClaudeQuota', w.showClaudeQuota !== false); sw('#swCodexQuota', w.showCodexQuota !== false);
     sw('#swSound', p.sound); sw('#swLogin', w.login); sw('#swDock', w.dock);
     const size = Number(w.size ?? 1);
     for (const b of document.querySelectorAll('#sizes button')) {

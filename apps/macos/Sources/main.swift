@@ -186,11 +186,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let git = GitWatcher()
     private let ci = CIWatcher()
     private let claude = ClaudeWatcher()
+    private let quota = QuotaWatcher()
     private let overlay = Overlay()
     private let panel = ControlPanel()
     private var dockIconEnabled = UserDefaults.standard.object(forKey: dockIconDefaultsKey) as? Bool ?? true
     private let activity = ActivityLog()
     private var swarmEnabled = UserDefaults.standard.object(forKey: "swarmOnDesktop") as? Bool ?? true
+    private var showClaudeQuota = UserDefaults.standard.object(forKey: "showClaudeQuota") as? Bool ?? true
+    private var showCodexQuota = UserDefaults.standard.object(forKey: "showCodexQuota") as? Bool ?? true
     private var lastSwarmCount = -1
     private var recentEvents: [String: Date] = [:]
 
@@ -252,11 +255,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let claudeStatusItem = NSMenuItem(title: "Claude Code: watching transcripts", action: nil, keyEquivalent: "")
     private let claudeTodayItem = NSMenuItem(title: "Today: 0 prompts · 0 tool calls", action: nil, keyEquivalent: "")
     private let claudeLastItem = NSMenuItem(title: "Last: nothing yet", action: nil, keyEquivalent: "")
+    private let quotaSeparatorItem = NSMenuItem.separator()
+    private let quotaClaudeItem = NSMenuItem(title: "Claude: checking limits…", action: nil, keyEquivalent: "")
+    private let quotaCodexItem = NSMenuItem(title: "Codex: checking limits…", action: nil, keyEquivalent: "")
     private let hooksItem = NSMenuItem(title: "Connect Claude Code hooks…", action: #selector(toggleClaudeHooks), keyEquivalent: "")
     private let swarmItem = NSMenuItem(title: "Let bugs loose on the screen", action: #selector(toggleSwarm), keyEquivalent: "")
     private let gitHooksItem = NSMenuItem(title: "Connect global git hooks…", action: #selector(toggleGitHooks), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // One copy at a time: a second launch hands over to the first and quits. Only the
+        // newer process quits, so two launches that start together cannot each see the
+        // other and both exit, which would leave no pet running at all.
+        let bundleId = Bundle.main.bundleIdentifier ?? "app.bitling.pet"
+        let me = NSRunningApplication.current
+        func isOlder(_ a: NSRunningApplication, than b: NSRunningApplication) -> Bool {
+            let (da, db) = (a.launchDate ?? .distantFuture, b.launchDate ?? .distantFuture)
+            return da != db ? da < db : a.processIdentifier < b.processIdentifier
+        }
+        if let first = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+            .first(where: { $0.processIdentifier != me.processIdentifier && isOlder($0, than: me) }) {
+            first.activate(options: [.activateIgnoringOtherApps])
+            NSApp.terminate(nil)
+            return
+        }
         NSApp.setActivationPolicy(dockIconEnabled ? .regular : .accessory)
         buildMainMenu()
         buildWebView()
@@ -271,6 +292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         ci.start()
         claude.onEvent = { [weak self] event in self?.deliverGitEvent(event) }
         claude.start()
+        quota.onUpdate = { [weak self] _ in self?.renderQuota() }
+        quota.start()
         overlay.onKill = { [weak self] beetle in
             guard let self else { return }
             self.js("petNative.killed(\(beetle.boss ? "true" : "false"))")
@@ -450,6 +473,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         for item in [ciStatusItem, ciLastItem] { item.isEnabled = false; gitMenu.addItem(item) }
         gitMenu.addItem(.separator())
         for item in [claudeStatusItem, claudeTodayItem, claudeLastItem] { item.isEnabled = false; gitMenu.addItem(item) }
+        gitMenu.addItem(quotaSeparatorItem)
+        for item in [quotaClaudeItem, quotaCodexItem] { item.isEnabled = false; gitMenu.addItem(item) }
+        updateQuotaMenu()
         hooksItem.target = self
         gitMenu.addItem(hooksItem)
         swarmItem.target = self
@@ -505,6 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageReady = true
+        renderQuota()
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -655,6 +682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         claudeStatusItem.title = "Claude Code: \(active) active session\(active == 1 ? "" : "s") · \(hooked ? "hooks connected" : "transcripts only")"
         claudeTodayItem.title = "Today: \(claude.promptsToday) prompt\(claude.promptsToday == 1 ? "" : "s") · \(claude.toolsToday) tool calls · \(claude.sessionsToday) new session\(claude.sessionsToday == 1 ? "" : "s")"
         claudeLastItem.title = "Last: \(claude.lastSummary)"
+        updateQuotaMenu()
         hooksItem.title = hooked ? "Disconnect Claude Code hooks" : "Connect Claude Code hooks…"
         swarmItem.state = swarmEnabled ? .on : .off
         stopWatchingMenu.removeAllItems()
@@ -723,6 +751,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "claudeHooks": ClaudeHooks.installed(),
                 "gitHooks": GitHooks.installed(),
                 "swarm": swarmEnabled,
+                "showClaudeQuota": showClaudeQuota,
+                "showCodexQuota": showCodexQuota,
                 "petVisible": window.isVisible,
                 "size": Double(petSizeScale),
                 "dock": dockIconEnabled,
@@ -744,6 +774,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "githubConnect": toggleGitHubConnection()
         case "claudeHooks": toggleClaudeHooks()
         case "swarm": toggleSwarm()
+        case "toggleClaudeQuota":
+            showClaudeQuota.toggle()
+            UserDefaults.standard.set(showClaudeQuota, forKey: "showClaudeQuota")
+            renderQuota()
+        case "toggleCodexQuota":
+            showCodexQuota.toggle()
+            UserDefaults.standard.set(showCodexQuota, forKey: "showCodexQuota")
+            renderQuota()
         case "hide": toggleShown()
         case _ where action.hasPrefix("size:"):
             applyPetSize(CGFloat(Double(action.dropFirst(5)) ?? 1))
@@ -944,6 +982,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard let data = try? JSONSerialization.data(withJSONObject: status.asDictionary),
               let json = String(data: data, encoding: .utf8) else { return }
         js("petNative.gitStatus(\(json))")
+    }
+
+    // MARK: Usage limits
+
+    /// "Claude: 5h 94% left · week 100% left". A window the tool never recorded is left out.
+    private func quotaSummary(_ name: String, _ provider: QuotaProvider) -> String {
+        func left(_ label: String, _ window: QuotaWindow?) -> String? {
+            window.map { "\(label) \(Int((100 - $0.usedPercent).rounded()))% left" }
+        }
+        let parts = [left("5h", provider.fiveHour), left("week", provider.weekly)].compactMap { $0 }
+        return parts.isEmpty ? "\(name): no recent usage data" : "\(name): " + parts.joined(separator: " · ")
+    }
+
+    private func updateQuotaMenu() {
+        if let data = quota.latestData {
+            quotaClaudeItem.title = quotaSummary("Claude", data.claude)
+            quotaCodexItem.title = quotaSummary("Codex", data.codex)
+        }
+        quotaSeparatorItem.isHidden = !showClaudeQuota && !showCodexQuota
+        quotaClaudeItem.isHidden = !showClaudeQuota
+        quotaCodexItem.isHidden = !showCodexQuota
+    }
+
+    /// The menu and the pet's HUD follow the same readings and the same on/off switches,
+    /// so every change to either goes through here.
+    private func renderQuota() {
+        updateQuotaMenu()
+        let data = quota.latestData ?? QuotaData()
+        let payload = QuotaPayload(claude: data.claude, codex: data.codex,
+                                   showClaude: showClaudeQuota, showCodex: showCodexQuota)
+        js("petNative.quotaUpdate(\(payload.json))")
     }
 
     @objc private func watchFolder() {

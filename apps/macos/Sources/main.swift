@@ -478,6 +478,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         gitMenu.addItem(.separator())
         for item in [claudeStatusItem, claudeTodayItem, claudeLastItem] { item.isEnabled = false; gitMenu.addItem(item) }
         gitMenu.addItem(quotaSeparatorItem)
+        quotaClaudeItem.image = menuLogo("claude")
+        quotaCodexItem.image = menuLogo("codex")
         for item in [quotaClaudeItem, quotaCodexItem] { item.isEnabled = false; gitMenu.addItem(item) }
         updateQuotaMenu()
         hooksItem.target = self
@@ -1001,6 +1003,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     // MARK: Usage limits
+
+    /// The provider's own icon (from Resources/logos) at menu size; nil leaves the item text-only.
+    private func menuLogo(_ name: String) -> NSImage? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "logos"),
+              let image = NSImage(contentsOf: url) else { return nil }
+        image.size = NSSize(width: 16, height: 16)
+        return image
+    }
 
     /// "Claude: 5h 94% left · week 100% left". A window the tool never recorded is left out.
     private func quotaSummary(_ name: String, _ provider: QuotaProvider) -> String {

@@ -56,6 +56,9 @@ fi
 if [[ -d Resources/avatars ]]; then
   cp -R Resources/avatars "$APP/Contents/Resources/avatars"
 fi
+if [[ -d Resources/logos ]]; then
+  cp -R Resources/logos "$APP/Contents/Resources/logos"
+fi
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/bitling "$APP/Contents/Resources/bitling"
 chmod +x "$APP/Contents/Resources/bitling"

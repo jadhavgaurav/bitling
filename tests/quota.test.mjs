@@ -396,3 +396,13 @@ test('renewal is throttled and only for a stale sign-in, and the hook ignores Bi
     await rm(swiftDir, { recursive: true, force: true });
   }
 });
+
+test('the menu logos ship in the bundle: valid 64px PNGs that the code and the build both point at', async () => {
+  for (const name of ['claude', 'codex']) {
+    const png = await readFile(`apps/macos/Resources/logos/${name}.png`);
+    assert.equal(png.subarray(1, 4).toString(), 'PNG', `${name}.png is a PNG`);
+    assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [64, 64], `${name}.png is 64x64`);
+    assert.match(await readFile('apps/macos/Sources/main.swift', 'utf8'), new RegExp(`menuLogo\\("${name}"\\)`), `${name} is attached to its menu item`);
+  }
+  assert.match(await readFile('apps/macos/build.sh', 'utf8'), /cp -R Resources\/logos/, 'build.sh copies the logos into the app');
+});

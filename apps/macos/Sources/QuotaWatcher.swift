@@ -220,11 +220,13 @@ struct LiveFailure: Error {
     /// How long to leave it alone before asking again. A declined keychain dialog comes back
     /// every time it is asked, so that one is asked rarely.
     let retryAfter: TimeInterval
+    /// True when running Claude Code once is likely to fix it: it renews its own sign-in.
+    var renewable = false
 
     static let notSignedIn = LiveFailure(message: "sign in to Claude Code for live usage", retryAfter: 600)
     static let keychainDenied = LiveFailure(message: "keychain access was declined", retryAfter: 3600)
-    static let tokenExpired = LiveFailure(message: "waiting for Claude Code to renew its sign-in", retryAfter: 120)
-    static let signInRejected = LiveFailure(message: "Claude Code's sign-in was rejected", retryAfter: 120)
+    static let tokenExpired = LiveFailure(message: "waiting for Claude Code to renew its sign-in", retryAfter: 120, renewable: true)
+    static let signInRejected = LiveFailure(message: "Claude Code's sign-in was rejected", retryAfter: 120, renewable: true)
     static let rateLimited = LiveFailure(message: "usage service is busy", retryAfter: 300)
     static let offline = LiveFailure(message: "usage service unreachable", retryAfter: 120)
     static let unexpectedResponse = LiveFailure(message: "unexpected usage response", retryAfter: 120)
@@ -232,6 +234,28 @@ struct LiveFailure: Error {
     static let codexMissing = LiveFailure(message: "the codex command was not found", retryAfter: 3600)
     static let codexSilent = LiveFailure(message: "codex did not answer", retryAfter: 120)
     static let codexNotSignedIn = LiveFailure(message: "sign in to Codex for live usage", retryAfter: 600)
+}
+
+/// Outcomes only, so a failing feed can be diagnosed: never a token, a header, or a response body.
+/// ~/Library/Logs/Bitling/usage.log, trimmed when it grows.
+enum UsageLog {
+    private static let lock = NSLock()
+    static func write(_ line: String) {
+        lock.lock(); defer { lock.unlock() }
+        let fm = FileManager.default
+        let dir = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Bitling")
+        let file = dir.appendingPathComponent("usage.log")
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let size = (try? fm.attributesOfItem(atPath: file.path)[.size]) as? Int, size > 64_000 { try? fm.removeItem(at: file) }
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        guard let data = "\(stamp) \(line)\n".data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: file) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd(); try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: file)
+        }
+    }
 }
 
 struct LiveReading {
@@ -314,15 +338,33 @@ enum CodexUsageParser {
 final class ClaudeLiveUsage {
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
-    /// Blocks until the keychain dialog (if any) and the request finish: call off the main thread.
+    /// Blocks until the keychain dialog (if any), the request and any renewal finish: call off
+    /// the main thread. Claude Code's token lasts hours and is renewed only when Claude Code
+    /// runs, so after a long idle it is expired. Running Claude once makes it renew its own
+    /// sign-in, which is then read again. That costs a few seconds of CPU, so it happens at
+    /// most once per `ClaudeRenewal.minimumGap` and only when the token is actually stale.
     func fetch(now: Date = Date()) -> Result<LiveReading, LiveFailure> {
+        let first = attempt(now: now)
+        guard case .failure(let failure) = first, failure.renewable, ClaudeRenewal.claim(now: now) else { return first }
+        UsageLog.write("claude: \(failure.message); running Claude Code once so it renews its sign-in")
+        ClaudeRenewal.run()
+        return attempt(now: Date())
+    }
+
+    private func attempt(now: Date) -> Result<LiveReading, LiveFailure> {
         let stored: Data
         switch Self.readKeychain() {
         case .success(let data): stored = data
         case .failure(let failure): return .failure(failure)
         }
-        guard let credential = ClaudeCredential.parse(stored) else { return .failure(.notSignedIn) }
-        if credential.isExpired(at: now) { return .failure(.tokenExpired) }
+        guard let credential = ClaudeCredential.parse(stored) else {
+            UsageLog.write("claude: keychain item read, but it has no usable sign-in")
+            return .failure(.notSignedIn)
+        }
+        if credential.isExpired(at: now) {
+            UsageLog.write("claude: sign-in token expired \(credential.expiresAt.map { Int(now.timeIntervalSince($0) / 60) } ?? 0) min ago")
+            return .failure(.tokenExpired)
+        }
 
         var request = URLRequest(url: Self.endpoint, timeoutInterval: 12)
         request.setValue("Bearer \(credential.accessToken)", forHTTPHeaderField: "Authorization")
@@ -337,10 +379,16 @@ final class ClaudeLiveUsage {
         }.resume()
         _ = done.wait(timeout: .now() + 15)
 
-        guard let status else { return .failure(.offline) }
+        guard let status else { UsageLog.write("claude: no response from the usage service"); return .failure(.offline) }
+        UsageLog.write("claude: usage service answered \(status)")
         switch status {
         case 200:
-            guard let body, let reading = ClaudeUsageParser.parse(body, fetchedAt: now) else { return .failure(.unexpectedResponse) }
+            guard let body, let reading = ClaudeUsageParser.parse(body, fetchedAt: now) else {
+                let keys = (body.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] })?.keys.sorted().joined(separator: ",") ?? "not json"
+                UsageLog.write("claude: could not read the reply, its fields are: \(keys)")
+                return .failure(.unexpectedResponse)
+            }
+            UsageLog.write("claude: live 5h \(reading.fiveHour?.usedPercent ?? -1)% week \(reading.weekly?.usedPercent ?? -1)%")
             return .success(reading)
         case 401, 403: return .failure(.signInRejected)
         case 429: return .failure(.rateLimited)
@@ -360,7 +408,59 @@ final class ClaudeLiveUsage {
         case errSecSuccess: return (item as? Data).map { .success($0) } ?? .failure(.notSignedIn)
         case errSecItemNotFound: return .failure(.notSignedIn)
         // Declined, cancelled, or the keychain is locked and may not ask: all mean "not now".
-        default: return .failure(.keychainDenied)
+        case let status:
+            UsageLog.write("claude: keychain read refused (OSStatus \(status))")
+            return .failure(.keychainDenied)
+        }
+    }
+}
+
+enum ClaudeRenewal {
+    static let minimumGap: TimeInterval = 30 * 60
+    private static let lock = NSLock()
+    private static var last = Date.distantPast
+
+    /// Pure so it can be tested: may a renewal run now, given when the last one started?
+    static func mayRun(lastRun: Date, now: Date) -> Bool { now.timeIntervalSince(lastRun) >= minimumGap }
+
+    /// Takes the one renewal slot, or says no if one ran recently.
+    static func claim(now: Date) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard mayRun(lastRun: last, now: now) else { return false }
+        last = now
+        return true
+    }
+
+    private static var candidates: [String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return ["\(home)/.npm-global/bin/claude", "\(home)/.local/bin/claude", "\(home)/.claude/local/claude",
+                "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
+    }
+
+    /// `claude -p /usage` is a local command: it answers from the account without a model turn.
+    /// Running it is what makes Claude Code renew its sign-in. No session is saved, and
+    /// BITLING_PROBE tells Bitling's own Claude hooks to ignore the run.
+    static func run() {
+        guard let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            UsageLog.write("claude: the claude command was not found, so the sign-in cannot be renewed")
+            return
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["-p", "/usage", "--no-session-persistence"]
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        var environment = ProcessInfo.processInfo.environment
+        environment["BITLING_PROBE"] = "1"
+        process.environment = environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
+        do { try process.run() } catch { UsageLog.write("claude: could not start the claude command"); return }
+        if finished.wait(timeout: .now() + 60) == .timedOut {
+            process.terminate()
+            UsageLog.write("claude: the renewal run took too long and was stopped")
         }
     }
 }

@@ -117,6 +117,9 @@ case "$command_name" in
     exit 0
     ;;
   claude)
+    # Bitling itself runs Claude Code now and then to renew its sign-in (see QuotaWatcher.swift).
+    # That run is not a session of yours, so its hooks must not reach the pet.
+    [[ -n "${BITLING_PROBE:-}" ]] && exit 0
     # Claude Code hook adapter: reads the hook JSON on stdin and forwards one event.
     # The payload travels through the environment because python's program text uses stdin.
     BITLING_PAYLOAD="$(cat)" python3 - <<'PY'

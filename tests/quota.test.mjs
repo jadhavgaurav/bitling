@@ -196,6 +196,16 @@ case "credential":
     if let c = ClaudeCredential.parse(data) {
         print(json(["parsed": true, "expired": c.isExpired(at: now), "printed": "\\(c)", "described": c.description]))
     } else { print(json(["parsed": false])) }
+case "renewal":
+    let base = Date(timeIntervalSince1970: 1_791_790_000)
+    let gap = ClaudeRenewal.minimumGap
+    print(json(["gap": gap,
+                "soon": ClaudeRenewal.mayRun(lastRun: base, now: base.addingTimeInterval(gap - 1)),
+                "atGap": ClaudeRenewal.mayRun(lastRun: base, now: base.addingTimeInterval(gap)),
+                "never": ClaudeRenewal.mayRun(lastRun: .distantPast, now: base),
+                "expiredIsRenewable": LiveFailure.tokenExpired.renewable,
+                "rejectedIsRenewable": LiveFailure.signInRejected.renewable,
+                "deniedIsRenewable": LiveFailure.keychainDenied.renewable]))
 default: print("unknown mode")
 }
 `;
@@ -338,5 +348,47 @@ test('live readings are parsed from the real response shapes, and the Claude tok
     assert.equal((await ask('credential', { somethingElse: true })).parsed, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('renewal is throttled and only for a stale sign-in, and the hook ignores Bitling\'s own probe', async (t) => {
+  // --- the hook: a probe run must not tell the pet anything, a real session must
+  const directory = await mkdtemp(join(tmpdir(), 'bitling-quota-hook-'));
+  try {
+    const bin = join(directory, 'bin'), log = join(directory, 'opened.txt');
+    await mkdir(bin);
+    await writeFile(join(bin, 'open'), `#!/bin/bash\necho "$@" >> '${log}'\n`, { mode: 0o755 });
+    const env = extra => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, ...extra });
+    const fire = (extra) => new Promise((resolve, reject) => {
+      const child = execFile('/bin/bash', ['apps/macos/Resources/bitling', 'claude'], { env: env(extra) }, err => err ? reject(err) : resolve());
+      child.stdin.end(JSON.stringify({ hook_event_name: 'Stop', cwd: '/tmp/some-project' }));
+    });
+    await fire({ BITLING_PROBE: '1' });
+    const probed = await readFile(log, 'utf8').catch(() => '');
+    assert.equal(probed, '', 'a probe run must not reach the pet');
+    await fire({});
+    const real = await readFile(log, 'utf8').catch(() => '');
+    assert.match(real, /bitling:\/\/claude-done\?name=some-project/, 'a real session still reaches the pet');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+
+  // --- the policy
+  if (!(await swiftAvailable())) return t.skip('swiftc is not installed');
+  const swiftDir = await mkdtemp(join(tmpdir(), 'bitling-quota-renew-'));
+  try {
+    await writeFile(join(swiftDir, 'main.swift'), DRIVER);
+    const binary = join(swiftDir, 'reader');
+    await run('swiftc', ['-O', '-swift-version', '5', 'apps/macos/Sources/QuotaWatcher.swift', join(swiftDir, 'main.swift'), '-o', binary]);
+    const out = JSON.parse((await run(binary, ['renewal', 'unused'])).stdout);
+    assert.equal(out.gap, 1800);
+    assert.equal(out.soon, false, 'no second renewal inside half an hour');
+    assert.equal(out.atGap, true);
+    assert.equal(out.never, true);
+    assert.equal(out.expiredIsRenewable, true);
+    assert.equal(out.rejectedIsRenewable, true);
+    assert.equal(out.deniedIsRenewable, false, 'running Claude cannot fix a declined keychain dialog');
+  } finally {
+    await rm(swiftDir, { recursive: true, force: true });
   }
 });

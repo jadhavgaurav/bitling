@@ -376,7 +376,10 @@ can be, and otherwise comes from what the tool logged, with its age printed besi
 - **Claude** is asked through the same endpoint Claude Code's `/usage` uses. That needs the
   sign-in token Claude Code keeps in your login keychain, so macOS asks once whether Bitling may
   read it. The token is never logged, stored or written anywhere, is sent only to
-  `api.anthropic.com`, and is never refreshed (that could sign Claude Code out).
+  `api.anthropic.com`, and is never refreshed by Bitling (that could sign Claude Code out).
+  Claude Code only renews that token when it runs, so when it has expired Bitling runs
+  `claude -p /usage` once, at most every 30 minutes, which makes Claude Code renew its own
+  sign-in. That run saves no session and is ignored by Bitling's Claude hooks.
 - Both can be switched off in the control room, under Live Claude usage and Live Codex usage.
 
 To check changes on macOS, use Node.js 22.13+ and Google Chrome:

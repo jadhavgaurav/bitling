@@ -1012,12 +1012,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         return image
     }
 
-    /// "Claude: 5h 94% left · week 100% left". A window the tool never recorded is left out.
+    /// "Claude: 5h 6% used · week 0% used". A window the tool never recorded is left out.
     private func quotaSummary(_ name: String, _ provider: QuotaProvider) -> String {
-        func left(_ label: String, _ window: QuotaWindow?) -> String? {
-            window.map { "\(label) \(Int((100 - $0.usedPercent).rounded()))% left" }
+        func used(_ label: String, _ window: QuotaWindow?) -> String? {
+            window.map { "\(label) \(Int($0.usedPercent.rounded()))% used" }
         }
-        let parts = [left("5h", provider.fiveHour), left("week", provider.weekly)].compactMap { $0 }
+        let parts = [used("5h", provider.fiveHour), used("week", provider.weekly)].compactMap { $0 }
         let base = parts.isEmpty ? "\(name): no recent usage data" : "\(name): " + parts.joined(separator: " · ")
         // Say so when the figures come from the logs because live data could not be had.
         return provider.liveStatus.map { "\(base) (\($0))" } ?? base

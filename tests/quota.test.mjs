@@ -62,15 +62,15 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
     assert.equal(hud.hidden, false);
     assert.equal(hud.claudePlan, 'Max 20x');
     assert.equal(hud.codexPlan, 'Plus');
-    assert.equal(hud.claude5hVal, '6%');
-    assert.equal(hud.claude5hSub, '6% left', 'a fresh reading carries no age label');
-    assert.ok(hud.claude5hCls.includes('critical'), 'under 10% left is critical');
-    assert.equal(hud.claudeWkVal, '60%');
-    assert.equal(hud.claudeWkSub, '60% left · logged 2h 0m ago', 'a two hour old sample is labelled as old');
-    assert.equal(hud.codex5hVal, '80%');
-    assert.equal(hud.codex5hSub, '80% left · resets in 2h 10m');
+    assert.equal(hud.claude5hVal, '94%');
+    assert.equal(hud.claude5hSub, '94% used', 'a fresh reading carries no age label');
+    assert.ok(hud.claude5hCls.includes('critical'), '90% or more used is critical');
+    assert.equal(hud.claudeWkVal, '40%');
+    assert.equal(hud.claudeWkSub, '40% used · logged 2h 0m ago', 'a two hour old sample is labelled as old');
+    assert.equal(hud.codex5hVal, '20%');
+    assert.equal(hud.codex5hSub, '20% used · resets in 2h 10m');
     assert.equal(hud.codexWkVal, '--');
-    assert.equal(hud.codexWkSub, 'no recent data', 'a window nobody recorded is not shown as 100% left');
+    assert.equal(hud.codexWkSub, 'no recent data', 'a window nobody recorded is not shown as 0% used');
     assert.equal(hud.codexWkWidth, '0%');
     assert.ok(!/NaN|undefined|null|turns|gpt-/i.test(hud.all), `no stray placeholder text: ${hud.all}`);
 
@@ -85,7 +85,7 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
                claudeNoteHidden: document.querySelector('#quotaClaudeNote').hidden,
                codexNoteHidden: document.querySelector('#quotaCodexNote').hidden };
     });
-    assert.equal(stale.codexWk, '84% left · logged 2d 2h ago',
+    assert.equal(stale.codexWk, '16% used · logged 2d 2h ago',
       'a reset time out of a two day old log must not be shown as a live countdown');
     assert.equal(stale.claudeNote, 'Not live: keychain access was declined');
     assert.equal(stale.claudeNoteHidden, false);

@@ -12706,19 +12706,19 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
       sub.textContent = 'no recent data';
       return;
     }
-    const left = Math.max(0, Math.min(100, 100 - win.usedPercent));
+    const used = Math.max(0, Math.min(100, win.usedPercent));
     const now = Date.now();
-    fill.style.width = `${left}%`;
-    fill.classList.toggle('critical', left <= 10);
-    fill.classList.toggle('warning', left > 10 && left <= 25);
-    val.textContent = `${Math.round(left)}%`;
+    fill.style.width = `${used}%`;
+    fill.classList.toggle('critical', used >= 90);
+    fill.classList.toggle('warning', used >= 75 && used < 90);
+    val.textContent = `${Math.round(used)}%`;
     // A reset time read out of an old log is as old as the log, so a countdown is shown only
     // beside a fresh reading. Beside a stale one it would look current and be wrong.
     const stale = !!win.asOf && now - win.asOf > QUOTA_STALE_MS;
     let note = '';
     if (stale) note = ` · logged ${quotaSpan(now - win.asOf)} ago`;
     else if (win.resetsAt && win.resetsAt > now) note = ` · resets in ${quotaSpan(win.resetsAt - now)}`;
-    sub.textContent = `${Math.round(left)}% left${note}`;
+    sub.textContent = `${Math.round(used)}% used${note}`;
   }
 
   function paintQuota() {

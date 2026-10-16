@@ -77,7 +77,7 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
     const stale = await page.evaluate(() => {
       const now = Date.now(), hour = 3600000;
       window.petNative.quotaUpdate({ showClaude: true, showCodex: true,
-        claude: { plan: 'Max 20x', liveStatus: 'keychain access was declined', fiveHour: { usedPercent: 10, asOf: now - 2 * hour } },
+        claude: { plan: 'Max 20x', liveStatus: 'claude did not answer', fiveHour: { usedPercent: 10, asOf: now - 2 * hour } },
         codex: { plan: 'Plus', weekly: { usedPercent: 16, resetsAt: now + 5 * 24 * hour, asOf: now - 50 * hour } } });
       window.__quota.showQuotaHud(3000);
       const text = id => document.querySelector(id).textContent;
@@ -87,7 +87,7 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
     });
     assert.equal(stale.codexWk, '16% used · logged 2d 2h ago',
       'a reset time out of a two day old log must not be shown as a live countdown');
-    assert.equal(stale.claudeNote, 'Not live: keychain access was declined');
+    assert.equal(stale.claudeNote, 'Not live: claude did not answer');
     assert.equal(stale.claudeNoteHidden, false);
     assert.equal(stale.codexNoteHidden, true, 'no note when nothing is wrong');
   } finally {
@@ -189,27 +189,12 @@ switch args[1] {
 case "files":
     print(String(decoding: try! enc.encode(QuotaReader.read(home: URL(fileURLWithPath: args[2]))), as: UTF8.self))
 case "claude-usage":
-    let data = try! Data(contentsOf: URL(fileURLWithPath: args[2]))
-    if let r = ClaudeUsageParser.parse(data, fetchedAt: now) { print(json(["fiveHour": window(r.fiveHour), "weekly": window(r.weekly)])) } else { print("nil") }
+    let text = try! String(contentsOf: URL(fileURLWithPath: args[2]), encoding: .utf8)
+    if let r = ClaudeUsageTextParser.parse(text, fetchedAt: now) { print(json(["fiveHour": window(r.fiveHour), "weekly": window(r.weekly)])) } else { print("nil") }
 case "codex-usage":
     let data = try! Data(contentsOf: URL(fileURLWithPath: args[2]))
     let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
     if let r = CodexUsageParser.parse(object, fetchedAt: now) { print(json(["plan": r.plan as Any? ?? NSNull(), "fiveHour": window(r.fiveHour), "weekly": window(r.weekly)])) } else { print("nil") }
-case "credential":
-    let data = try! Data(contentsOf: URL(fileURLWithPath: args[2]))
-    if let c = ClaudeCredential.parse(data) {
-        print(json(["parsed": true, "expired": c.isExpired(at: now), "printed": "\\(c)", "described": c.description]))
-    } else { print(json(["parsed": false])) }
-case "renewal":
-    let base = Date(timeIntervalSince1970: 1_791_790_000)
-    let gap = ClaudeRenewal.minimumGap
-    print(json(["gap": gap,
-                "soon": ClaudeRenewal.mayRun(lastRun: base, now: base.addingTimeInterval(gap - 1)),
-                "atGap": ClaudeRenewal.mayRun(lastRun: base, now: base.addingTimeInterval(gap)),
-                "never": ClaudeRenewal.mayRun(lastRun: .distantPast, now: base),
-                "expiredIsRenewable": LiveFailure.tokenExpired.renewable,
-                "rejectedIsRenewable": LiveFailure.signInRejected.renewable,
-                "deniedIsRenewable": LiveFailure.keychainDenied.renewable]))
 default: print("unknown mode")
 }
 `;
@@ -293,7 +278,7 @@ test('the native reader returns only recorded figures: right bucket, right accou
   }
 });
 
-test('live readings are parsed from the real response shapes, and the Claude token never prints', async (t) => {
+test('live readings are parsed from the real output shapes', async (t) => {
   if (!(await swiftAvailable())) return t.skip('swiftc is not installed');
   const directory = await mkdtemp(join(tmpdir(), 'bitling-quota-live-'));
   try {
@@ -308,20 +293,30 @@ test('live readings are parsed from the real response shapes, and the Claude tok
     };
     const fetchedAt = 1_791_790_000_000;
 
-    // Claude: utilization is a percent, an idle window is null, and nothing is clamped past 100.
-    let r = await ask('claude-usage', {
-      five_hour: { utilization: 37.0, resets_at: '2026-10-12T09:30:00.123456+00:00' },
-      seven_day: { utilization: 26.0, resets_at: '2026-10-17T10:00:00+00:00' }, seven_day_opus: null });
-    assert.equal(r.fiveHour.used, 37);
-    assert.equal(r.weekly.used, 26);
-    assert.equal(r.fiveHour.resetsAt, Date.parse('2026-10-12T09:30:00.123Z'), 'fractional-second resets parse');
-    assert.equal(r.weekly.resetsAt, Date.parse('2026-10-17T10:00:00Z'));
-    assert.equal(r.fiveHour.asOf, fetchedAt, 'a live reading is dated when it was fetched');
-    r = await ask('claude-usage', { five_hour: null, seven_day: { utilization: 140, resets_at: '2026-10-17T10:00:00+00:00' } });
-    assert.equal(r.fiveHour.used, 0, 'a null window is an untouched one');
-    assert.equal(r.fiveHour.resetsAt, null);
+    // Claude: the text `claude -p /usage` prints. Resets are in the zone the CLI names.
+    const askText = async text => {
+      const file = join(directory, 'claude.txt');
+      await writeFile(file, text);
+      const out = (await run(binary, ['claude-usage', file])).stdout.trim();
+      return out === 'nil' ? null : JSON.parse(out);
+    };
+    let r = await askText(`You are currently using your subscription to power your Claude Code usage
+
+Current session: 7% used · resets Oct 12 at 1:20pm (Asia/Calcutta)
+Current week (all models): 82% used · resets Oct 18 at 5:30am (Asia/Calcutta)
+Current week (Fable): 0% used · resets Oct 18 at 5:30am (Asia/Calcutta)
+`);
+    assert.equal(r.fiveHour.used, 7);
+    assert.equal(r.weekly.used, 82, 'the all-models week, not the per-model one');
+    assert.equal(r.fiveHour.resetsAt, Date.UTC(2026, 9, 12, 7, 50), '1:20pm IST');
+    assert.equal(r.weekly.resetsAt, Date.UTC(2026, 9, 18, 0, 0), '5:30am IST on the 18th');
+    assert.equal(r.fiveHour.asOf, 1_791_790_000_000, 'a live reading is dated when it was fetched');
+    r = await askText('Current session: 0% used\nCurrent week (all models): 140% used · resets Jan 3 at 9am (UTC)\n');
+    assert.equal(r.fiveHour.used, 0);
+    assert.equal(r.fiveHour.resetsAt, null, 'an untouched window has no reset');
     assert.equal(r.weekly.used, 100, 'clamped');
-    assert.equal(await ask('claude-usage', { error: 'nope' }), null, 'an unrecognised body is a failure, not zeros');
+    assert.equal(r.weekly.resetsAt, Date.UTC(2027, 0, 3, 9, 0), 'a date already past rolls to next year');
+    assert.equal(await askText('Not logged in\n'), null, 'an unrecognised output is a failure, not zeros');
 
     // Codex: the shape account/rateLimits/read really returned, with the "codex" bucket chosen.
     const bucket = (limitId, p, s) => ({ limitId, limitName: null,
@@ -339,23 +334,12 @@ test('live readings are parsed from the real response shapes, and the Claude tok
     r = await ask('codex-usage', { rateLimits: bucket('codex', 7, 2) });
     assert.equal(r.fiveHour.used, 7, 'the single-bucket form still works');
     assert.equal(await ask('codex-usage', { rateLimits: bucket('premium', 90, 90) }), null, 'a non-codex bucket alone is not codex usage');
-
-    // The token: parsed, expiry judged, and never present in anything printable.
-    const secret = 'sk-ant-oat01-THIS-MUST-NEVER-APPEAR';
-    let c = await ask('credential', { claudeAiOauth: { accessToken: secret, expiresAt: fetchedAt + 3600000 } });
-    assert.equal(c.parsed, true);
-    assert.equal(c.expired, false);
-    assert.ok(!c.printed.includes(secret) && !c.described.includes(secret), `token leaked into its own description: ${c.printed}`);
-    c = await ask('credential', { claudeAiOauth: { accessToken: secret, expiresAt: fetchedAt - 1000 } });
-    assert.equal(c.expired, true, 'an expired token is recognised so it is never sent');
-    assert.equal((await ask('credential', { claudeAiOauth: { accessToken: '' } })).parsed, false);
-    assert.equal((await ask('credential', { somethingElse: true })).parsed, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
 
-test('renewal is throttled and only for a stale sign-in, and the hook ignores Bitling\'s own probe', async (t) => {
+test('the hook ignores Bitling\'s own usage probe', async () => {
   // --- the hook: a probe run must not tell the pet anything, a real session must
   const directory = await mkdtemp(join(tmpdir(), 'bitling-quota-hook-'));
   try {
@@ -375,25 +359,6 @@ test('renewal is throttled and only for a stale sign-in, and the hook ignores Bi
     assert.match(real, /bitling:\/\/claude-done\?name=some-project/, 'a real session still reaches the pet');
   } finally {
     await rm(directory, { recursive: true, force: true });
-  }
-
-  // --- the policy
-  if (!(await swiftAvailable())) return t.skip('swiftc is not installed');
-  const swiftDir = await mkdtemp(join(tmpdir(), 'bitling-quota-renew-'));
-  try {
-    await writeFile(join(swiftDir, 'main.swift'), DRIVER);
-    const binary = join(swiftDir, 'reader');
-    await run('swiftc', ['-O', '-swift-version', '5', 'apps/macos/Sources/QuotaWatcher.swift', join(swiftDir, 'main.swift'), '-o', binary]);
-    const out = JSON.parse((await run(binary, ['renewal', 'unused'])).stdout);
-    assert.equal(out.gap, 1800);
-    assert.equal(out.soon, false, 'no second renewal inside half an hour');
-    assert.equal(out.atGap, true);
-    assert.equal(out.never, true);
-    assert.equal(out.expiredIsRenewable, true);
-    assert.equal(out.rejectedIsRenewable, true);
-    assert.equal(out.deniedIsRenewable, false, 'running Claude cannot fix a declined keychain dialog');
-  } finally {
-    await rm(swiftDir, { recursive: true, force: true });
   }
 });
 

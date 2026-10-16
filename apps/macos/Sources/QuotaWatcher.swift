@@ -206,12 +206,10 @@ enum QuotaReader {
 // its CLI writes to disk, so anything done from the Codex app is invisible there. Both tools
 // can say what they know right now, and that is preferred whenever it is available:
 //
-//   Claude  the endpoint behind Claude Code's /usage. It takes the sign-in token Claude Code
-//           keeps in the login keychain. The token is never logged, stored or written
-//           anywhere, is sent only to api.anthropic.com, and is never refreshed here:
-//           refreshing would rotate it and could sign Claude Code out, so an expired token
-//           just means waiting until Claude Code renews it. macOS asks once, in its own
-//           dialog, whether Bitling may read the item.
+//   Claude  `claude -p /usage`, parsed from its text. Claude reads its own sign-in, so Bitling
+//           never touches the keychain or a token (reading Claude Code's keychain item meant a
+//           password prompt after every token renewal, because Claude Code recreates the item).
+//           It costs a few seconds of CPU, so it is asked every 5 minutes.
 //   Codex   `codex app-server`, asked for account/rateLimits/read. Codex answers with its own
 //           sign-in, so no credential passes through Bitling at all.
 
@@ -220,17 +218,10 @@ struct LiveFailure: Error {
     /// How long to leave it alone before asking again. A declined keychain dialog comes back
     /// every time it is asked, so that one is asked rarely.
     let retryAfter: TimeInterval
-    /// True when running Claude Code once is likely to fix it: it renews its own sign-in.
-    var renewable = false
 
     static let notSignedIn = LiveFailure(message: "sign in to Claude Code for live usage", retryAfter: 600)
-    static let keychainDenied = LiveFailure(message: "keychain access was declined", retryAfter: 3600)
-    static let tokenExpired = LiveFailure(message: "waiting for Claude Code to renew its sign-in", retryAfter: 120, renewable: true)
-    static let signInRejected = LiveFailure(message: "Claude Code's sign-in was rejected", retryAfter: 120, renewable: true)
-    static let rateLimited = LiveFailure(message: "usage service is busy", retryAfter: 300)
-    static let offline = LiveFailure(message: "usage service unreachable", retryAfter: 120)
-    static let unexpectedResponse = LiveFailure(message: "unexpected usage response", retryAfter: 120)
-    static func httpStatus(_ code: Int) -> LiveFailure { LiveFailure(message: "usage service answered \(code)", retryAfter: 120) }
+    static let claudeMissing = LiveFailure(message: "the claude command was not found", retryAfter: 3600)
+    static let claudeSilent = LiveFailure(message: "claude did not answer", retryAfter: 300)
     static let codexMissing = LiveFailure(message: "the codex command was not found", retryAfter: 3600)
     static let codexSilent = LiveFailure(message: "codex did not answer", retryAfter: 120)
     static let codexNotSignedIn = LiveFailure(message: "sign in to Codex for live usage", retryAfter: 600)
@@ -265,48 +256,50 @@ struct LiveReading {
     let fetchedAt: Date
 }
 
-struct ClaudeCredential: CustomStringConvertible {
-    let accessToken: String
-    let expiresAt: Date?
-
-    /// Never prints the token, even by accident in a string interpolation.
-    var description: String { "ClaudeCredential(<redacted>)" }
-
-    func isExpired(at now: Date) -> Bool { expiresAt.map { $0 <= now } ?? false }
-
-    /// The keychain item is JSON: {"claudeAiOauth": {"accessToken": "...", "expiresAt": <ms>}}.
-    static func parse(_ data: Data) -> ClaudeCredential? {
-        guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let oauth = obj["claudeAiOauth"] as? [String: Any],
-              let token = oauth["accessToken"] as? String, !token.isEmpty else { return nil }
-        let expires = (oauth["expiresAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
-        return ClaudeCredential(accessToken: token, expiresAt: expires)
+enum ClaudeUsageTextParser {
+    /// `claude -p /usage` prints, among other lines:
+    ///   Current session: 7% used · resets Oct 16 at 1:20pm (Asia/Calcutta)
+    ///   Current week (all models): 82% used · resets Oct 18 at 5:30am (Asia/Calcutta)
+    /// A window with no reset (nothing used yet) has no "resets" part.
+    static func parse(_ text: String, fetchedAt: Date) -> LiveReading? {
+        let five = window(prefix: "Current session:", in: text, now: fetchedAt)
+        let week = window(prefix: "Current week (all models):", in: text, now: fetchedAt)
+        return five == nil && week == nil ? nil : LiveReading(plan: nil, fiveHour: five, weekly: week, fetchedAt: fetchedAt)
     }
-}
 
-enum ClaudeUsageParser {
-    /// {"five_hour": {"utilization": 37.0, "resets_at": "2026-10-12T09:30:00.123456+00:00"},
-    ///  "seven_day": {...}}. A window with no usage comes back null, which means untouched.
-    static func parse(_ data: Data, fetchedAt: Date) -> LiveReading? {
-        guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              obj.keys.contains("five_hour") || obj.keys.contains("seven_day") else { return nil }
-        let now = fetchedAt.timeIntervalSince1970 * 1000
-        func window(_ key: String) -> QuotaWindow {
-            guard let raw = obj[key] as? [String: Any], let used = raw["utilization"] as? Double else {
-                return QuotaWindow(usedPercent: 0, resetsAt: nil, asOf: now)
-            }
-            return QuotaWindow(usedPercent: min(100, max(0, used)),
-                               resetsAt: date(raw["resets_at"] as? String).map { $0.timeIntervalSince1970 * 1000 },
-                               asOf: now)
+    private static let pattern = try! NSRegularExpression(pattern: #"(\d+(?:\.\d+)?)% used(?: · resets (.+?) \((.+?)\))?\s*$"#)
+
+    private static func group(_ index: Int, of match: NSTextCheckingResult, in line: String) -> String? {
+        Range(match.range(at: index), in: line).map { String(line[$0]) }
+    }
+
+    private static func window(prefix: String, in text: String, now: Date) -> QuotaWindow? {
+        guard let line = text.split(separator: "\n").first(where: { $0.hasPrefix(prefix) }).map(String.init),
+              let match = pattern.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let used = Double(group(1, of: match, in: line) ?? "") else { return nil }
+        let stamp = now.timeIntervalSince1970 * 1000
+        let reset = group(2, of: match, in: line).flatMap { resetDate($0, zone: group(3, of: match, in: line), now: now) }
+        return QuotaWindow(usedPercent: min(100, max(0, used)), resetsAt: reset.map { $0.timeIntervalSince1970 * 1000 }, asOf: stamp)
+    }
+
+    /// "Oct 16 at 1:20pm", "Oct 16 at 1pm" or just "1:20pm", in the zone the CLI names. A date with
+    /// no year is the next one that is not in the past.
+    private static func resetDate(_ text: String, zone: String?, now: Date) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        let tz = zone.flatMap(TimeZone.init(identifier:)) ?? .current
+        calendar.timeZone = tz
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = tz
+        formatter.calendar = calendar
+        for (format, withDay) in [("MMM d 'at' h:mma", true), ("MMM d 'at' ha", true), ("h:mma", false), ("ha", false)] {
+            formatter.dateFormat = format
+            formatter.defaultDate = calendar.startOfDay(for: now)
+            guard let date = formatter.date(from: text) else { continue }
+            let step: Calendar.Component = withDay ? .year : .day
+            return date < now.addingTimeInterval(-3600) ? calendar.date(byAdding: step, value: 1, to: date) : date
         }
-        return LiveReading(plan: nil, fiveHour: window("five_hour"), weekly: window("seven_day"), fetchedAt: fetchedAt)
-    }
-
-    private static func date(_ text: String?) -> Date? {
-        guard let text else { return nil }
-        let precise = ISO8601DateFormatter()
-        precise.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return precise.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+        return nil
     }
 }
 
@@ -336,99 +329,48 @@ enum CodexUsageParser {
 }
 
 final class ClaudeLiveUsage {
-    private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
-
-    /// Blocks until the keychain dialog (if any), the request and any renewal finish: call off
-    /// the main thread. Claude Code's token lasts hours and is renewed only when Claude Code
-    /// runs, so after a long idle it is expired. Running Claude once makes it renew its own
-    /// sign-in, which is then read again. That costs a few seconds of CPU, so it happens at
-    /// most once per `ClaudeRenewal.minimumGap` and only when the token is actually stale.
+    /// Blocks until `claude -p /usage` answers: call off the main thread. The command answers
+    /// from the account without a model turn, costing a few seconds of CPU, and Claude reads its
+    /// own sign-in, so Bitling never touches the keychain or any token.
     func fetch(now: Date = Date()) -> Result<LiveReading, LiveFailure> {
-        let first = attempt(now: now)
-        guard case .failure(let failure) = first, failure.renewable, ClaudeRenewal.claim(now: now) else { return first }
-        UsageLog.write("claude: \(failure.message); running Claude Code once so it renews its sign-in")
-        ClaudeRenewal.run()
-        return attempt(now: Date())
-    }
-
-    private func attempt(now: Date) -> Result<LiveReading, LiveFailure> {
-        let stored: Data
-        switch Self.readKeychain() {
-        case .success(let data): stored = data
-        case .failure(let failure): return .failure(failure)
+        guard let path = Self.candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            UsageLog.write("claude: the claude command was not found")
+            return .failure(.claudeMissing)
         }
-        guard let credential = ClaudeCredential.parse(stored) else {
-            UsageLog.write("claude: keychain item read, but it has no usable sign-in")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        // BITLING_PROBE tells Bitling's own Claude hooks to ignore this run.
+        process.arguments = ["-p", "/usage", "--no-session-persistence"]
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        var environment = ProcessInfo.processInfo.environment
+        environment["BITLING_PROBE"] = "1"
+        process.environment = environment
+        let output = Pipe()
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        let collected = LockedData()
+        output.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty { handle.readabilityHandler = nil } else { collected.append(chunk) }
+        }
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
+        do { try process.run() } catch { UsageLog.write("claude: could not start the claude command"); return .failure(.claudeMissing) }
+        defer { output.fileHandleForReading.readabilityHandler = nil }
+        if finished.wait(timeout: .now() + 60) == .timedOut {
+            process.terminate()
+            UsageLog.write("claude: /usage took too long and was stopped")
+            return .failure(.claudeSilent)
+        }
+        // The handler may still be draining the pipe when the child exits.
+        Thread.sleep(forTimeInterval: 0.1)
+        guard let reading = ClaudeUsageTextParser.parse(String(decoding: collected.value, as: UTF8.self), fetchedAt: now) else {
+            UsageLog.write("claude: /usage printed no session or week line")
             return .failure(.notSignedIn)
         }
-        if credential.isExpired(at: now) {
-            UsageLog.write("claude: sign-in token expired \(credential.expiresAt.map { Int(now.timeIntervalSince($0) / 60) } ?? 0) min ago")
-            return .failure(.tokenExpired)
-        }
-
-        var request = URLRequest(url: Self.endpoint, timeoutInterval: 12)
-        request.setValue("Bearer \(credential.accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        request.setValue("bitling", forHTTPHeaderField: "User-Agent")
-
-        let done = DispatchSemaphore(value: 0)
-        var body: Data?, status: Int?
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            body = data; status = (response as? HTTPURLResponse)?.statusCode
-            done.signal()
-        }.resume()
-        _ = done.wait(timeout: .now() + 15)
-
-        guard let status else { UsageLog.write("claude: no response from the usage service"); return .failure(.offline) }
-        UsageLog.write("claude: usage service answered \(status)")
-        switch status {
-        case 200:
-            guard let body, let reading = ClaudeUsageParser.parse(body, fetchedAt: now) else {
-                let keys = (body.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] })?.keys.sorted().joined(separator: ",") ?? "not json"
-                UsageLog.write("claude: could not read the reply, its fields are: \(keys)")
-                return .failure(.unexpectedResponse)
-            }
-            UsageLog.write("claude: live 5h \(reading.fiveHour?.usedPercent ?? -1)% week \(reading.weekly?.usedPercent ?? -1)%")
-            return .success(reading)
-        case 401, 403: return .failure(.signInRejected)
-        case 429: return .failure(.rateLimited)
-        default: return .failure(.httpStatus(status))
-        }
-    }
-
-    private static func readKeychain() -> Result<Data, LiveFailure> {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        switch SecItemCopyMatching(query as CFDictionary, &item) {
-        case errSecSuccess: return (item as? Data).map { .success($0) } ?? .failure(.notSignedIn)
-        case errSecItemNotFound: return .failure(.notSignedIn)
-        // Declined, cancelled, or the keychain is locked and may not ask: all mean "not now".
-        case let status:
-            UsageLog.write("claude: keychain read refused (OSStatus \(status))")
-            return .failure(.keychainDenied)
-        }
-    }
-}
-
-enum ClaudeRenewal {
-    static let minimumGap: TimeInterval = 30 * 60
-    private static let lock = NSLock()
-    private static var last = Date.distantPast
-
-    /// Pure so it can be tested: may a renewal run now, given when the last one started?
-    static func mayRun(lastRun: Date, now: Date) -> Bool { now.timeIntervalSince(lastRun) >= minimumGap }
-
-    /// Takes the one renewal slot, or says no if one ran recently.
-    static func claim(now: Date) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        guard mayRun(lastRun: last, now: now) else { return false }
-        last = now
-        return true
+        UsageLog.write("claude: live 5h \(reading.fiveHour?.usedPercent ?? -1)% week \(reading.weekly?.usedPercent ?? -1)%")
+        return .success(reading)
     }
 
     private static var candidates: [String] {
@@ -436,33 +378,13 @@ enum ClaudeRenewal {
         return ["\(home)/.npm-global/bin/claude", "\(home)/.local/bin/claude", "\(home)/.claude/local/claude",
                 "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
     }
+}
 
-    /// `claude -p /usage` is a local command: it answers from the account without a model turn.
-    /// Running it is what makes Claude Code renew its sign-in. No session is saved, and
-    /// BITLING_PROBE tells Bitling's own Claude hooks to ignore the run.
-    static func run() {
-        guard let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-            UsageLog.write("claude: the claude command was not found, so the sign-in cannot be renewed")
-            return
-        }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = ["-p", "/usage", "--no-session-persistence"]
-        process.currentDirectoryURL = FileManager.default.temporaryDirectory
-        var environment = ProcessInfo.processInfo.environment
-        environment["BITLING_PROBE"] = "1"
-        process.environment = environment
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        let finished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in finished.signal() }
-        do { try process.run() } catch { UsageLog.write("claude: could not start the claude command"); return }
-        if finished.wait(timeout: .now() + 60) == .timedOut {
-            process.terminate()
-            UsageLog.write("claude: the renewal run took too long and was stopped")
-        }
-    }
+private final class LockedData {
+    private let lock = NSLock()
+    private var data = Data()
+    func append(_ chunk: Data) { lock.lock(); data.append(chunk); lock.unlock() }
+    var value: Data { lock.lock(); defer { lock.unlock() }; return data }
 }
 
 /// Collects a child process's output a line at a time so a reader can wait with a timeout.
@@ -554,15 +476,18 @@ private final class LiveFeed {
     var failure: LiveFailure?
     var next = Date.distantPast
     var fetching = false
+    /// How often a fresh reading is asked for, and how long one is still called live.
+    let interval: TimeInterval
+    var freshness: TimeInterval { interval * 3 }
     let fetch: () -> Result<LiveReading, LiveFailure>
-    init(fetch: @escaping () -> Result<LiveReading, LiveFailure>) { self.fetch = fetch }
+    init(interval: TimeInterval, fetch: @escaping () -> Result<LiveReading, LiveFailure>) { self.interval = interval; self.fetch = fetch }
 
     func reset() { reading = nil; failure = nil; next = .distantPast }
 }
 
 /// Re-reads the quota files on a timer, and asks Claude and Codex for live usage where that is
 /// switched on. The file reads are tiny (one small JSON file and the tail of one log), so a
-/// 30 second cadence costs nothing; the live requests run about once a minute.
+/// 30 second cadence costs nothing; Codex live runs about once a minute and Claude every 5.
 final class QuotaWatcher {
     /// Fires on the main thread, and only when the readings actually changed.
     var onUpdate: ((QuotaData) -> Void)?
@@ -581,13 +506,10 @@ final class QuotaWatcher {
 
     private let queue = DispatchQueue(label: "app.bitling.quota", qos: .utility)
     private let liveQueue = DispatchQueue(label: "app.bitling.quota.live", qos: .utility, attributes: .concurrent)
-    private let claudeFeed = LiveFeed(fetch: { ClaudeLiveUsage().fetch() })
-    private let codexFeed = LiveFeed(fetch: { CodexLiveUsage().fetch() })
+    private let claudeFeed = LiveFeed(interval: 300, fetch: { ClaudeLiveUsage().fetch() })
+    private let codexFeed = LiveFeed(interval: 60, fetch: { CodexLiveUsage().fetch() })
     private var timer: Timer?
     private var reading = false
-
-    /// A live reading older than this is no longer called live.
-    private static let liveFreshness: TimeInterval = 180
 
     func start() {
         refresh()
@@ -635,7 +557,7 @@ final class QuotaWatcher {
                 switch result {
                 case .success(let reading):
                     feed.reading = reading; feed.failure = nil
-                    feed.next = Date().addingTimeInterval(60)
+                    feed.next = Date().addingTimeInterval(feed.interval)
                 case .failure(let failure):
                     feed.failure = failure
                     feed.next = Date().addingTimeInterval(failure.retryAfter)
@@ -651,7 +573,7 @@ final class QuotaWatcher {
         var data = files
         func merge(_ provider: inout QuotaProvider, _ feed: LiveFeed) {
             guard feed.enabled else { return }
-            if let live = feed.reading, Date().timeIntervalSince(live.fetchedAt) < Self.liveFreshness {
+            if let live = feed.reading, Date().timeIntervalSince(live.fetchedAt) < feed.freshness {
                 provider.fiveHour = live.fiveHour
                 provider.weekly = live.weekly
                 if let plan = live.plan { provider.plan = plan }

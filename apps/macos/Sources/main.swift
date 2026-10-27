@@ -1158,13 +1158,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     @objc private func pretendCommit() {
-        git.recordPretend(commits: 1)
         let samples = ["fix: stop the widget from eating cookies", "wip", "feat: add jelly physics", "typo in README", "Revert \"remove tests\"", "refactor everything"]
         deliverGitEvent(GitEvent(kind: "commit", repo: "demo", branch: "main", message: samples.randomElement() ?? "commit", hash: String(UUID().uuidString.prefix(7)).lowercased(), insertions: Int.random(in: 1...600), deletions: Int.random(in: 0...80), files: Int.random(in: 1...12), commitsToday: git.commitsToday, pushesToday: git.pushesToday))
     }
 
     @objc private func pretendPush() {
-        git.recordPretend(pushes: 1)
         deliverGitEvent(GitEvent(kind: "push", repo: "demo", branch: "main", message: "", hash: "", commitsToday: git.commitsToday, pushesToday: git.pushesToday))
     }
 

@@ -91,6 +91,10 @@ final class GitWatcher {
     private(set) var commitsToday = 0
     private(set) var pushesToday = 0
     private var todayKey = ""
+    /// Hashes already counted today. One commit is reachable through several reflogs (a linked
+    /// worktree's own log, and the main repository's scan of every worktree), so counting events
+    /// rather than commits counted it once per path.
+    private var countedToday = Set<String>()
     private(set) var lastEventSummary = "nothing yet"
 
     var onEvent: ((GitEvent) -> Void)?
@@ -136,8 +140,13 @@ final class GitWatcher {
         extraRoots = (defaults.array(forKey: Self.rootsKey) as? [String] ?? []).map { URL(fileURLWithPath: $0) }
         if let today = defaults.dictionary(forKey: Self.todayKey),
            let day = today["day"] as? String, day == Self.dayString() {
-            commitsToday = today["commits"] as? Int ?? 0
             pushesToday = today["pushes"] as? Int ?? 0
+            // A count saved without hashes predates de-duplication and was inflated: start over
+            // and let seedToday() rebuild it from the reflogs.
+            if let hashes = today["hashes"] as? [String] {
+                countedToday = Set(hashes)
+                commitsToday = today["commits"] as? Int ?? hashes.count
+            }
         }
         todayKey = Self.dayString()
     }
@@ -170,6 +179,7 @@ final class GitWatcher {
         queue.async {
             self.primeFromCache()
             self.scan()
+            self.seedToday()
         }
         pollTimer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.queue.async { self?.poll() }
@@ -209,7 +219,7 @@ final class GitWatcher {
         UserDefaults.standard.set(extraRoots.map { $0.path }, forKey: Self.rootsKey)
     }
 
-    private func primeFromCache() {
+    func primeFromCache() {
         guard let cached = UserDefaults.standard.array(forKey: Self.cacheKey) as? [String] else { return }
         for path in cached {
             var isDir: ObjCBool = false
@@ -224,10 +234,45 @@ final class GitWatcher {
 
     private func bumpToday(commits: Int = 0, pushes: Int = 0) {
         let day = Self.dayString()
-        if day != todayKey { todayKey = day; commitsToday = 0; pushesToday = 0 }
+        if day != todayKey { todayKey = day; commitsToday = 0; pushesToday = 0; countedToday = [] }
         commitsToday += commits
         pushesToday += pushes
-        UserDefaults.standard.set(["day": day, "commits": commitsToday, "pushes": pushesToday], forKey: Self.todayKey)
+        UserDefaults.standard.set(["day": day, "commits": commitsToday, "pushes": pushesToday, "hashes": Array(countedToday)], forKey: Self.todayKey)
+    }
+
+    /// Counts a commit once, however many reflogs mention it. A commit with no hash cannot be
+    /// told apart, so it is counted as it arrives.
+    private func countCommit(_ hash: String) {
+        if !hash.isEmpty {
+            if Self.dayString() != todayKey { bumpToday() }
+            guard countedToday.insert(String(hash.prefix(12))).inserted else { return }
+        }
+        bumpToday(commits: 1)
+    }
+
+    /// The reflog message prefixes that mean "a commit landed", the same ones classify() reports.
+    private static let commitMessagePrefixes = ["commit:", "commit (initial):", "commit (merge):", "merge ", "cherry-pick:"]
+
+    /// Rebuilds today's commit count from the reflogs, so it is right after a restart and
+    /// includes commits made while Bitling was not running. Runs on the git queue.
+    func seedToday() {
+        let midnight = Calendar.current.startOfDay(for: Date())
+        for repo in tracked.values {
+            var logs = [repo.gitDir.appendingPathComponent("logs/HEAD")]
+            let worktrees = repo.gitDir.appendingPathComponent("worktrees")
+            for entry in (try? FileManager.default.contentsOfDirectory(at: worktrees, includingPropertiesForKeys: nil)) ?? [] {
+                logs.append(entry.appendingPathComponent("logs/HEAD"))
+            }
+            for log in logs {
+                // Today's lines are at the end; the first line of a tail read may be cut off.
+                let size = fileSize(log)
+                for raw in readTail(log, from: size > 512_000 ? size - 512_000 : 0).split(separator: "\n") {
+                    guard let line = Self.parseReflogLine(String(raw)), line.date >= midnight, line.newHash.count >= 40,
+                          Self.commitMessagePrefixes.contains(where: { line.message.hasPrefix($0) }) else { continue }
+                    countCommit(line.newHash)
+                }
+            }
+        }
     }
 
     // MARK: Discovery
@@ -513,14 +558,10 @@ final class GitWatcher {
         return result
     }
 
-    func recordPretend(commits: Int = 0, pushes: Int = 0) {
-        bumpToday(commits: commits, pushes: pushes)
-    }
-
     private func emit(_ event: GitEvent) {
         var ev = event
         switch ev.kind {
-        case "commit", "merge", "cherry-pick": bumpToday(commits: 1)
+        case "commit", "merge", "cherry-pick": countCommit(ev.hash)
         case "push": bumpToday(pushes: 1)
         default: bumpToday()
         }

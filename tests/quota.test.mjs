@@ -195,6 +195,16 @@ case "codex-usage":
     let data = try! Data(contentsOf: URL(fileURLWithPath: args[2]))
     let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
     if let r = CodexUsageParser.parse(object, fetchedAt: now) { print(json(["plan": r.plan as Any? ?? NSNull(), "fiveHour": window(r.fiveHour), "weekly": window(r.weekly)])) } else { print("nil") }
+case "merge":
+    // args: ageSeconds, hasFileWindow(0/1)
+    let age = Double(args[2])!
+    var provider = QuotaProvider(plan: nil, fiveHour: args[3] == "1" ? QuotaWindow(usedPercent: 50, resetsAt: nil, asOf: now.timeIntervalSince1970 * 1000 - 7200_000) : nil, weekly: nil, liveStatus: nil)
+    let fetched = now.addingTimeInterval(-age)
+    let live = LiveReading(plan: nil,
+                           fiveHour: QuotaWindow(usedPercent: 17, resetsAt: (now.timeIntervalSince1970 + (args[4] == "past" ? -60 : 3600)) * 1000, asOf: fetched.timeIntervalSince1970 * 1000),
+                           weekly: nil, fetchedAt: fetched)
+    QuotaWatcher.merge(&provider, live: live, failure: LiveFailure.claudeSilent, freshness: 900, now: now)
+    print(json(["used": provider.fiveHour?.usedPercent as Any? ?? NSNull(), "status": provider.liveStatus as Any? ?? NSNull()]))
 default: print("unknown mode")
 }
 `;
@@ -334,6 +344,24 @@ Current week (Fable): 0% used · resets Oct 18 at 5:30am (Asia/Calcutta)
     r = await ask('codex-usage', { rateLimits: bucket('codex', 7, 2) });
     assert.equal(r.fiveHour.used, 7, 'the single-bucket form still works');
     assert.equal(await ask('codex-usage', { rateLimits: bucket('premium', 90, 90) }), null, 'a non-codex bucket alone is not codex usage');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a failed refresh keeps the last live reading on screen, marked stale, until it is too old or past its reset', async (t) => {
+  if (!(await swiftAvailable())) return t.skip('swiftc is not installed');
+  const directory = await mkdtemp(join(tmpdir(), 'bitling-quota-merge-'));
+  try {
+    await writeFile(join(directory, 'main.swift'), DRIVER);
+    const binary = join(directory, 'reader');
+    await run('swiftc', ['-O', '-swift-version', '5', 'apps/macos/Sources/QuotaWatcher.swift', join(directory, 'main.swift'), '-o', binary]);
+    const merge = async (age, file, reset = 'future') => JSON.parse((await run(binary, ['merge', String(age), String(file), reset])).stdout);
+    assert.deepEqual(await merge(60, 1), { used: 17, status: null }, 'a fresh reading wins and carries no warning');
+    assert.deepEqual(await merge(1800, 1), { used: 17, status: 'claude did not answer' }, 'a stale live reading beats an older file reading and says why it is not live');
+    assert.deepEqual(await merge(1800, 0), { used: 17, status: 'claude did not answer' }, 'and beats no reading at all');
+    assert.equal((await merge(7 * 3600, 0)).used, null, 'after 6 hours it is dropped');
+    assert.equal((await merge(1800, 0, 'past')).used, null, 'a window whose reset has passed is not shown');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

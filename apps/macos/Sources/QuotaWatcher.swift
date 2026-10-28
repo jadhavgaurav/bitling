@@ -219,9 +219,10 @@ struct LiveFailure: Error {
     /// every time it is asked, so that one is asked rarely.
     let retryAfter: TimeInterval
 
-    static let notSignedIn = LiveFailure(message: "sign in to Claude Code for live usage", retryAfter: 600)
-    static let claudeMissing = LiveFailure(message: "the claude command was not found", retryAfter: 3600)
-    static let claudeSilent = LiveFailure(message: "claude did not answer", retryAfter: 300)
+    static let notSignedIn = LiveFailure(message: "sign in to Claude Code for live usage", retryAfter: 120)
+    // Short, because Claude Code updates itself by replacing its binary, which is missing for a moment.
+    static let claudeMissing = LiveFailure(message: "the claude command was not found", retryAfter: 120)
+    static let claudeSilent = LiveFailure(message: "claude did not answer", retryAfter: 60)
     static let codexMissing = LiveFailure(message: "the codex command was not found", retryAfter: 3600)
     static let codexSilent = LiveFailure(message: "codex did not answer", retryAfter: 120)
     static let codexNotSignedIn = LiveFailure(message: "sign in to Codex for live usage", retryAfter: 600)
@@ -365,8 +366,10 @@ final class ClaudeLiveUsage {
         }
         // The handler may still be draining the pipe when the child exits.
         Thread.sleep(forTimeInterval: 0.1)
-        guard let reading = ClaudeUsageTextParser.parse(String(decoding: collected.value, as: UTF8.self), fetchedAt: now) else {
-            UsageLog.write("claude: /usage printed no session or week line")
+        let text = String(decoding: collected.value, as: UTF8.self)
+        guard let reading = ClaudeUsageTextParser.parse(text, fetchedAt: now) else {
+            let first = text.split(separator: "\n").first.map { String($0.prefix(80)) } ?? "nothing"
+            UsageLog.write("claude: /usage printed no session or week line, it began: \(first)")
             return .failure(.notSignedIn)
         }
         UsageLog.write("claude: live 5h \(reading.fiveHour?.usedPercent ?? -1)% week \(reading.weekly?.usedPercent ?? -1)%")
@@ -375,8 +378,10 @@ final class ClaudeLiveUsage {
 
     private static var candidates: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let onPath = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map { "\($0)/claude" }
         return ["\(home)/.npm-global/bin/claude", "\(home)/.local/bin/claude", "\(home)/.claude/local/claude",
-                "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
+                "\(home)/.bun/bin/claude", "\(home)/.volta/bin/claude",
+                "/opt/homebrew/bin/claude", "/usr/local/bin/claude"] + onPath
     }
 }
 
@@ -567,19 +572,40 @@ final class QuotaWatcher {
         }
     }
 
+    /// How long the last live reading is still worth showing, marked as stale, when refreshing fails.
+    static let staleLiveKeep: TimeInterval = 6 * 3600
+
+    /// A fresh live reading replaces the file-based windows. A live reading that has gone stale
+    /// (a refresh failed) is still better than nothing, and better than a file reading older
+    /// than it, so it stays on screen with its age and the reason it is not live. A window
+    /// whose reset has passed is dropped: its figure no longer describes anything.
+    static func merge(_ provider: inout QuotaProvider, live: LiveReading?, failure: LiveFailure?, freshness: TimeInterval, now: Date) {
+        guard let live else { provider.liveStatus = failure?.message; return }
+        let age = now.timeIntervalSince(live.fetchedAt)
+        if age < freshness {
+            provider.fiveHour = live.fiveHour
+            provider.weekly = live.weekly
+            if let plan = live.plan { provider.plan = plan }
+            return
+        }
+        provider.liveStatus = failure?.message
+        guard age < staleLiveKeep else { return }
+        let nowMs = now.timeIntervalSince1970 * 1000
+        func newer(_ kept: QuotaWindow?, _ candidate: QuotaWindow?) -> QuotaWindow? {
+            guard let candidate, candidate.resetsAt.map({ $0 > nowMs }) ?? true else { return kept }
+            return (kept?.asOf ?? 0) < candidate.asOf ? candidate : kept
+        }
+        provider.fiveHour = newer(provider.fiveHour, live.fiveHour)
+        provider.weekly = newer(provider.weekly, live.weekly)
+    }
+
     /// A fresh live reading replaces the file-based windows; otherwise the files stand, with
     /// the reason live data is missing attached so the menu can say so.
     private func applyingLive(to files: QuotaData) -> QuotaData {
         var data = files
         func merge(_ provider: inout QuotaProvider, _ feed: LiveFeed) {
             guard feed.enabled else { return }
-            if let live = feed.reading, Date().timeIntervalSince(live.fetchedAt) < feed.freshness {
-                provider.fiveHour = live.fiveHour
-                provider.weekly = live.weekly
-                if let plan = live.plan { provider.plan = plan }
-            } else {
-                provider.liveStatus = feed.failure?.message
-            }
+            Self.merge(&provider, live: feed.reading, failure: feed.failure, freshness: feed.freshness, now: Date())
         }
         merge(&data.claude, claudeFeed)
         merge(&data.codex, codexFeed)

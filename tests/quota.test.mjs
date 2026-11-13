@@ -127,7 +127,63 @@ test('an empty or partial update never paints junk, and the per-provider switche
     assert.equal(result.claudeOnly.divider, true, 'no divider with a single provider');
     assert.equal(result.codexOnly.claude, true);
     assert.equal(result.codexOnly.codex, false);
-    assert.equal(result.bothOff.hidden, true, 'switching both off hides the HUD entirely');
+    assert.equal(result.bothOff.claude, true, 'Claude is hidden when its switch is off');
+    assert.equal(result.bothOff.codex, true, 'Codex is hidden when its switch is off');
+    assert.equal(result.bothOff.divider, true, 'no quota divider with both quota providers off');
+  } finally {
+    await browser.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('System CPU and RAM colour runs continuously from green through amber to red, and the bar is a gradient', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'bitling-quota-'));
+  const browser = await chromium.launch({ channel: process.env.BITLING_BROWSER_CHANNEL || 'chrome' });
+  try {
+    const page = await openPet(browser, directory, { width: 360, height: 560 });
+    const read = () => page.evaluate(() => {
+      const style = (id, prop) => getComputedStyle(document.querySelector(id))[prop];
+      return {
+        cpuText: document.querySelector('#sysCpuVal').textContent,
+        cpuWidth: document.querySelector('#sysCpuFill').style.width,
+        cpuFill: document.querySelector('#sysCpuFill').style.backgroundImage,
+        cpuColor: style('#sysCpuVal', 'color'),
+        memText: document.querySelector('#sysMemVal').textContent,
+        memColor: style('#sysMemVal', 'color'),
+        memFill: document.querySelector('#sysMemFill').style.backgroundImage,
+        hidden: document.querySelector('#quotaHud').hidden,
+      };
+    });
+    const push = (cpu, memory) => page.evaluate(([c, m]) => {
+      window.petNative.systemUpdate({ cpu: c, memory: m });
+      window.__quota.showQuotaHud(60000);
+    }, [cpu, memory]);
+
+    await push(0, 60);
+    let s = await read();
+    assert.equal(s.hidden, false, 'the HUD opens on its own with system figures and no quota data');
+    assert.equal(s.cpuColor, 'rgb(34, 197, 94)', 'idle is green');
+    assert.equal(s.memColor, 'rgb(245, 158, 11)', 'exactly 60% is amber');
+    assert.match(s.memFill, /linear-gradient\(90deg, rgb\(34, 197, 94\), rgb\(245, 158, 11\)\)/, 'the bar runs green to its level colour');
+
+    await push(85, 12.4);
+    s = await read();
+    assert.equal(s.cpuText, '85%');
+    assert.equal(s.cpuColor, 'rgb(239, 68, 68)', '85% is red');
+    assert.equal(s.memText, '12%');
+    // 12% is a fifth of the way from green to amber: 34 + (245 - 34) * 0.2 = 76, and so on.
+    assert.equal(s.memColor, 'rgb(76, 189, 77)', 'values between stops blend smoothly');
+
+    await push(72, 0);
+    s = await read();
+    assert.match(s.cpuColor, /rgb\(2[0-9]{2}, 1[0-9]{2}, [0-9]+\)/, '72% sits between amber and red');
+    assert.notEqual(s.cpuColor, 'rgb(245, 158, 11)', 'no fixed band: 72% is not the amber stop');
+
+    await push(null, null);
+    s = await read();
+    assert.equal(s.cpuText, '--', 'no baseline yet shows a dash, not a number');
+    assert.equal(s.cpuWidth, '0%');
+    assert.equal(s.cpuFill, '', 'the gradient is removed when there is no reading');
   } finally {
     await browser.close();
     await rm(directory, { recursive: true, force: true });

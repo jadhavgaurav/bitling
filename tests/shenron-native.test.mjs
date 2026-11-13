@@ -17,7 +17,7 @@ test('native Shenron stage fills the display, stays fixed and restores floating 
 extension AppDelegate {
     func verifyShenronStage() {
         let visible = NSScreen.main!.visibleFrame
-        let original = NSRect(x: visible.minX + 40, y: visible.minY + 50, width: 300, height: 340)
+        let original = NSRect(x: visible.minX + 40, y: visible.minY + 50, width: petBaseSize.width, height: petBaseSize.height)
         petSizeScale = 1
         webView = WKWebView(frame: NSRect(origin: .zero, size: original.size))
         window = PetWindow(contentRect: original, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -56,7 +56,7 @@ delegate.verifyShenronStage()
     await writeFile(sourcePath, source.slice(0, start) + probe);
     await run('swiftc', ['-swift-version', '5', '-framework', 'Cocoa', '-framework', 'WebKit',
       '-framework', 'ServiceManagement', '-framework', 'Security', sourcePath,
-      ...['GitWatcher', 'CIWatcher', 'ClaudeWatcher', 'QuotaWatcher', 'Overlay', 'ControlPanel', 'GitHubAuth'].map(n => `apps/macos/Sources/${n}.swift`), '-o', executable]);
+      ...['GitWatcher', 'CIWatcher', 'ClaudeWatcher', 'QuotaWatcher', 'SystemMonitor', 'Overlay', 'ControlPanel', 'GitHubAuth'].map(n => `apps/macos/Sources/${n}.swift`), '-o', executable]);
     const { stdout } = await run(executable);
     assert.match(stdout, /click-through passed/);
   } finally { await rm(directory, { recursive: true, force: true }); }

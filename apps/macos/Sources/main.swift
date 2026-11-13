@@ -13,8 +13,12 @@ import WebKit
 let stateDefaultsKey = "petState"
 let windowXDefaultsKey = "petWindowX"
 let dockIconDefaultsKey = "showInDock"
-// Tall enough for the full robot plus a deployed parachute, wide enough for its arms.
-let petBaseSize = NSSize(width: 300, height: 340)
+// Tall enough for the full robot plus a deployed parachute, wide enough for its arms. The extra
+// height above the pet's feet is room for the usage HUD, which sits above the pet's head.
+let petBaseSize = NSSize(width: 300, height: 470)
+// A floating pet's feet stand this far above the window's bottom edge, measured on the 300 x 340
+// window it was drawn for (its old floor sat at 66% of that height).
+let petFloorInsetBase: CGFloat = 116
 let petSizeDefaultsKey = "petSize"
 /// How large the creature is, as a multiple of the stock window. Everything that measures
 /// the pet reads this, so growing it moves the floor, the clamps and the flight targets too.
@@ -187,6 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let ci = CIWatcher()
     private let claude = ClaudeWatcher()
     private let quota = QuotaWatcher()
+    private let system = SystemMonitor()
     private let overlay = Overlay()
     private let panel = ControlPanel()
     private var dockIconEnabled = UserDefaults.standard.object(forKey: dockIconDefaultsKey) as? Bool ?? true
@@ -298,6 +303,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         quota.claudeLiveEnabled = claudeLiveUsage
         quota.codexLiveEnabled = codexLiveUsage
         quota.start()
+        system.onSample = { [weak self] sample in self?.renderSystem(sample) }
+        system.start()
         overlay.onKill = { [weak self] beetle in
             guard let self else { return }
             self.js("petNative.killed(\(beetle.boss ? "true" : "false"))")
@@ -538,6 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageReady = true
         renderQuota()
+        renderFloor()
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -1043,6 +1051,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         js("petNative.quotaUpdate(\(payload.json))")
     }
 
+    /// Where the pet's feet sit in the window. Stage mode fills the screen and keeps its own floor.
+    private func renderFloor() {
+        let inset = desktopStage ? 0 : petFloorInsetBase * petSizeScale
+        js("petNative.floorInset(\(Double(inset)))")
+    }
+
+    /// Sent every second; the HUD only paints it while it is open.
+    private func renderSystem(_ sample: SystemMonitor.Sample) {
+        let cpu = sample.cpu.map { String(format: "%.1f", $0) } ?? "null"
+        let memory = sample.memory.map { String(format: "%.1f", $0) } ?? "null"
+        js("petNative.systemUpdate({cpu:\(cpu),memory:\(memory)})")
+    }
+
     @objc private func watchFolder() {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
@@ -1229,6 +1250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard enabled != desktopStage else { return }
         let visible = screenForWindow().visibleFrame
         desktopStage = enabled
+        renderFloor()
         airborne = false
         flight = .none
         velocityX = 0

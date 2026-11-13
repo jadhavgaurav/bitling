@@ -170,6 +170,8 @@
   .quota-sub { font-size: 8.5px; color: rgba(255, 255, 255, 0.6); margin-top: 1px; margin-bottom: 2px; line-height: 1.1; padding-left: 20px; }
   .quota-note { font-size: 8.5px; color: #f59e0b; margin-top: 3px; padding-left: 20px; line-height: 1.15; }
   .quota-note[hidden] { display: none !important; }
+  .sys-badge { color: #7dd3fc; }
+  .sys-lbl { width: 24px; }
   .quota-div { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 5px 0; }
   html.desktop .quota-hud { display: block; }
 </style>
@@ -234,6 +236,22 @@
       </div>
       <div class="quota-sub" id="quotaCodexWkSub">no recent data</div>
       <div class="quota-note" id="quotaCodexNote" hidden></div>
+    </div>
+    <div class="quota-div" id="quotaSysDivider"></div>
+    <div class="quota-sec" id="quotaSysSec">
+      <div class="quota-hdr">
+        <span class="quota-badge sys-badge">System</span>
+      </div>
+      <div class="quota-row">
+        <span class="quota-lbl sys-lbl">CPU</span>
+        <div class="quota-meter"><div class="quota-fill" id="sysCpuFill" style="width:0%"></div></div>
+        <span class="quota-val" id="sysCpuVal">--</span>
+      </div>
+      <div class="quota-row">
+        <span class="quota-lbl sys-lbl">RAM</span>
+        <div class="quota-meter"><div class="quota-fill" id="sysMemFill" style="width:0%"></div></div>
+        <span class="quota-val" id="sysMemVal">--</span>
+      </div>
     </div>
   </div>
 
@@ -995,6 +1013,8 @@
   const canvas = $('#stage');
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, scale = 1, groundY = 0;
+  // Distance from the canvas bottom to a floating pet's feet, set by the host. Zero means the stage.
+  let floorInset = 0;
 
   const pet = {
     init: false, x: 0, y: 0, vx: 0, vy: 0, ax: 0,
@@ -12662,6 +12682,7 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
   // exact reset time where the tool wrote one, and when the reading was taken. Nothing is
   // assumed here, so a missing window shows as "no recent data" rather than as 100% left.
   let latestQuotaData = null;
+  let latestSystem = null;
   let quotaHudUntil = 0;
   // Claude Desktop samples about every 15 minutes while it runs; anything older than this
   // gets its age printed next to it.
@@ -12702,18 +12723,14 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
 
   function paintQuota() {
     const data = latestQuotaData;
-    if (!data) return;
-    const showClaude = data.showClaude !== false, showCodex = data.showCodex !== false;
+    const showClaude = !!data && data.showClaude !== false, showCodex = !!data && data.showCodex !== false;
     const secClaude = $('#quotaClaudeSec'), secCodex = $('#quotaCodexSec'), div = $('#quotaDivider');
     if (secClaude) secClaude.hidden = !showClaude;
     if (secCodex) secCodex.hidden = !showCodex;
     if (div) div.hidden = !showClaude || !showCodex;
-    if (!showClaude && !showCodex) {
-      const hud = $('#quotaHud');
-      if (hud) hud.hidden = true;
-      quotaHudUntil = 0;
-      return;
-    }
+    const sysDiv = $('#quotaSysDivider');
+    if (sysDiv) sysDiv.hidden = !showClaude && !showCodex;
+    if (!showClaude && !showCodex) return;
     const claude = data.claude || {}, codex = data.codex || {};
     const claudePlan = $('#quotaClaudePlan'), codexPlan = $('#quotaCodexPlan');
     if (claudePlan) claudePlan.textContent = claude.plan || '';
@@ -12736,17 +12753,60 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     if (hud && !hud.hidden) paintQuota();
   }
 
-  function showQuotaHud(dur = 3500) {
-    const hud = $('#quotaHud');
-    if (!hud || !latestQuotaData) return;
-    if (latestQuotaData.showClaude === false && latestQuotaData.showCodex === false) {
-      hud.hidden = true;
-      quotaHudUntil = 0;
+  // ---------------------------------------------------------------- system load
+  // Whole-machine CPU and RAM, sent by the host about once a second. The host keeps sending
+  // while the HUD is closed, so the figures shown on open are already current.
+  // Colour runs continuously: green at 0%, amber at 60%, red at 85% and above. Each bar is a
+  // gradient from green to the colour of its current level, so the bar always shows the range.
+  const USAGE_STOPS = [[0, [34, 197, 94]], [60, [245, 158, 11]], [85, [239, 68, 68]]];
+  function usageRgb(percent) {
+    const p = Math.max(0, Math.min(100, percent));
+    const last = USAGE_STOPS[USAGE_STOPS.length - 1];
+    if (p >= last[0]) return `rgb(${last[1].join(', ')})`;
+    let i = 0;
+    while (p > USAGE_STOPS[i + 1][0]) i++;
+    const [from, c0] = USAGE_STOPS[i], [to, c1] = USAGE_STOPS[i + 1];
+    const t = (p - from) / (to - from);
+    return `rgb(${c0.map((v, k) => Math.round(v + (c1[k] - v) * t)).join(', ')})`;
+  }
+
+  function paintSystemRow(prefix, percent) {
+    const fill = $(`#${prefix}Fill`), val = $(`#${prefix}Val`);
+    if (!fill || !val) return;
+    if (!Number.isFinite(percent)) {
+      fill.style.width = '0%';
+      fill.style.background = '';
+      val.textContent = '--';
+      val.style.color = '';
       return;
     }
+    const used = Math.max(0, Math.min(100, percent)), shown = Math.round(used);
+    fill.style.width = `${used}%`;
+    fill.style.background = `linear-gradient(90deg, ${usageRgb(0)}, ${usageRgb(shown)})`;
+    val.textContent = `${shown}%`;
+    val.style.color = usageRgb(shown);
+  }
+
+  function paintSystem() {
+    if (!$('#quotaSysSec')) return;
+    paintSystemRow('sysCpu', latestSystem && latestSystem.cpu);
+    paintSystemRow('sysMem', latestSystem && latestSystem.memory);
+  }
+
+  function handleSystemUpdate(data) {
+    if (!data) return;
+    latestSystem = data;
+    const hud = $('#quotaHud');
+    if (hud && !hud.hidden) paintSystem();
+  }
+
+  function showQuotaHud(dur = 3500) {
+    const hud = $('#quotaHud');
+    if (!hud || (!latestQuotaData && !latestSystem)) return;
     // Repaint on every show so the countdowns and "logged ... ago" are current, not as
     // they were when the host last sent a reading.
     paintQuota();
+    paintSystem();
     hud.hidden = false;
     quotaHudUntil = performance.now() + dur;
   }

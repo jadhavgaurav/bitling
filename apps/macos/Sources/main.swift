@@ -1012,7 +1012,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         return image
     }
 
-    /// "Claude: 5h 6% used · week 0% used". A window the tool never recorded is left out.
+    /// "Codex: 5h 6% used · week 0% used". A window the tool never recorded is left out.
     private func quotaSummary(_ name: String, _ provider: QuotaProvider) -> String {
         func used(_ label: String, _ window: QuotaWindow?) -> String? {
             window.map { "\(label) \(Int($0.usedPercent.rounded()))% used" }

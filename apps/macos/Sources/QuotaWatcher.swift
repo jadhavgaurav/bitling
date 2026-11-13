@@ -51,7 +51,6 @@ struct QuotaPayload: Encodable {
 }
 
 enum QuotaReader {
-    private static let fiveHours: TimeInterval = 5 * 3600
     private static let sevenDays: TimeInterval = 7 * 86400
 
     static func read(home: URL, now: Date = Date()) -> QuotaData {
@@ -81,9 +80,6 @@ enum QuotaReader {
         // A reading older than its own window says nothing about the window that is open now.
         let asOf = stamp(latest)
         let age = now.timeIntervalSince1970 - asOf / 1000
-        if let fh = usage["fh"] as? Double, age < fiveHours {
-            provider.fiveHour = QuotaWindow(usedPercent: clamp(fh), resetsAt: nil, asOf: asOf)
-        }
         if let sd = usage["sd"] as? Double, age < sevenDays {
             provider.weekly = QuotaWindow(usedPercent: clamp(sd), resetsAt: nil, asOf: asOf)
         }
@@ -259,13 +255,12 @@ struct LiveReading {
 
 enum ClaudeUsageTextParser {
     /// `claude -p /usage` prints, among other lines:
-    ///   Current session: 7% used · resets Oct 16 at 1:20pm (Asia/Calcutta)
     ///   Current week (all models): 82% used · resets Oct 18 at 5:30am (Asia/Calcutta)
-    /// A window with no reset (nothing used yet) has no "resets" part.
+    /// A window with no reset (nothing used yet) has no "resets" part. Claude has no 5 hour
+    /// limit any more, so no session line is read.
     static func parse(_ text: String, fetchedAt: Date) -> LiveReading? {
-        let five = window(prefix: "Current session:", in: text, now: fetchedAt)
-        let week = window(prefix: "Current week (all models):", in: text, now: fetchedAt)
-        return five == nil && week == nil ? nil : LiveReading(plan: nil, fiveHour: five, weekly: week, fetchedAt: fetchedAt)
+        guard let week = window(prefix: "Current week (all models):", in: text, now: fetchedAt) else { return nil }
+        return LiveReading(plan: nil, fiveHour: nil, weekly: week, fetchedAt: fetchedAt)
     }
 
     private static let pattern = try! NSRegularExpression(pattern: #"(\d+(?:\.\d+)?)% used(?: · resets (.+?) \((.+?)\))?\s*$"#)
@@ -369,10 +364,10 @@ final class ClaudeLiveUsage {
         let text = String(decoding: collected.value, as: UTF8.self)
         guard let reading = ClaudeUsageTextParser.parse(text, fetchedAt: now) else {
             let first = text.split(separator: "\n").first.map { String($0.prefix(80)) } ?? "nothing"
-            UsageLog.write("claude: /usage printed no session or week line, it began: \(first)")
+            UsageLog.write("claude: /usage printed no week line, it began: \(first)")
             return .failure(.notSignedIn)
         }
-        UsageLog.write("claude: live 5h \(reading.fiveHour?.usedPercent ?? -1)% week \(reading.weekly?.usedPercent ?? -1)%")
+        UsageLog.write("claude: live week \(reading.weekly?.usedPercent ?? -1)%")
         return .success(reading)
     }
 

@@ -208,12 +208,6 @@
         <span class="quota-plan" id="quotaClaudePlan"></span>
       </div>
       <div class="quota-row">
-        <span class="quota-lbl">5h</span>
-        <div class="quota-meter"><div class="quota-fill claude-fill" id="quotaClaude5hFill" style="width:0%"></div></div>
-        <span class="quota-val" id="quotaClaude5hVal">--%</span>
-      </div>
-      <div class="quota-sub" id="quotaClaude5hSub">no recent data</div>
-      <div class="quota-row">
         <span class="quota-lbl">Wk</span>
         <div class="quota-meter"><div class="quota-fill claude-fill" id="quotaClaudeWkFill" style="width:0%"></div></div>
         <span class="quota-val" id="quotaClaudeWkVal">--%</span>
@@ -12724,7 +12718,6 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     const claudePlan = $('#quotaClaudePlan'), codexPlan = $('#quotaCodexPlan');
     if (claudePlan) claudePlan.textContent = claude.plan || '';
     if (codexPlan) codexPlan.textContent = codex.plan || '';
-    paintQuotaRow('quotaClaude5h', claude.fiveHour);
     paintQuotaRow('quotaClaudeWk', claude.weekly);
     paintQuotaRow('quotaCodex5h', codex.fiveHour);
     paintQuotaRow('quotaCodexWk', codex.weekly);

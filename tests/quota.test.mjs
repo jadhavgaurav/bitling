@@ -35,9 +35,7 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
       const now = Date.now(), minute = 60000;
       window.petNative.quotaUpdate({
         showClaude: true, showCodex: true,
-        claude: { plan: 'Max 20x',
-          fiveHour: { usedPercent: 94, asOf: now - 2 * minute },
-          weekly: { usedPercent: 40, asOf: now - 120 * minute } },
+        claude: { plan: 'Max 20x', weekly: { usedPercent: 40, asOf: now - 120 * minute } },
         codex: { plan: 'Plus',
           fiveHour: { usedPercent: 20, resetsAt: now + 130 * minute + 20000, asOf: now - minute },
           weekly: undefined },
@@ -48,7 +46,7 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
       return {
         hidden: document.querySelector('#quotaHud').hidden,
         claudePlan: text('#quotaClaudePlan'), codexPlan: text('#quotaCodexPlan'),
-        claude5hVal: text('#quotaClaude5hVal'), claude5hSub: text('#quotaClaude5hSub'), claude5hCls: cls('#quotaClaude5hFill'),
+        claudeRows: document.querySelectorAll('#quotaClaudeSec .quota-row').length,
         claudeWkVal: text('#quotaClaudeWkVal'), claudeWkSub: text('#quotaClaudeWkSub'), claudeWkCls: cls('#quotaClaudeWkFill'),
         codex5hVal: text('#quotaCodex5hVal'), codex5hSub: text('#quotaCodex5hSub'),
         codexWkVal: text('#quotaCodexWkVal'), codexWkSub: text('#quotaCodexWkSub'), codexWkWidth: document.querySelector('#quotaCodexWkFill').style.width,
@@ -62,9 +60,7 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
     assert.equal(hud.hidden, false);
     assert.equal(hud.claudePlan, 'Max 20x');
     assert.equal(hud.codexPlan, 'Plus');
-    assert.equal(hud.claude5hVal, '94%');
-    assert.equal(hud.claude5hSub, '94% used', 'a fresh reading carries no age label');
-    assert.ok(hud.claude5hCls.includes('critical'), '90% or more used is critical');
+    assert.equal(hud.claudeRows, 1, 'Claude has no 5 hour row, only the weekly one');
     assert.equal(hud.claudeWkVal, '40%');
     assert.equal(hud.claudeWkSub, '40% used · logged 2h 0m ago', 'a two hour old sample is labelled as old');
     assert.equal(hud.codex5hVal, '20%');
@@ -77,7 +73,7 @@ test('the HUD shows only what was recorded, labels stale readings and counts dow
     const stale = await page.evaluate(() => {
       const now = Date.now(), hour = 3600000;
       window.petNative.quotaUpdate({ showClaude: true, showCodex: true,
-        claude: { plan: 'Max 20x', liveStatus: 'claude did not answer', fiveHour: { usedPercent: 10, asOf: now - 2 * hour } },
+        claude: { plan: 'Max 20x', liveStatus: 'claude did not answer', weekly: { usedPercent: 10, asOf: now - 2 * hour } },
         codex: { plan: 'Plus', weekly: { usedPercent: 16, resetsAt: now + 5 * 24 * hour, asOf: now - 50 * hour } } });
       window.__quota.showQuotaHud(3000);
       const text = id => document.querySelector(id).textContent;
@@ -115,7 +111,7 @@ test('an empty or partial update never paints junk, and the per-provider switche
       out.beforeAnyData = document.querySelector('#quotaHud').hidden;          // nothing to show yet
       nq({ showClaude: true, showCodex: true });                                 // flags only, no readings
       q.showQuotaHud(3000); out.flagsOnly = state();
-      nq({ showClaude: true, showCodex: false, claude: { fiveHour: { usedPercent: 10, asOf: Date.now() } }, codex: {} });
+      nq({ showClaude: true, showCodex: false, claude: { weekly: { usedPercent: 10, asOf: Date.now() } }, codex: {} });
       q.showQuotaHud(3000); out.claudeOnly = state();
       nq({ showClaude: false, showCodex: true, claude: {}, codex: { fiveHour: { usedPercent: 10, asOf: Date.now() } } });
       q.showQuotaHud(3000); out.codexOnly = state();
@@ -146,7 +142,7 @@ test('the HUD expires, and sits above the speech bubble instead of covering it',
     const layout = await page.evaluate(() => {
       const q = window.__quota;
       window.petNative.quotaUpdate({ showClaude: true, showCodex: true,
-        claude: { plan: 'Max 20x', fiveHour: { usedPercent: 30, asOf: Date.now() }, weekly: { usedPercent: 30, asOf: Date.now() } },
+        claude: { plan: 'Max 20x', weekly: { usedPercent: 30, asOf: Date.now() } },
         codex: { plan: 'Plus', fiveHour: { usedPercent: 30, asOf: Date.now() }, weekly: { usedPercent: 30, asOf: Date.now() } } });
       q.showQuotaHud(3000);
       q.update(0.016);
@@ -229,25 +225,22 @@ test('the native reader returns only recorded figures: right bucket, right accou
     await writeFile(join(claudeHome, '.claude.json'), JSON.stringify({ oauthAccount: { organizationUuid: 'org-A', organizationRateLimitTier: 'default_claude_max_5x' } }));
     const history = samples => writeFile(join(claudeHome, 'Library/Application Support/Claude/plan-usage-history.json'), JSON.stringify({ version: 1, samples }));
     await history([
-      { t: now - 90 * minute, org: 'org-A', u: { fh: 11, sd: 5 } },
-      { t: now - 30 * minute, org: 'org-A', u: { fh: 30, sd: 10 } },
-      { t: now - 5 * minute, org: 'org-B', u: { fh: 99, sd: 99 } },
+      { t: now - 90 * minute, org: 'org-A', u: { sd: 5 } },
+      { t: now - 30 * minute, org: 'org-A', u: { sd: 10 } },
+      { t: now - 5 * minute, org: 'org-B', u: { sd: 99 } },
     ]);
     let r = await read(claudeHome);
     assert.equal(r.claude.plan, 'Max 5x', 'the multiple comes from the tier, not a hardcoded 20x');
-    assert.equal(r.claude.fiveHour.usedPercent, 30, "another account's newer sample must not be used");
-    assert.equal(r.claude.weekly.usedPercent, 10);
-    assert.equal(r.claude.fiveHour.resetsAt, undefined, 'Claude records no reset time, so none is reported');
-    assert.equal(r.claude.weekly.resetsAt, undefined);
+    assert.equal(r.claude.weekly.usedPercent, 10, "another account's newer sample must not be used");
+    assert.equal(r.claude.fiveHour, undefined, 'Claude has no 5 hour window to report');
+    assert.equal(r.claude.weekly.resetsAt, undefined, 'Claude records no reset time, so none is reported');
 
-    await history([{ t: now - 6 * hour, org: 'org-A', u: { fh: 80, sd: 55 } }]);
+    await history([{ t: now - 6 * hour, org: 'org-A', u: { sd: 55 } }]);
     r = await read(claudeHome);
-    assert.equal(r.claude.fiveHour, undefined, 'a reading older than the 5 hour window says nothing about the open one');
     assert.equal(r.claude.weekly.usedPercent, 55, 'the weekly figure is still good, and keeps its age');
 
-    await history([{ t: now - 8 * 24 * hour, org: 'org-A', u: { fh: 80, sd: 55 } }]);
+    await history([{ t: now - 8 * 24 * hour, org: 'org-A', u: { sd: 55 } }]);
     r = await read(claudeHome);
-    assert.equal(r.claude.fiveHour, undefined);
     assert.equal(r.claude.weekly, undefined, 'older than a week is no reading at all');
 
     // ---- Codex: the "codex" bucket only, newest file wins, rolled-over windows are untouched
@@ -316,14 +309,15 @@ Current session: 7% used · resets Oct 12 at 1:20pm (Asia/Calcutta)
 Current week (all models): 82% used · resets Oct 18 at 5:30am (Asia/Calcutta)
 Current week (Fable): 0% used · resets Oct 18 at 5:30am (Asia/Calcutta)
 `);
-    assert.equal(r.fiveHour.used, 7);
+    assert.equal(r.fiveHour, null, 'the session line is ignored: Claude has no 5 hour limit');
     assert.equal(r.weekly.used, 82, 'the all-models week, not the per-model one');
-    assert.equal(r.fiveHour.resetsAt, Date.UTC(2026, 9, 12, 7, 50), '1:20pm IST');
     assert.equal(r.weekly.resetsAt, Date.UTC(2026, 9, 18, 0, 0), '5:30am IST on the 18th');
-    assert.equal(r.fiveHour.asOf, 1_791_790_000_000, 'a live reading is dated when it was fetched');
-    r = await askText('Current session: 0% used\nCurrent week (all models): 140% used · resets Jan 3 at 9am (UTC)\n');
-    assert.equal(r.fiveHour.used, 0);
-    assert.equal(r.fiveHour.resetsAt, null, 'an untouched window has no reset');
+    assert.equal(r.weekly.asOf, 1_791_790_000_000, 'a live reading is dated when it was fetched');
+    r = await askText('Current session: 0% used\nCurrent week (all models): 0% used\n');
+    assert.equal(r.fiveHour, null);
+    assert.equal(r.weekly.used, 0);
+    assert.equal(r.weekly.resetsAt, null, 'an untouched window has no reset');
+    r = await askText('Current week (all models): 140% used · resets Jan 3 at 9am (UTC)\n');
     assert.equal(r.weekly.used, 100, 'clamped');
     assert.equal(r.weekly.resetsAt, Date.UTC(2027, 0, 3, 9, 0), 'a date already past rolls to next year');
     assert.equal(await askText('Not logged in\n'), null, 'an unrecognised output is a failure, not zeros');

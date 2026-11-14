@@ -1,5 +1,28 @@
-import Foundation
+import AppKit
 import Darwin
+
+/// Green at 0%, amber at 60%, red from 85%, blended smoothly between. The pet page's bars
+/// use the same stops, so the menu bar and the pet agree.
+enum UsageColor {
+    private static let stops: [(at: Double, rgb: [Double])] = [
+        (0, [34, 197, 94]), (60, [245, 158, 11]), (85, [239, 68, 68]),
+    ]
+
+    static func rgb(for percent: Double) -> [Int] {
+        let p = min(100, max(0, percent))
+        guard let last = stops.last else { return [0, 0, 0] }
+        if p >= last.at { return last.rgb.map { Int($0) } }
+        let index = stops.lastIndex { $0.at <= p } ?? 0
+        let from = stops[index], to = stops[index + 1]
+        let t = (p - from.at) / (to.at - from.at)
+        return zip(from.rgb, to.rgb).map { Int(($0 + ($1 - $0) * t).rounded()) }
+    }
+
+    static func color(for percent: Double) -> NSColor {
+        let c = rgb(for: percent).map { CGFloat($0) / 255 }
+        return NSColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: 1)
+    }
+}
 
 /// Whole-machine CPU and memory use, read from the kernel once per sample.
 final class SystemMonitor {
@@ -71,7 +94,13 @@ final class SystemMonitor {
         return Double(busy) / Double(total) * 100
     }
 
-    /// Activity Monitor's "Memory Used": app memory, wired memory and compressed memory.
+    /// Activity Monitor's "Memory Used": everything that is neither free nor file cache. File cache
+    /// (the "external" pages) is left out because macOS gives it back the moment a program asks,
+    /// so counting it would show a healthy machine as full.
+    ///
+    /// Checked against Activity Monitor itself, read through accessibility over seven paired
+    /// samples: this matched to within 0.01 GB on average. The textbook sum of app, wired and
+    /// compressed memory read about 0.9 GB low on the same machine.
     private func memoryPercent() -> Double? {
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
@@ -81,8 +110,13 @@ final class SystemMonitor {
             }
         }
         guard result == KERN_SUCCESS, physicalMemory > 0 else { return nil }
-        let pages = UInt64(stats.active_count) + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)
-        let used = pages * UInt64(vm_kernel_page_size)
-        return min(100, Double(used) / Double(physicalMemory) * 100)
+        let pageSize = UInt64(vm_kernel_page_size)
+        let totalPages = physicalMemory / pageSize
+        // free_count also holds the speculative pages; vm_stat's "Pages free" does not, and the
+        // figure that matches Activity Monitor counts them as used.
+        let freePages = UInt64(stats.free_count) &- UInt64(min(stats.speculative_count, stats.free_count))
+        let cachePages = UInt64(stats.external_page_count)
+        let usedPages = totalPages &- min(totalPages, freePages + cachePages)
+        return min(100, Double(usedPages * pageSize) / Double(physicalMemory) * 100)
     }
 }

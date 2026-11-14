@@ -460,6 +460,7 @@ def build(source: Path, target: Path) -> None:
         "    gitStatus(info) { handleGitStatus(info); },\n"
         "    quotaUpdate(data) { if (typeof handleQuotaUpdate === 'function') handleQuotaUpdate(data); },\n"
         "    systemUpdate(data) { if (typeof handleSystemUpdate === 'function') handleSystemUpdate(data); },\n"
+        "    hudEnabled(on) { if (typeof setQuotaHudEnabled === 'function') setQuotaHudEnabled(on); },\n"
         "    swarmMode(on) { hostSwarm = !!on; if (!hostSwarm) hostBugs = []; },\n"
         "    swarm(list) { hostBugs = Array.isArray(list) ? list : []; },\n"
         "    killed(boss) { countKill(true, !!boss); pet.happy = boss ? 2 : 0.8; },\n"

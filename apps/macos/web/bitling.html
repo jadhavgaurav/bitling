@@ -12800,9 +12800,18 @@ if (!(DESKTOP && (state.species === 'dragon' || state.species === 'spiderman')) 
     if (hud && !hud.hidden) paintSystem();
   }
 
+  // The host turns the HUD on from the menu bar item's menu. It is on by default here so the
+  // page works on its own; the app sends the saved choice as soon as the page loads.
+  let hudEnabled = true;
+  function setQuotaHudEnabled(on) {
+    hudEnabled = !!on;
+    const hud = $('#quotaHud');
+    if (!hudEnabled && hud) { hud.hidden = true; quotaHudUntil = 0; }
+  }
+
   function showQuotaHud(dur = 3500) {
     const hud = $('#quotaHud');
-    if (!hud || (!latestQuotaData && !latestSystem)) return;
+    if (!hudEnabled || !hud || (!latestQuotaData && !latestSystem)) return;
     // Repaint on every show so the countdowns and "logged ... ago" are current, not as
     // they were when the host last sent a reading.
     paintQuota();

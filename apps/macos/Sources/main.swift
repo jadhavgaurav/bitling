@@ -192,6 +192,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let claude = ClaudeWatcher()
     private let quota = QuotaWatcher()
     private let system = SystemMonitor()
+    private var latestSystem: SystemMonitor.Sample?
+    private var usageStatusItem: NSStatusItem?
+    private let usageMenu = NSMenu()
+    private let usageClaudeItem = NSMenuItem(title: "Claude: checking limits…", action: nil, keyEquivalent: "")
+    private let usageCodexItem = NSMenuItem(title: "Codex: checking limits…", action: nil, keyEquivalent: "")
+    private let usageCPUItem = NSMenuItem(title: "CPU: measuring…", action: nil, keyEquivalent: "")
+    private let usageRAMItem = NSMenuItem(title: "Memory: measuring…", action: nil, keyEquivalent: "")
+    private let petHudItem = NSMenuItem(title: "Show usage above the pet", action: nil, keyEquivalent: "")
+    private var petUsageHud = UserDefaults.standard.object(forKey: "petUsageHud") as? Bool ?? false
     private let overlay = Overlay()
     private let panel = ControlPanel()
     private var dockIconEnabled = UserDefaults.standard.object(forKey: dockIconDefaultsKey) as? Bool ?? true
@@ -526,6 +535,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let quit = NSMenuItem(title: "Quit Bitling", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
         statusItem.menu = menu
+        buildUsageStatusItem()
     }
 
     private func loadPage() {
@@ -546,6 +556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         pageReady = true
         renderQuota()
         renderFloor()
+        renderHudSwitch()
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -1045,10 +1056,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     /// so every change to either goes through here.
     private func renderQuota() {
         updateQuotaMenu()
+        renderUsageStatus()
         let data = quota.latestData ?? QuotaData()
         let payload = QuotaPayload(claude: data.claude, codex: data.codex,
                                    showClaude: showClaudeQuota, showCodex: showCodexQuota)
         js("petNative.quotaUpdate(\(payload.json))")
+    }
+
+    /// A second menu bar item with a live readout: Claude's weekly use, CPU and memory, each
+    /// coloured by how full it is. Its menu holds the detail and the switch for the pet's HUD.
+    private func buildUsageStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.toolTip = "Claude usage, CPU and memory"
+        usageMenu.autoenablesItems = false
+        for entry in [usageClaudeItem, usageCodexItem, usageCPUItem, usageRAMItem] {
+            entry.isEnabled = false
+            usageMenu.addItem(entry)
+        }
+        usageMenu.addItem(.separator())
+        petHudItem.target = self
+        petHudItem.action = #selector(togglePetUsageHud)
+        petHudItem.state = petUsageHud ? .on : .off
+        usageMenu.addItem(petHudItem)
+        item.menu = usageMenu
+        usageStatusItem = item
+        renderUsageStatus()
+    }
+
+    private func renderUsageStatus() {
+        guard let button = usageStatusItem?.button else { return }
+        let labelAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12),
+            .foregroundColor: NSColor.labelColor.withAlphaComponent(0.8),
+        ]
+        let title = NSMutableAttributedString()
+        // A stale figure is the last one that worked, so it is dimmed and marked "~" rather than
+        // coloured as if it were current.
+        func append(_ name: String, _ percent: Double?, stale: Bool = false) {
+            if title.length > 0 { title.append(NSAttributedString(string: "  ", attributes: labelAttributes)) }
+            title.append(NSAttributedString(string: "\(name) ", attributes: labelAttributes))
+            let shown = percent.map { Int($0.rounded()) }
+            let color = stale ? NSColor.labelColor.withAlphaComponent(0.5)
+                : shown.map { UsageColor.color(for: Double($0)) } ?? NSColor.labelColor.withAlphaComponent(0.5)
+            title.append(NSAttributedString(string: shown.map { "\(stale ? "~" : "")\($0)%" } ?? "--", attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+                .foregroundColor: color,
+            ]))
+        }
+        let data = quota.latestData
+        let claudeWeek = data?.claude.weekly
+        let claudeStale = claudeWeek?.isStale() ?? false
+        if showClaudeQuota { append("Claude", claudeWeek?.usedPercent, stale: claudeStale) }
+        append("CPU", latestSystem?.cpu)
+        append("RAM", latestSystem?.memory)
+        if !button.attributedTitle.isEqual(to: title) { button.attributedTitle = title }
+
+        if let data {
+            var claudeLine = quotaSummary("Claude", data.claude)
+            if let week = claudeWeek, claudeStale {
+                let minutes = max(1, Int((Date().timeIntervalSince1970 * 1000 - week.asOf) / 60000))
+                claudeLine += " · last read \(minutes < 120 ? "\(minutes) min" : "\(minutes / 60) h") ago, not current"
+            }
+            usageClaudeItem.title = claudeLine
+            usageCodexItem.title = quotaSummary("Codex", data.codex)
+        }
+        button.toolTip = claudeStale ? "Claude's figure is the last one read, not live. CPU and memory are live."
+            : "Claude usage, CPU and memory"
+        usageClaudeItem.isHidden = !showClaudeQuota
+        usageCodexItem.isHidden = !showCodexQuota
+        usageCPUItem.title = latestSystem?.cpu.map { "CPU: \(Int($0.rounded()))% used" } ?? "CPU: measuring…"
+        usageRAMItem.title = latestSystem?.memory.map { "Memory: \(Int($0.rounded()))% used" } ?? "Memory: measuring…"
+    }
+
+    @objc private func togglePetUsageHud() {
+        petUsageHud.toggle()
+        UserDefaults.standard.set(petUsageHud, forKey: "petUsageHud")
+        petHudItem.state = petUsageHud ? .on : .off
+        renderHudSwitch()
+    }
+
+    private func renderHudSwitch() {
+        js("petNative.hudEnabled(\(petUsageHud))")
     }
 
     /// Where the pet's feet sit in the window. Stage mode fills the screen and keeps its own floor.
@@ -1059,6 +1147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     /// Sent every second; the HUD only paints it while it is open.
     private func renderSystem(_ sample: SystemMonitor.Sample) {
+        latestSystem = sample
+        renderUsageStatus()
         let cpu = sample.cpu.map { String(format: "%.1f", $0) } ?? "null"
         let memory = sample.memory.map { String(format: "%.1f", $0) } ?? "null"
         js("petNative.systemUpdate({cpu:\(cpu),memory:\(memory)})")

@@ -24,6 +24,16 @@ struct QuotaWindow: Codable, Equatable {
     var asOf: Double
 }
 
+extension QuotaWindow {
+    /// Claude is asked every 5 minutes, so a reading older than three asks is no longer live:
+    /// it is the last one that worked, and anything that shows it has to say so.
+    static let staleAfter: TimeInterval = 15 * 60
+
+    func isStale(at now: Date = Date()) -> Bool {
+        now.timeIntervalSince1970 * 1000 - asOf > Self.staleAfter * 1000
+    }
+}
+
 struct QuotaProvider: Codable, Equatable {
     var plan: String?
     var fiveHour: QuotaWindow?
@@ -329,6 +339,15 @@ final class ClaudeLiveUsage {
     /// from the account without a model turn, costing a few seconds of CPU, and Claude reads its
     /// own sign-in, so Bitling never touches the keychain or any token.
     func fetch(now: Date = Date()) -> Result<LiveReading, LiveFailure> {
+        let first = attempt(now: now)
+        guard case .failure = first else { return first }
+        // Claude Code replaces its own binary when it updates, and a run that starts in that gap
+        // fails or prints nothing. One more try a few seconds later usually lands after it.
+        Thread.sleep(forTimeInterval: 4)
+        return attempt(now: Date())
+    }
+
+    private func attempt(now: Date) -> Result<LiveReading, LiveFailure> {
         guard let path = Self.candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
             UsageLog.write("claude: the claude command was not found")
             return .failure(.claudeMissing)

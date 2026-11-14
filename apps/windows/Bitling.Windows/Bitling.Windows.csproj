@@ -16,6 +16,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The WPF desktop SDK leaves System.IO out of the implicit usings, and with both WPF and
+         WinForms on, Point and Size exist in System.Drawing and System.Windows. Pick the WPF ones. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Windows.Point" Alias="Point" />
+    <Using Include="System.Windows.Size" Alias="Size" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2739.15" />
   </ItemGroup>
 

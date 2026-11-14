@@ -3,6 +3,7 @@
 // `application(_:open:)` on an already-running LSUIElement app.
 using System.Windows;
 using Bitling.Native;
+using Application = System.Windows.Application;
 
 namespace Bitling;
 

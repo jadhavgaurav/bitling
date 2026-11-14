@@ -11,3 +11,7 @@ graphify-out/manifest.json
 graphify-out/cost.json
 graphify-out/.graphify_*
 graphify-out/20*
+
+# .NET build output
+bin/
+obj/

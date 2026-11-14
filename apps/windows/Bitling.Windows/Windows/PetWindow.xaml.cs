@@ -115,7 +115,13 @@ public partial class PetWindow : Window
         var saved = AppSettings.GetString(StateDefaultsKey);
         if (saved != null) await core.AddScriptToExecuteOnDocumentCreatedAsync(JsInterop.InjectSavedState(saved));
         core.WebMessageReceived += OnWebMessageReceived;
-        core.NavigationCompleted += (_, args) => { if (args.IsSuccess) _pageReady = true; };
+        core.NavigationCompleted += (_, args) =>
+        {
+            if (!args.IsSuccess) return;
+            _pageReady = true;
+            // Usage lives in the tray icon here, so the pet's own usage HUD stays shut.
+            Js("petNative.hudEnabled(false)");
+        };
 
         var exeDir = AppContext.BaseDirectory;
         var petHtml = Path.Combine(exeDir, "Resources", "pet.html");

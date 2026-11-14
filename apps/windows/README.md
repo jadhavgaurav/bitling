@@ -117,9 +117,36 @@ Requires the .NET 8 SDK with the WPF/WinForms desktop workload, Python 3 (for
 runtime dependency of `Watchers/GitWatcher.cs` and because its bundled `sh.exe` is what
 runs the installed git hooks).
 
+## Usage in the tray
+
+A second tray icon shows Claude's weekly use, CPU and RAM as three thin bars, each coloured
+green to red by how full it is (the same colour scale as the pet page and the macOS menu
+bar). Left-click opens a card with the figures, right-click lists them, and the main tray
+menu's "Usage in the tray" switches it on and off. The pet's own usage HUD stays off here.
+
+- `Usage/SystemMonitor.cs` samples CPU (`GetSystemTimes`) and memory (`GlobalMemoryStatusEx`,
+  total minus available, which is Task Manager's "In use") once a second.
+- `Usage/LiveUsage.cs` asks `claude -p /usage` every 5 minutes and `codex app-server` every
+  minute. Unlike macOS there is no log-file fallback: a missing or signed-out tool shows as
+  "Not live", never as an old number. A Claude figure older than 15 minutes is greyed and
+  marked `~`.
+- The pure logic (parsers, colours, merge, staleness) is in `Usage/UsageParsers.cs` and
+  `Usage/UsageColor.cs`, and is checked on any OS with the .NET SDK by
+  `Bitling.Windows.Checks` (`tests/windows-usage.test.mjs` runs it).
+
+The macOS side of this was verified against Activity Monitor and `top` under a known load.
+The Windows side compiles and its logic is tested, but the tray icon, the card and the two
+Win32 samplers have not been run on Windows. See the checklist below.
+
 ## Manual test plan (none of this has been run yet)
 
-1. `dotnet build` cleanly — fix compile errors first; this is untested code.
+0. Usage tray: does a bars icon appear next to the pet's icon? Open Task Manager and run
+   something heavy: does the CPU bar rise to match within a second or two? Does the RAM bar
+   agree with Task Manager's "In use"? Does the card open above the taskbar and close when you
+   click elsewhere? Does `claude -p /usage` work from a plain PowerShell window, and does the
+   Claude bar then agree with Claude's own usage page?
+1. `dotnet build` cleanly. It compiles on macOS with `-p:EnableWindowsTargeting=true`
+   (`tests/windows-usage.test.mjs` runs that), but it has never been built on Windows itself.
 2. Launch: does a tray icon appear, and does the pet's egg/creature show at the bottom of
    the primary monitor?
 3. Drag the pet: does it follow the cursor, and does letting go while moving fast throw it

@@ -14,6 +14,7 @@ using Bitling.Auth;
 using Bitling.Models;
 using Bitling.Native;
 using Bitling.Settings;
+using Bitling.Usage;
 using Bitling.Watchers;
 using Bitling.Windows;
 using Application = System.Windows.Application;
@@ -30,6 +31,10 @@ sealed class AppController : IDisposable
     private readonly GitWatcher _git = new();
     private readonly CIWatcher _ci = new();
     private readonly ClaudeWatcher _claude = new();
+    private readonly SystemMonitor _system = new();
+    private readonly QuotaWatcher _quota = new();
+    private readonly UsageTray _usageTray = new();
+    private const string UsageTrayKey = "showUsageTray";
     private readonly ActivityLog _activity = new();
     private readonly Dictionary<string, DateTime> _recentEvents = new();
     private System.Windows.Threading.DispatcherTimer? _panelRefreshTimer;
@@ -58,6 +63,12 @@ sealed class AppController : IDisposable
         _claude.OnEvent += DeliverGitEvent;
         _claude.Start();
 
+        // Watchers report from background threads; the tray and its card live on the UI thread.
+        _system.Sampled += sample => Application.Current.Dispatcher.BeginInvoke(() => _usageTray.Update(sample));
+        _quota.Updated += () => Application.Current.Dispatcher.BeginInvoke(() => _usageTray.Update(_quota.Claude, _quota.Codex));
+        _usageTray.HideRequested += () => SetUsageTrayVisible(false);
+        SetUsageTrayVisible(AppSettings.GetBool(UsageTrayKey, true));
+
         _panelRefreshTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(0.5) };
         _panelRefreshTimer.Tick += (_, _) => _panel.Refresh();
         _panelRefreshTimer.Start();
@@ -66,6 +77,16 @@ sealed class AppController : IDisposable
         {
             try { ProtocolRegistration.Register(); } catch { /* best effort; the CLI still works via a running instance */ }
         });
+    }
+
+    /// The readers only run while the icon is shown: asking Claude for /usage costs a few
+    /// seconds of CPU every five minutes, which is not worth paying for an icon nobody sees.
+    private void SetUsageTrayVisible(bool visible)
+    {
+        AppSettings.Set(UsageTrayKey, visible);
+        _usageTray.Visible = visible;
+        if (visible) { _system.Start(); _quota.Start(); }
+        else { _system.Stop(); _quota.Stop(); }
     }
 
     // MARK: bitling:// dispatch
@@ -485,6 +506,9 @@ sealed class AppController : IDisposable
         _menu.Items.Add(gitMenu);
         _menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
 
+        var usageItem = new System.Windows.Forms.ToolStripMenuItem("Usage in the tray") { Checked = _usageTray.Visible };
+        usageItem.Click += (_, _) => SetUsageTrayVisible(!_usageTray.Visible);
+        _menu.Items.Add(usageItem);
         var loginItem = new System.Windows.Forms.ToolStripMenuItem("Open at login") { Checked = LoginItem.IsEnabled() };
         loginItem.Click += (_, _) => LoginItem.SetEnabled(!LoginItem.IsEnabled());
         _menu.Items.Add(loginItem);
@@ -494,6 +518,9 @@ sealed class AppController : IDisposable
     public void Dispose()
     {
         _panelRefreshTimer?.Stop();
+        _system.Dispose();
+        _quota.Dispose();
+        _usageTray.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
     }

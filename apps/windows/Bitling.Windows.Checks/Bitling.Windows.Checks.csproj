@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Runs the pure usage logic (parsers, colours, merge) with no Windows UI, so it can be checked
+       on any machine with the .NET SDK. Run it with dotnet run, pointing at this folder. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net$(BundledNETCoreAppTargetFrameworkVersion)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Bitling.Windows\Usage\QuotaModels.cs" Link="Usage\QuotaModels.cs" />
+    <Compile Include="..\Bitling.Windows\Usage\UsageColor.cs" Link="Usage\UsageColor.cs" />
+    <Compile Include="..\Bitling.Windows\Usage\UsageParsers.cs" Link="Usage\UsageParsers.cs" />
+  </ItemGroup>
+
+</Project>

@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let usageCodexItem = NSMenuItem(title: "Codex: checking limits…", action: nil, keyEquivalent: "")
     private let usageCPUItem = NSMenuItem(title: "CPU: measuring…", action: nil, keyEquivalent: "")
     private let usageRAMItem = NSMenuItem(title: "Memory: measuring…", action: nil, keyEquivalent: "")
+    private let usageDiskItem = NSMenuItem(title: "Disk: measuring…", action: nil, keyEquivalent: "")
     private let petHudItem = NSMenuItem(title: "Show usage above the pet", action: nil, keyEquivalent: "")
     private var petUsageHud = UserDefaults.standard.object(forKey: "petUsageHud") as? Bool ?? false
     private let overlay = Overlay()
@@ -1069,7 +1070,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.toolTip = "Claude usage, CPU and memory"
         usageMenu.autoenablesItems = false
-        for entry in [usageClaudeItem, usageCodexItem, usageCPUItem, usageRAMItem] {
+        for entry in [usageClaudeItem, usageCodexItem, usageCPUItem, usageRAMItem, usageDiskItem] {
             entry.isEnabled = false
             usageMenu.addItem(entry)
         }
@@ -1109,6 +1110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if showClaudeQuota { append("Claude", claudeWeek?.usedPercent, stale: claudeStale) }
         append("CPU", latestSystem?.cpu)
         append("RAM", latestSystem?.memory)
+        append("Disk", latestSystem?.disk)
         if !button.attributedTitle.isEqual(to: title) { button.attributedTitle = title }
 
         if let data {
@@ -1126,6 +1128,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         usageCodexItem.isHidden = !showCodexQuota
         usageCPUItem.title = latestSystem?.cpu.map { "CPU: \(Int($0.rounded()))% used" } ?? "CPU: measuring…"
         usageRAMItem.title = latestSystem?.memory.map { "Memory: \(Int($0.rounded()))% used" } ?? "Memory: measuring…"
+        usageDiskItem.title = latestSystem?.disk.map { percent in
+            let free = latestSystem?.diskFreeBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "?"
+            return "Disk: \(Int(percent.rounded()))% full, \(free) free"
+        } ?? "Disk: measuring…"
     }
 
     @objc private func togglePetUsageHud() {

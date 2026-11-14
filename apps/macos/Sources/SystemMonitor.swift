@@ -31,6 +31,9 @@ final class SystemMonitor {
         let cpu: Double?
         /// Share of physical memory in use, 0 to 100.
         let memory: Double?
+        /// Share of the startup disk in use, 0 to 100, and the bytes still free on it.
+        let disk: Double?
+        let diskFreeBytes: Int64?
     }
 
     var onSample: ((Sample) -> Void)?
@@ -56,7 +59,20 @@ final class SystemMonitor {
     }
 
     private func sample() {
-        onSample?(Sample(cpu: cpuPercent(), memory: memoryPercent()))
+        let disk = diskUsage()
+        onSample?(Sample(cpu: cpuPercent(), memory: memoryPercent(),
+                         disk: disk?.percent, diskFreeBytes: disk?.freeBytes))
+    }
+
+    /// The startup disk, as Finder reports it: the space macOS will let apps use, which includes
+    /// purgeable caches it can clear on demand, so the figure matches the Storage pane in Settings.
+    private func diskUsage() -> (percent: Double, freeBytes: Int64)? {
+        let keys: Set<URLResourceKey> = [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
+        guard let values = try? URL(fileURLWithPath: "/").resourceValues(forKeys: keys),
+              let total = values.volumeTotalCapacity, total > 0,
+              let free = values.volumeAvailableCapacityForImportantUsage else { return nil }
+        let used = Double(Int64(total) - free) / Double(total) * 100
+        return (min(100, max(0, used)), free)
     }
 
     /// The kernel's tick counters are 32-bit and wrap, so every delta uses wrapping subtraction.

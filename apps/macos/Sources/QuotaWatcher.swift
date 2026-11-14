@@ -226,8 +226,6 @@ struct LiveFailure: Error {
     let retryAfter: TimeInterval
 
     static let notSignedIn = LiveFailure(message: "sign in to Claude Code for live usage", retryAfter: 120)
-    // Short, because Claude Code updates itself by replacing its binary, which is missing for a moment.
-    static let claudeMissing = LiveFailure(message: "the claude command was not found", retryAfter: 120)
     static let claudeSilent = LiveFailure(message: "claude did not answer", retryAfter: 60)
     static let codexMissing = LiveFailure(message: "the codex command was not found", retryAfter: 3600)
     static let codexSilent = LiveFailure(message: "codex did not answer", retryAfter: 120)
@@ -334,68 +332,95 @@ enum CodexUsageParser {
     }
 }
 
+/// Claude's live usage, from the endpoint behind Claude Code's own usage screen. The sign-in is
+/// the `claudeAiOauth` entry Claude Code keeps in the keychain ("Claude Code-credentials"). It is
+/// read only to make this request: never stored, logged or passed to another process. macOS asks
+/// once whether Bitling may read that item; choose "Always Allow". Blocks: call off the main thread.
 final class ClaudeLiveUsage {
-    /// Blocks until `claude -p /usage` answers: call off the main thread. The command answers
-    /// from the account without a model turn, costing a few seconds of CPU, and Claude reads its
-    /// own sign-in, so Bitling never touches the keychain or any token.
-    func fetch(now: Date = Date()) -> Result<LiveReading, LiveFailure> {
-        let first = attempt(now: now)
-        guard case .failure = first else { return first }
-        // Claude Code replaces its own binary when it updates, and a run that starts in that gap
-        // fails or prints nothing. One more try a few seconds later usually lands after it.
-        Thread.sleep(forTimeInterval: 4)
-        return attempt(now: Date())
+    private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+
+    private enum Credential {
+        case token(String)
+        case expired
+        case missing
     }
 
-    private func attempt(now: Date) -> Result<LiveReading, LiveFailure> {
-        guard let path = Self.candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-            UsageLog.write("claude: the claude command was not found")
-            return .failure(.claudeMissing)
+    func fetch(now: Date = Date()) -> Result<LiveReading, LiveFailure> {
+        let token: String
+        switch Self.credential(now: now) {
+        case .token(let value): token = value
+        case .expired:
+            // Claude Code refreshes this token itself the next time it runs.
+            UsageLog.write("claude: the sign-in token has expired; it renews the next time Claude Code runs")
+            return .failure(.notSignedIn)
+        case .missing:
+            UsageLog.write("claude: no Claude Code sign-in found in the keychain, or access was not allowed")
+            return .failure(.notSignedIn)
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        // BITLING_PROBE tells Bitling's own Claude hooks to ignore this run.
-        process.arguments = ["-p", "/usage", "--no-session-persistence"]
-        process.currentDirectoryURL = FileManager.default.temporaryDirectory
-        var environment = ProcessInfo.processInfo.environment
-        environment["BITLING_PROBE"] = "1"
-        process.environment = environment
-        let output = Pipe()
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        let collected = LockedData()
-        output.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if chunk.isEmpty { handle.readabilityHandler = nil } else { collected.append(chunk) }
-        }
-        let finished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in finished.signal() }
-        do { try process.run() } catch { UsageLog.write("claude: could not start the claude command"); return .failure(.claudeMissing) }
-        defer { output.fileHandleForReading.readabilityHandler = nil }
-        if finished.wait(timeout: .now() + 60) == .timedOut {
-            process.terminate()
-            UsageLog.write("claude: /usage took too long and was stopped")
+
+        var request = URLRequest(url: Self.endpoint, timeoutInterval: 20)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+        request.setValue("Bitling", forHTTPHeaderField: "User-Agent")
+        let done = DispatchSemaphore(value: 0)
+        var answer: (data: Data?, response: HTTPURLResponse?) = (nil, nil)
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            answer = (data, response as? HTTPURLResponse)
+            done.signal()
+        }.resume()
+        guard done.wait(timeout: .now() + 25) == .success, let http = answer.response, let data = answer.data else {
+            UsageLog.write("claude: the usage endpoint did not answer")
             return .failure(.claudeSilent)
         }
-        // The handler may still be draining the pipe when the child exits.
-        Thread.sleep(forTimeInterval: 0.1)
-        let text = String(decoding: collected.value, as: UTF8.self)
-        guard let reading = ClaudeUsageTextParser.parse(text, fetchedAt: now) else {
-            let first = text.split(separator: "\n").first.map { String($0.prefix(80)) } ?? "nothing"
-            UsageLog.write("claude: /usage printed no week line, it began: \(first)")
-            return .failure(.notSignedIn)
+        guard http.statusCode == 200 else {
+            UsageLog.write("claude: the usage endpoint answered HTTP \(http.statusCode)")
+            return .failure(http.statusCode == 401 || http.statusCode == 403 ? .notSignedIn : .claudeSilent)
+        }
+        guard let reading = Self.parse(data, now: now) else {
+            UsageLog.write("claude: the usage endpoint answered without a weekly figure")
+            return .failure(.claudeSilent)
         }
         UsageLog.write("claude: live week \(reading.weekly?.usedPercent ?? -1)%")
         return .success(reading)
     }
 
-    private static var candidates: [String] {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let onPath = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map { "\($0)/claude" }
-        return ["\(home)/.npm-global/bin/claude", "\(home)/.local/bin/claude", "\(home)/.claude/local/claude",
-                "\(home)/.bun/bin/claude", "\(home)/.volta/bin/claude",
-                "/opt/homebrew/bin/claude", "/usr/local/bin/claude"] + onPath
+    private static func credential(now: Date) -> Credential {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: "Claude Code-credentials",
+            kSecAttrAccount: NSUserName(),
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let oauth = root["claudeAiOauth"] as? [String: Any],
+              let token = oauth["accessToken"] as? String, !token.isEmpty else { return .missing }
+        if let expiresMs = oauth["expiresAt"] as? Double, expiresMs / 1000 <= now.timeIntervalSince1970 { return .expired }
+        return .token(token)
+    }
+
+    /// `seven_day.utilization` is the weekly all-models percentage the usage screen shows, and
+    /// `seven_day.resets_at` is when that week resets. The five hour window is not in the answer.
+    static func parse(_ data: Data, now: Date) -> LiveReading? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let week = root["seven_day"] as? [String: Any],
+              let used = week["utilization"] as? Double else { return nil }
+        let reset = (week["resets_at"] as? String).flatMap(isoDate)
+        let window = QuotaWindow(usedPercent: min(100, max(0, used)),
+                                 resetsAt: reset.map { $0.timeIntervalSince1970 * 1000 },
+                                 asOf: now.timeIntervalSince1970 * 1000)
+        return LiveReading(plan: nil, fiveHour: nil, weekly: window, fetchedAt: now)
+    }
+
+    /// The endpoint sends microsecond fractions, which the ISO 8601 formatter does not take, so they are dropped first.
+    private static func isoDate(_ text: String) -> Date? {
+        let trimmed = text.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: trimmed)
     }
 }
 
@@ -525,7 +550,7 @@ final class QuotaWatcher {
 
     private let queue = DispatchQueue(label: "app.bitling.quota", qos: .utility)
     private let liveQueue = DispatchQueue(label: "app.bitling.quota.live", qos: .utility, attributes: .concurrent)
-    private let claudeFeed = LiveFeed(interval: 300, fetch: { ClaudeLiveUsage().fetch() })
+    private let claudeFeed = LiveFeed(interval: 120, fetch: { ClaudeLiveUsage().fetch() })
     private let codexFeed = LiveFeed(interval: 60, fetch: { CodexLiveUsage().fetch() })
     private var timer: Timer?
     private var reading = false
